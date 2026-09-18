@@ -1,0 +1,458 @@
+/*
+ * Simulator host theme + layout.
+ * Shared primitives/tokens come from ./panda-ide.css (imported first in App.tsx).
+ * This file only:
+ *   1. maps the --pds-* semantic COLOR tokens to a dark (default) / light palette
+ *      that follows the OS via prefers-color-scheme;
+ *   2. defines the simulator-specific IDE shell layout.
+ * The e-paper device body/screen are intentionally NOT themed (always physical
+ * black body + paper-white screen).
+ */
+
+/* ---- Dark palette (default, VS Code Dark+ flavored) ---- */
+:root {
+  color-scheme: dark;
+  --pds-bg: #1e1e1e;
+  --pds-panel: #252526;
+  --pds-panel-raised: #2d2d31;
+  --pds-border: #2b2b2b;
+  --pds-border-strong: #3c3c3c;
+  --pds-ink: #d4d4d4;
+  --pds-muted: #9d9d9d;
+  --pds-accent: #0e639c;
+  --pds-accent-ink: #ffffff;
+  --pds-accent-hover: #1177bb;
+  --pds-hover: rgba(255, 255, 255, 0.08);
+  --pds-danger: #a1260d;
+  --pds-danger-ink: #ffffff;
+  --pds-running: #2ea043;
+  --pds-running-ink: #ffffff;
+  --pds-focus-ring: #4daafc;
+  --pds-code-bg: #181818;
+  --pds-code-ink: #9fdf9f;
+}
+
+/* ---- Light palette (follows OS) ---- */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --pds-bg: #ffffff;
+    --pds-panel: #f3f3f3;
+    --pds-panel-raised: #ffffff;
+    --pds-border: #e5e5e5;
+    --pds-border-strong: #cecece;
+    --pds-ink: #1f1f1f;
+    --pds-muted: #616161;
+    --pds-accent: #005fb8;
+    --pds-accent-ink: #ffffff;
+    --pds-accent-hover: #0258a8;
+    --pds-hover: rgba(0, 0, 0, 0.06);
+    --pds-danger: #b5200d;
+    --pds-danger-ink: #ffffff;
+    --pds-running: #1a7f37;
+    --pds-running-ink: #ffffff;
+    --pds-focus-ring: #005fb8;
+    /* Serial console stays a dark terminal surface in both themes. */
+    --pds-code-bg: #1b1b1b;
+    --pds-code-ink: #b5e8a6;
+  }
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--pds-bg);
+}
+
+/* ---- Shell ---- */
+.ide-shell {
+  display: grid;
+  grid-template-rows: var(--pds-titlebar-h) minmax(0, 1fr) var(--pds-statusbar-h);
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ide-titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--pds-space-4);
+  border-bottom: 1px solid var(--pds-border);
+  background: var(--pds-panel);
+  padding: 0 var(--pds-space-3);
+}
+
+.ide-titlebar__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pds-space-2);
+  min-width: 0;
+}
+
+.ide-titlebar__name {
+  font-size: var(--pds-text-md);
+  font-weight: 600;
+}
+
+.ide-titlebar__subtitle {
+  overflow: hidden;
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-titlebar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pds-space-2);
+  margin-left: auto;
+}
+
+/* ---- Body: activity bar | sidebar | main ---- */
+.ide-body {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pds-activitybar {
+  border-right: 1px solid var(--pds-border);
+  background: var(--pds-panel);
+}
+
+.ide-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pds-space-5);
+  width: 240px;
+  flex: 0 0 240px;
+  overflow: auto;
+  border-right: 1px solid var(--pds-border);
+  background: var(--pds-panel);
+  padding: var(--pds-space-4) var(--pds-space-3);
+}
+
+.ide-sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pds-space-2);
+}
+
+.ide-sidebar__keys {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  gap: var(--pds-space-2);
+}
+
+.ide-key {
+  width: 100%;
+}
+
+.ide-sidebar__hint {
+  margin: 0;
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  line-height: 1.4;
+}
+
+.ide-sidebar__device-meta {
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  line-height: 1.35;
+}
+
+.ide-sdcard__path {
+  overflow: hidden;
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-code-bg);
+  color: var(--pds-code-ink);
+  font-family: var(--pds-font-mono);
+  font-size: var(--pds-text-xs);
+  line-height: 1.3;
+  padding: var(--pds-space-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-sdcard__actions,
+.ide-sdcard__new-folder {
+  display: flex;
+  gap: var(--pds-space-1);
+  min-width: 0;
+}
+
+.ide-sdcard__action {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-inline: var(--pds-space-2);
+}
+
+.ide-sdcard__file-input {
+  display: none;
+}
+
+.ide-sdcard__folder-input {
+  flex: 1 1 auto;
+}
+
+.ide-sdcard__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  padding: var(--pds-space-1);
+}
+
+.ide-sdcard__entry {
+  display: flex;
+  align-items: center;
+  min-height: var(--pds-control-h);
+  min-width: 0;
+}
+
+.ide-sdcard__entry-name {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--pds-space-2);
+  min-width: 0;
+  border: 0;
+  border-radius: var(--pds-radius-sm);
+  background: transparent;
+  color: var(--pds-ink);
+  font: inherit;
+  font-size: var(--pds-text-sm);
+  padding: 0 var(--pds-space-2);
+  cursor: pointer;
+}
+
+.ide-sdcard__entry-name:hover:not(:disabled) {
+  background: var(--pds-hover);
+}
+
+.ide-sdcard__entry-name:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ide-sdcard__entry-kind {
+  flex: 0 0 32px;
+  color: var(--pds-muted);
+  font-family: var(--pds-font-mono);
+  font-size: 10px;
+}
+
+.ide-sdcard__entry-label {
+  overflow: hidden;
+  min-width: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-sdcard__delete {
+  flex: 0 0 var(--pds-control-h);
+  color: var(--pds-muted);
+}
+
+/* ---- Main: device stage + bottom panel ---- */
+.ide-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ide-device-stage {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--pds-space-1);
+  /* Subtle tint so the paper-white device screen stays distinct from the
+     stage in both light and dark themes. */
+  background: color-mix(in srgb, var(--pds-bg) 92%, var(--pds-ink) 8%);
+}
+
+.ide-device-stage__error {
+  position: absolute;
+  top: var(--pds-space-3);
+  left: var(--pds-space-3);
+  right: var(--pds-space-3);
+  z-index: 2;
+  max-height: 120px;
+  overflow: auto;
+}
+
+.ide-device-stage__notice {
+  position: absolute;
+  top: var(--pds-space-3);
+  left: var(--pds-space-3);
+  right: var(--pds-space-3);
+  z-index: 2;
+  max-width: 720px;
+  margin: 0 auto;
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-md);
+  background: color-mix(in srgb, var(--pds-panel-raised) 94%, var(--pds-accent) 6%);
+  color: var(--pds-ink);
+  font-size: var(--pds-text-sm);
+  line-height: 1.45;
+  padding: var(--pds-space-3) var(--pds-space-4);
+  box-shadow: var(--pds-shadow-sm);
+}
+
+.ide-device-stage--scroll-scale {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+/* Device body (physical black) + paper-white screen — theme-independent.
+   The shell carries the device aspect ratio and fills the stage's height,
+   so the device always fits without clipping. */
+.panel-shell {
+  position: relative;
+  display: flex;
+  height: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  aspect-ratio: 462 / 832;
+  border: 1px solid #000;
+  border-radius: 18px;
+  background: #0c0c0c;
+  padding: 16px 13px;
+  box-shadow: var(--pds-shadow-md);
+}
+
+.panel-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  background: #ffffff;
+  cursor: crosshair;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+.panel-shell--fixed-scale {
+  flex: 0 0 auto;
+  width: calc(var(--panel-canvas-width) + 28px);
+  height: calc(var(--panel-canvas-height) + 34px);
+  max-width: none;
+  max-height: none;
+}
+
+.panel-shell--fixed-scale .panel-canvas {
+  width: var(--panel-canvas-width);
+  height: var(--panel-canvas-height);
+  flex: 0 0 auto;
+}
+
+/* ---- Bottom panel (serial console) ---- */
+.ide-bottom {
+  display: flex;
+  flex-direction: column;
+  height: 32vh;
+  min-height: 120px;
+  max-height: 42vh;
+  border-top: 1px solid var(--pds-border);
+  background: var(--pds-panel);
+}
+
+.ide-bottom__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--pds-border);
+  padding: 0 var(--pds-space-2);
+}
+
+.ide-bottom__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--pds-space-1);
+}
+
+.ide-bottom__action {
+  min-height: var(--pds-control-h-sm);
+  color: var(--pds-muted);
+}
+
+.ide-bottom__console {
+  flex: 1 1 auto;
+  margin: var(--pds-space-2);
+  min-height: 0;
+}
+
+.ide-main--display-one-to-one .ide-bottom {
+  height: calc(var(--pds-control-h-sm) + 1px);
+  min-height: calc(var(--pds-control-h-sm) + 1px);
+  max-height: calc(var(--pds-control-h-sm) + 1px);
+}
+
+.ide-main--display-one-to-one .ide-bottom__head {
+  border-bottom: 0;
+}
+
+.ide-main--display-one-to-one .ide-bottom__console {
+  display: none;
+}
+
+/* ---- Status bar ---- */
+.ide-statusbar {
+  background: var(--pds-panel);
+  color: var(--pds-muted);
+}
+
+.ide-statusbar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--pds-radius-pill);
+  background: var(--pds-muted);
+}
+
+.ide-statusbar__dot--on {
+  background: var(--pds-running);
+}
+
+.ide-statusbar__keys {
+  margin-left: auto;
+  min-width: 0;
+  color: var(--pds-muted);
+}
+
+/* ---- Responsive ---- */
+@media (max-height: 720px) {
+  .panel-shell:not(.panel-shell--fixed-scale) .panel-canvas {
+    height: min(66vh, 560px);
+  }
+}
+
+@media (max-width: 720px) {
+  .ide-sidebar {
+    width: 200px;
+    flex-basis: 200px;
+  }
+
+  .ide-titlebar__subtitle {
+    display: none;
+  }
+}

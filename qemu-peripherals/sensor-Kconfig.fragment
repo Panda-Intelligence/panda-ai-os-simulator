@@ -1,0 +1,7 @@
+config FT6336U_MOFEI
+    bool
+    select BITBANG_I2C
+
+config CHSC6440_S37UC
+    bool
+    select BITBANG_I2C

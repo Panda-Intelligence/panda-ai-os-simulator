@@ -1,0 +1,2 @@
+system_ss.add(when: 'CONFIG_FT6336U_MOFEI', if_true: files('ft6336u.c'))
+system_ss.add(when: 'CONFIG_CHSC6440_S37UC', if_true: files('chsc6440.c'))

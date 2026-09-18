@@ -1,0 +1,243 @@
+export const SUPPORTED_SIMULATOR_LOCALES = [
+  { code: "en", label: "English" },
+  { code: "zh-Hans", label: "简体中文" },
+  { code: "zh-Hant", label: "繁體中文" },
+] as const;
+
+export type SimulatorLocale = (typeof SUPPORTED_SIMULATOR_LOCALES)[number]["code"];
+
+export const DEFAULT_SIMULATOR_LOCALE: SimulatorLocale = "en";
+export const SIMULATOR_LOCALE_STORAGE_KEY = "mofei-simulator-locale";
+
+export const SIMULATOR_TRANSLATIONS = {
+  en: {
+    appTitle: "Panda Simulator",
+    appSubtitle: "Panda Compatible Devices",
+    buttonQuickLaunch: "Quick Launch",
+    buttonChooseFirmware: "Choose Firmware...",
+    buttonStop: "Stop",
+    buttonClearLog: "Clear log",
+    buttonCopyLog: "Copy log",
+    filePickerFirmwareFilter: "Firmware",
+    localeLabel: "Language",
+    deviceLabel: "Device",
+    devicePickerAria: "Simulator device",
+    deviceLockedHint: "Stop the simulator to switch device",
+    displayModeLabel: "Display",
+    displayModeAria: "Panel display mode",
+    displayModeFit: "Fit",
+    displayModeOneToOne: "1:1 pixels",
+    displayModeTwoX: "2x sharp",
+    statusIdle: "Idle",
+    statusStartError: "start_sim: error",
+    statusStopError: "stop_sim: error",
+    statusResetRebooting: "reset_sim: rebooting",
+    statusResetError: "reset_sim: error",
+    statusRuntimeUnavailable: "WASM runtime artifact unavailable",
+    cloudRuntimeNotice:
+      "This browser build is served by Panda AI Cloud. Firmware execution starts when the simulator runtime and bundled firmware artifacts are present.",
+    statusTipHiddenFiles: "Tip: Cmd+Shift+. in file picker shows hidden files",
+    statusSdLabel: "SD",
+    statusSdResolving: "resolving...",
+    statusKeysLabel: "Keys",
+    statusKeysHelp: "Left/Right/Up/Down swipe - Space tap - Enter/Return Confirm - Esc Back - 1/2/3 hardware keys",
+    hardwareKeysAria: "Hardware keys",
+    hardwareKeyEnter: "Enter",
+    hardwareKeyNext: "Next",
+    hardwareKeyEsc: "ESC",
+    hardwareKeyReset: "Reset",
+    hardwareKeyResetTitle: "Full simulator reboot",
+    panelAria: "E-ink panel",
+    serialConsoleAria: "Serial console",
+    serialNoOutput: "(no serial output yet)",
+    runControlsAria: "Run controls",
+    statusLabel: "Status",
+    sessionTitle: "Session",
+    firmwareLabel: "Firmware",
+    firmwareQuickLaunch: "Quick launch (bundled)",
+    sdCardTitle: "Web SD Card",
+    sdButtonUp: "Up",
+    sdButtonRefresh: "Refresh",
+    sdButtonImportFiles: "Import files",
+    sdButtonImportFolder: "Import folder",
+    sdButtonCreateFolder: "Create",
+    sdButtonDelete: "Delete",
+    sdNewFolderPlaceholder: "New folder",
+    sdEmpty: "No files",
+    sdBusy: "Working...",
+    sdLockedWhileRunning: "Stop the simulator before editing the SD card.",
+    sdStatusReady: "Ready",
+    sdStatusImported: "Imported",
+    sdStatusDownloaded: "Downloaded",
+    hardwareKeysTitle: "Hardware keys",
+    serialTabLabel: "Serial",
+    toggleSidebarAria: "Toggle sidebar",
+    togglePanelAria: "Toggle serial panel",
+  },
+  "zh-Hans": {
+    appTitle: "Panda 模拟器",
+    appSubtitle: "Panda 兼容设备",
+    buttonQuickLaunch: "快速启动",
+    buttonChooseFirmware: "选择固件...",
+    buttonStop: "停止",
+    buttonClearLog: "清空日志",
+    buttonCopyLog: "复制日志",
+    filePickerFirmwareFilter: "固件",
+    localeLabel: "语言",
+    deviceLabel: "设备",
+    devicePickerAria: "模拟器设备",
+    deviceLockedHint: "停止模拟器后可切换设备",
+    displayModeLabel: "显示",
+    displayModeAria: "面板显示模式",
+    displayModeFit: "适应",
+    displayModeOneToOne: "1:1 像素",
+    displayModeTwoX: "2x 锐利",
+    statusIdle: "空闲",
+    statusStartError: "start_sim: 错误",
+    statusStopError: "stop_sim: 错误",
+    statusResetRebooting: "reset_sim: 正在重启",
+    statusResetError: "reset_sim: 错误",
+    statusRuntimeUnavailable: "WASM 运行时产物不可用",
+    cloudRuntimeNotice:
+      "这个浏览器版本由 Panda AI Cloud 提供。模拟器运行时和内置固件产物存在时会启动固件执行。",
+    statusTipHiddenFiles: "提示：文件选择器中 Cmd+Shift+. 可显示隐藏文件",
+    statusSdLabel: "SD",
+    statusSdResolving: "解析中...",
+    statusKeysLabel: "按键",
+    statusKeysHelp: "方向键滑动 - Space 点击 - Enter/Return 确认 - Esc 返回 - 1/2/3 硬件键",
+    hardwareKeysAria: "硬件键",
+    hardwareKeyEnter: "Enter",
+    hardwareKeyNext: "Next",
+    hardwareKeyEsc: "ESC",
+    hardwareKeyReset: "Reset",
+    hardwareKeyResetTitle: "完整重启模拟器",
+    panelAria: "电子墨水屏面板",
+    serialConsoleAria: "串口控制台",
+    serialNoOutput: "(暂无串口输出)",
+    runControlsAria: "运行控制",
+    statusLabel: "状态",
+    sessionTitle: "会话",
+    firmwareLabel: "固件",
+    firmwareQuickLaunch: "快速启动（内置）",
+    sdCardTitle: "Web SD 卡",
+    sdButtonUp: "上一级",
+    sdButtonRefresh: "刷新",
+    sdButtonImportFiles: "导入文件",
+    sdButtonImportFolder: "导入文件夹",
+    sdButtonCreateFolder: "创建",
+    sdButtonDelete: "删除",
+    sdNewFolderPlaceholder: "新文件夹",
+    sdEmpty: "没有文件",
+    sdBusy: "处理中...",
+    sdLockedWhileRunning: "停止模拟器后才能编辑 SD 卡。",
+    sdStatusReady: "就绪",
+    sdStatusImported: "已导入",
+    sdStatusDownloaded: "已下载",
+    hardwareKeysTitle: "硬件键",
+    serialTabLabel: "串口",
+    toggleSidebarAria: "切换侧边栏",
+    togglePanelAria: "切换串口面板",
+  },
+  "zh-Hant": {
+    appTitle: "Panda 模擬器",
+    appSubtitle: "Panda 相容裝置",
+    buttonQuickLaunch: "快速啟動",
+    buttonChooseFirmware: "選擇韌體...",
+    buttonStop: "停止",
+    buttonClearLog: "清空日誌",
+    buttonCopyLog: "複製日誌",
+    filePickerFirmwareFilter: "韌體",
+    localeLabel: "語言",
+    deviceLabel: "裝置",
+    devicePickerAria: "模擬器裝置",
+    deviceLockedHint: "停止模擬器後可切換裝置",
+    displayModeLabel: "顯示",
+    displayModeAria: "面板顯示模式",
+    displayModeFit: "適應",
+    displayModeOneToOne: "1:1 像素",
+    displayModeTwoX: "2x 銳利",
+    statusIdle: "閒置",
+    statusStartError: "start_sim: 錯誤",
+    statusStopError: "stop_sim: 錯誤",
+    statusResetRebooting: "reset_sim: 正在重啟",
+    statusResetError: "reset_sim: 錯誤",
+    statusRuntimeUnavailable: "WASM 執行環境產物不可用",
+    cloudRuntimeNotice:
+      "這個瀏覽器版本由 Panda AI Cloud 提供。模擬器執行環境和內建韌體產物存在時會啟動韌體執行。",
+    statusTipHiddenFiles: "提示：檔案選擇器中 Cmd+Shift+. 可顯示隱藏檔",
+    statusSdLabel: "SD",
+    statusSdResolving: "解析中...",
+    statusKeysLabel: "按鍵",
+    statusKeysHelp: "方向鍵滑動 - Space 點擊 - Enter/Return 確認 - Esc 返回 - 1/2/3 硬體鍵",
+    hardwareKeysAria: "硬體鍵",
+    hardwareKeyEnter: "Enter",
+    hardwareKeyNext: "Next",
+    hardwareKeyEsc: "ESC",
+    hardwareKeyReset: "Reset",
+    hardwareKeyResetTitle: "完整重啟模擬器",
+    panelAria: "電子墨水螢幕面板",
+    serialConsoleAria: "序列埠控制台",
+    serialNoOutput: "(暫無序列埠輸出)",
+    runControlsAria: "執行控制",
+    statusLabel: "狀態",
+    sessionTitle: "工作階段",
+    firmwareLabel: "韌體",
+    firmwareQuickLaunch: "快速啟動（內建）",
+    sdCardTitle: "Web SD 卡",
+    sdButtonUp: "上一層",
+    sdButtonRefresh: "重新整理",
+    sdButtonImportFiles: "匯入檔案",
+    sdButtonImportFolder: "匯入資料夾",
+    sdButtonCreateFolder: "建立",
+    sdButtonDelete: "刪除",
+    sdNewFolderPlaceholder: "新資料夾",
+    sdEmpty: "沒有檔案",
+    sdBusy: "處理中...",
+    sdLockedWhileRunning: "停止模擬器後才能編輯 SD 卡。",
+    sdStatusReady: "就緒",
+    sdStatusImported: "已匯入",
+    sdStatusDownloaded: "已下載",
+    hardwareKeysTitle: "硬體鍵",
+    serialTabLabel: "序列埠",
+    toggleSidebarAria: "切換側邊欄",
+    togglePanelAria: "切換序列埠面板",
+  },
+} as const;
+
+export type SimulatorTranslationKey = keyof typeof SIMULATOR_TRANSLATIONS.en;
+
+export const isSimulatorLocale = (value: string | null | undefined): value is SimulatorLocale =>
+  SUPPORTED_SIMULATOR_LOCALES.some((locale) => locale.code === value);
+
+export const normalizeSimulatorLocale = (language: string | null | undefined): SimulatorLocale | null => {
+  const normalized = language?.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "zh-tw" || normalized === "zh-hk" || normalized === "zh-mo" || normalized.includes("hant")) {
+    return "zh-Hant";
+  }
+  if (normalized === "zh" || normalized.startsWith("zh-") || normalized.includes("hans")) {
+    return "zh-Hans";
+  }
+  if (normalized === "en" || normalized.startsWith("en-")) {
+    return "en";
+  }
+  return null;
+};
+
+export const resolveInitialSimulatorLocale = (): SimulatorLocale => {
+  const saved = window.localStorage.getItem(SIMULATOR_LOCALE_STORAGE_KEY);
+  if (isSimulatorLocale(saved)) return saved;
+
+  for (const language of navigator.languages.length > 0 ? navigator.languages : [navigator.language]) {
+    const locale = normalizeSimulatorLocale(language);
+    if (locale) return locale;
+  }
+
+  return DEFAULT_SIMULATOR_LOCALE;
+};
+
+export const saveSimulatorLocalePreference = (locale: SimulatorLocale) => {
+  window.localStorage.setItem(SIMULATOR_LOCALE_STORAGE_KEY, locale);
+};
+
+export const simulatorT = (locale: SimulatorLocale, key: SimulatorTranslationKey) => SIMULATOR_TRANSLATIONS[locale][key];

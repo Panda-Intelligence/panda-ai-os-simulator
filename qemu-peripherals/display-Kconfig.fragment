@@ -1,0 +1,7 @@
+config SSD1677_GDEQ0426
+    bool
+    depends on SSI
+
+config UC8253C_S37UC
+    bool
+    depends on SSI

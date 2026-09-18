@@ -1,0 +1,422 @@
+/*
+ * Panda IDE — shared design system (single source of truth)
+ * ============================================================
+ *
+ * Consumed by BOTH developer surfaces:
+ *   - apps/simulator       (standalone Tauri + React app)
+ *   - apps/panda-studio    (VS Code extension simulator webview)
+ *
+ * This file owns the *host-agnostic* layer only:
+ *   1. Non-color design tokens   (--pds-space-*, --pds-radius-*, type scale, motion, sizing)
+ *   2. Primitive component classes (.pds-btn, .pds-pill, .pds-tab, .pds-panel, ...)
+ *
+ * It deliberately does NOT define color VALUES. Each host maps the semantic
+ * color tokens below to its own palette:
+ *   - Simulator  -> dark/light palette via prefers-color-scheme (App.css)
+ *   - Studio     -> native VS Code theme tokens --vscode-* (media/simulator.css)
+ *
+ * Naming convention:
+ *   - CSS custom properties: --pds-<group>-<name>   (e.g. --pds-space-2)
+ *   - Component classes:      .pds-<block>           (e.g. .pds-btn)
+ *   - Modifiers:              .pds-<block>--<mod>     (e.g. .pds-btn--primary)
+ *   - Elements:               .pds-<block>__<part>   (e.g. .pds-statusbar__item)
+ * The pds- prefix avoids collision with --vscode-* and any legacy --ide-* / --studio-*.
+ *
+ * DO NOT FORK THIS FILE. It is copied verbatim into each app at build time
+ * (see each app's sync-theme script). Edit here only.
+ *
+ * Required semantic color tokens each host MUST define on :root
+ * (fallbacks are provided so an un-themed host still renders legibly):
+ *   --pds-bg            app background
+ *   --pds-panel         sidebar / panel surface
+ *   --pds-panel-raised  cards, inputs, raised surfaces
+ *   --pds-border        hairline separators
+ *   --pds-border-strong control borders
+ *   --pds-ink           primary text
+ *   --pds-muted         secondary text
+ *   --pds-accent        primary action / active accent
+ *   --pds-accent-ink    text on accent
+ *   --pds-accent-hover  primary action hover
+ *   --pds-hover         neutral hover wash
+ *   --pds-danger        destructive action
+ *   --pds-danger-ink    text on danger
+ *   --pds-running       "running"/success pill background
+ *   --pds-running-ink   text on running pill
+ *   --pds-focus-ring    keyboard focus outline
+ *   --pds-code-bg       monospace surface background (serial / code)
+ *   --pds-code-ink      monospace surface text
+ */
+
+:root {
+  /* Spacing scale (4px base) */
+  --pds-space-1: 4px;
+  --pds-space-2: 8px;
+  --pds-space-3: 12px;
+  --pds-space-4: 16px;
+  --pds-space-5: 20px;
+  --pds-space-6: 24px;
+
+  /* Radii */
+  --pds-radius-sm: 4px;
+  --pds-radius-md: 6px;
+  --pds-radius-lg: 10px;
+  --pds-radius-pill: 999px;
+
+  /* Type scale */
+  --pds-font-ui: "Segoe UI", Inter, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --pds-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --pds-text-xs: 11px;
+  --pds-text-sm: 12px;
+  --pds-text-md: 13px;
+  --pds-text-lg: 15px;
+  --pds-text-xl: 18px;
+
+  /* Control sizing */
+  --pds-control-h: 28px;
+  --pds-control-h-sm: 24px;
+
+  /* Chrome sizing */
+  --pds-activitybar-w: 48px;
+  --pds-titlebar-h: 40px;
+  --pds-statusbar-h: 24px;
+
+  /* Motion */
+  --pds-dur-fast: 90ms;
+  --pds-dur-base: 150ms;
+  --pds-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Elevation */
+  --pds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --pds-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.28);
+
+  /* Semantic color fallbacks (hosts override these on :root) */
+  --pds-bg: #1e1e1e;
+  --pds-panel: #252526;
+  --pds-panel-raised: #2d2d30;
+  --pds-border: #2b2b2b;
+  --pds-border-strong: #3c3c3c;
+  --pds-ink: #d4d4d4;
+  --pds-muted: #9d9d9d;
+  --pds-accent: #0e639c;
+  --pds-accent-ink: #ffffff;
+  --pds-accent-hover: #1177bb;
+  --pds-hover: rgba(255, 255, 255, 0.08);
+  --pds-danger: #a1260d;
+  --pds-danger-ink: #ffffff;
+  --pds-running: #2d7d46;
+  --pds-running-ink: #ffffff;
+  --pds-focus-ring: #4daafc;
+  --pds-code-bg: #181818;
+  --pds-code-ink: #c8e6c9;
+}
+
+/* ---- Base reset (scoped to surfaces that opt in via .pds-root) ---- */
+.pds-root,
+.pds-root * {
+  box-sizing: border-box;
+}
+
+.pds-root {
+  margin: 0;
+  color: var(--pds-ink);
+  background: var(--pds-bg);
+  font-family: var(--pds-font-ui);
+  font-size: var(--pds-text-md);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.pds-root :focus-visible {
+  outline: 2px solid var(--pds-focus-ring);
+  outline-offset: 1px;
+}
+
+/* ---- Buttons ---- */
+.pds-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pds-space-2);
+  min-height: var(--pds-control-h);
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  color: var(--pds-ink);
+  font: inherit;
+  font-size: var(--pds-text-sm);
+  line-height: 1;
+  padding: 0 var(--pds-space-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--pds-dur-fast) var(--pds-ease),
+    border-color var(--pds-dur-fast) var(--pds-ease);
+}
+
+.pds-btn:hover {
+  background: var(--pds-hover);
+}
+
+.pds-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pds-btn--primary {
+  border-color: var(--pds-accent);
+  background: var(--pds-accent);
+  color: var(--pds-accent-ink);
+}
+
+.pds-btn--primary:hover {
+  background: var(--pds-accent-hover);
+  border-color: var(--pds-accent-hover);
+}
+
+.pds-btn--danger {
+  border-color: var(--pds-danger);
+  background: var(--pds-danger);
+  color: var(--pds-danger-ink);
+}
+
+.pds-btn--danger:hover {
+  background: var(--pds-danger);
+  filter: brightness(1.12);
+}
+
+.pds-btn--ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+.pds-btn--ghost:hover {
+  background: var(--pds-hover);
+}
+
+.pds-btn--icon {
+  width: var(--pds-control-h);
+  padding: 0;
+}
+
+/* ---- Select ---- */
+.pds-select {
+  min-height: var(--pds-control-h);
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  color: var(--pds-ink);
+  font: inherit;
+  font-size: var(--pds-text-sm);
+  padding: 0 var(--pds-space-2);
+  cursor: pointer;
+}
+
+.pds-input {
+  min-height: var(--pds-control-h);
+  min-width: 0;
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  color: var(--pds-ink);
+  font: inherit;
+  font-size: var(--pds-text-sm);
+  padding: 0 var(--pds-space-2);
+}
+
+.pds-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- Status pill ---- */
+.pds-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-pill);
+  background: var(--pds-panel-raised);
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  line-height: 1;
+  padding: 0 var(--pds-space-2);
+}
+
+.pds-pill--running {
+  border-color: transparent;
+  background: var(--pds-running);
+  color: var(--pds-running-ink);
+}
+
+/* ---- Tabs (editor / bottom panel) ---- */
+.pds-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.pds-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--pds-control-h);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pds-muted);
+  font: inherit;
+  font-size: var(--pds-text-sm);
+  padding: 0 var(--pds-space-3);
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.pds-tab:hover {
+  color: var(--pds-ink);
+}
+
+.pds-tab--active {
+  color: var(--pds-ink);
+  border-bottom-color: var(--pds-accent);
+}
+
+/* ---- Panel / card surface ---- */
+.pds-panel {
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-md);
+  background: var(--pds-panel-raised);
+}
+
+.pds-section-title {
+  margin: 0;
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---- Key/value metadata list ---- */
+.pds-kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--pds-space-1) var(--pds-space-3);
+  margin: 0;
+  font-size: var(--pds-text-sm);
+}
+
+.pds-kv dt {
+  color: var(--pds-muted);
+}
+
+.pds-kv dd {
+  margin: 0;
+  color: var(--pds-ink);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Monospace console surface ---- */
+.pds-console {
+  overflow: auto;
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-md);
+  background: var(--pds-code-bg);
+  color: var(--pds-code-ink);
+  font-family: var(--pds-font-mono);
+  font-size: var(--pds-text-sm);
+  line-height: 1.45;
+  padding: var(--pds-space-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pds-console__empty {
+  color: var(--pds-muted);
+}
+
+/* ---- Status bar ---- */
+.pds-statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--pds-space-4);
+  min-height: var(--pds-statusbar-h);
+  overflow: hidden;
+  border-top: 1px solid var(--pds-border);
+  font-size: var(--pds-text-sm);
+  padding: 0 var(--pds-space-3);
+}
+
+.pds-statusbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pds-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Activity bar rail ---- */
+.pds-activitybar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pds-space-2);
+  width: var(--pds-activitybar-w);
+  padding: var(--pds-space-2) 0;
+}
+
+.pds-activitybar__brand {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: var(--pds-space-1);
+  border-radius: var(--pds-radius-md);
+  background: var(--pds-accent);
+  color: var(--pds-accent-ink);
+  font-size: var(--pds-text-lg);
+  font-weight: 700;
+}
+
+.pds-activitybar__btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--pds-radius-md);
+  background: transparent;
+  color: var(--pds-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+.pds-activitybar__btn:hover {
+  background: var(--pds-hover);
+  color: var(--pds-ink);
+}
+
+.pds-activitybar__btn--active {
+  color: var(--pds-ink);
+  box-shadow: inset 2px 0 0 var(--pds-accent);
+}
+
+.pds-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- Utility ---- */
+.pds-error {
+  margin: 0;
+  border: 1px solid var(--pds-danger);
+  border-radius: var(--pds-radius-md);
+  background: color-mix(in srgb, var(--pds-danger) 14%, transparent);
+  color: var(--pds-ink);
+  font-size: var(--pds-text-sm);
+  padding: var(--pds-space-2) var(--pds-space-3);
+  white-space: pre-wrap;
+}

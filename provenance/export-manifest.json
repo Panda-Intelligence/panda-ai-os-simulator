@@ -1,0 +1,902 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "Panda-Intelligence/murphy",
+  "sourceCommit": "972e16c3e0fc7d45097454a5eb5e99d40ca2cd3f",
+  "historyExported": false,
+  "publicationApproved": false,
+  "files": [
+    {
+      "sourcePath": "apps/simulator/.gitignore",
+      "path": ".gitignore",
+      "gitBlob": "62c61f948711fdea72f42dd71a562a91bd76be56",
+      "sha256": "e5fc66a46d49d2d0de325a4b062da59508e41b90240aa6d2bf7df41fb384b07b",
+      "bytes": 1078
+    },
+    {
+      "sourcePath": "apps/simulator/README.md",
+      "path": "README.md",
+      "gitBlob": "74b70b0787485b6e7b87aed1dbc76e9ad3783683",
+      "sha256": "053f343dbdcadfefaed7c7974384941346fbf9379ea059ce05f94e4d72310e08",
+      "bytes": 3907
+    },
+    {
+      "sourcePath": "apps/simulator/boards.json",
+      "path": "boards.json",
+      "gitBlob": "67a66ea4a704c99cf415062fb2b3b5b3ae7ac9d1",
+      "sha256": "9128b019715c3ba13effb34987d1767a77968719ebf5de8c50c15acad9334580",
+      "bytes": 4972
+    },
+    {
+      "sourcePath": "apps/simulator/boards.schema.json",
+      "path": "boards.schema.json",
+      "gitBlob": "c2776d0295c5309271a8ba3c1f4dbf6de5e98304",
+      "sha256": "d3c6a9b4cb90a9b765a6907f0445ef018d0c3f0f728e6814754279b46347970a",
+      "bytes": 2945
+    },
+    {
+      "sourcePath": "apps/simulator/docs/lilygo-runtime.md",
+      "path": "docs/lilygo-runtime.md",
+      "gitBlob": "d20663ce75d32683bf8e74a9a885c23a4b3b26fd",
+      "sha256": "69f2568418b502b2b4d36d770096bdfe20b06419eff5669f1d8030db446c21b8",
+      "bytes": 1863
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/.gitkeep",
+      "path": "firmware-fixtures/.gitkeep",
+      "gitBlob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/hello_uart/esp32s3.ld",
+      "path": "firmware-fixtures/hello_uart/esp32s3.ld",
+      "gitBlob": "99e27c4ca0d2260d660110093cfc58c90c4ab73f",
+      "sha256": "2d0eae55dc8e3cf13c5a656789fdc6a94f46e0f71d25f147a6e983b204b45e1a",
+      "bytes": 523
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/hello_uart/hello_uart.c",
+      "path": "firmware-fixtures/hello_uart/hello_uart.c",
+      "gitBlob": "9b9aa4807e2ae22b62c2ddcca1cf8e24d6130bc2",
+      "sha256": "84f1d691c17d67c888fc526515435f8976e054b107cd3c939551a45739befee3",
+      "bytes": 1104
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/hello_uart/start.S",
+      "path": "firmware-fixtures/hello_uart/start.S",
+      "gitBlob": "a50c31eef82495f4514567bb37f8b2aa61afe416",
+      "sha256": "b5c93b8a9c5dd63b7d415800cccda2618cf70e6af17d702808fd0c51b186201d",
+      "bytes": 2440
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/sim_test.cpp",
+      "path": "firmware-fixtures/sim_test.cpp",
+      "gitBlob": "82f1253e5f375cd87dcca4f08b3980313d4d3e52",
+      "sha256": "5d28db9a0c2f13d4e3e316e25b02752c2da3aee79af49ffb71de88ff235b5315",
+      "bytes": 6216
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/sim_test/esp32s3.ld",
+      "path": "firmware-fixtures/sim_test/esp32s3.ld",
+      "gitBlob": "980df768c4665f9bcf407da596c6c4612ab35da2",
+      "sha256": "8b4af48c14c6f390251bff6185e0b4490372927f42d613503c834684429a5e01",
+      "bytes": 455
+    },
+    {
+      "sourcePath": "apps/simulator/firmware-fixtures/sim_test/start.S",
+      "path": "firmware-fixtures/sim_test/start.S",
+      "gitBlob": "b3a9e4d69d35a9b49d98eeafe69bfbde12deaf72",
+      "sha256": "a7a4bc12fba4e0ee744dddb5c3671de948f5ea891b34f6c370707a54d8f18404",
+      "bytes": 1976
+    },
+    {
+      "sourcePath": "apps/simulator/headless/Cargo.lock",
+      "path": "headless/Cargo.lock",
+      "gitBlob": "6cac245bbf0a56afa700ae4f7ba21d9929e0fdbb",
+      "sha256": "5eb0338990b3215a792341cf8203d9bc265ba0b0647d3f6ecfd5c8701af7347a",
+      "bytes": 22910
+    },
+    {
+      "sourcePath": "apps/simulator/headless/Cargo.toml",
+      "path": "headless/Cargo.toml",
+      "gitBlob": "16916b7cb9e44d726d878b8b7be83ade69e2a2cb",
+      "sha256": "6c11cfd8d9093ee129b1bf4ec134b5dc61dbcc1e5c3d757c6b9c48bed55c3f8b",
+      "bytes": 640
+    },
+    {
+      "sourcePath": "apps/simulator/headless/src/bin/create_sd_image.rs",
+      "path": "headless/src/bin/create_sd_image.rs",
+      "gitBlob": "dd2a2f43544e9d090387e820cfc283da11e3e052",
+      "sha256": "ba8b62b354d3614b152232e843e1d40aa474c496e559ddc31462e3370b576f00",
+      "bytes": 1085
+    },
+    {
+      "sourcePath": "apps/simulator/headless/src/debug_transport.rs",
+      "path": "headless/src/debug_transport.rs",
+      "gitBlob": "b1a4d13651bd410eb0b03d0eaca7e550fbca43af",
+      "sha256": "768c673f4b6fa9648f46503969dae32f12d4489bdaaf3d7abea8d9487d594553",
+      "bytes": 21884
+    },
+    {
+      "sourcePath": "apps/simulator/headless/src/lib.rs",
+      "path": "headless/src/lib.rs",
+      "gitBlob": "3c1cd6a64bcfaf9cdfb8f5a46822be8716beafac",
+      "sha256": "e0c69cbe23a7125a6aa0da859c9aa97bed5114b62474ad89efab47b7aad4e5d7",
+      "bytes": 18
+    },
+    {
+      "sourcePath": "apps/simulator/headless/src/main.rs",
+      "path": "headless/src/main.rs",
+      "gitBlob": "4ebcc6a1d5ad30b1407ec20565acf5056bf6aa97",
+      "sha256": "7d89dc4f68e889d0e3653d426dceab0f83c64ff4c24adb42b728d2add3756f22",
+      "bytes": 372492
+    },
+    {
+      "sourcePath": "apps/simulator/headless/src/sd_image.rs",
+      "path": "headless/src/sd_image.rs",
+      "gitBlob": "ba89f10289247110c1e90758f9011a979301c8b5",
+      "sha256": "ad2a45afa84f1c0d6dd6590ea89e00fca8d529b53c38616334feb78cdbe26d29",
+      "bytes": 6716
+    },
+    {
+      "sourcePath": "apps/simulator/index.html",
+      "path": "index.html",
+      "gitBlob": "e002b8c25a6b9cc518ec656e03e585cf9bf90139",
+      "sha256": "dd78c9e2581cb104843077f6449e8e822f62f103ce56b83a41885e9e974286d3",
+      "bytes": 366
+    },
+    {
+      "sourcePath": "apps/simulator/package-lock.json",
+      "path": "package-lock.json",
+      "gitBlob": "898dc163b51d04670ced1837b96e9be9b6535d65",
+      "sha256": "7f88477501f6f23e5b900a46c624547f2063d53da82858a9a6327b3e7dd8d4ba",
+      "bytes": 39917
+    },
+    {
+      "sourcePath": "apps/simulator/package.json",
+      "path": "package.json",
+      "gitBlob": "b366e17cdece7d3588bab2fdbfb36bec8dec2bef",
+      "sha256": "3a9fb4a0f0cc4f0eed6356e9aed15cb34f085a87c6adea11b0d528f4778e21b7",
+      "bytes": 1012
+    },
+    {
+      "sourcePath": "apps/simulator/public/simulator-runtime/browser-simulator-worker.js",
+      "path": "public/simulator-runtime/browser-simulator-worker.js",
+      "gitBlob": "caa75976edbcba23836c75c5819f6e738a846409",
+      "sha256": "4edcc75ef5a4f613dfaa5a7b67881cf337035f53f345b61c5c2aec51f605eec9",
+      "bytes": 32615
+    },
+    {
+      "sourcePath": "apps/simulator/public/tauri.svg",
+      "path": "public/tauri.svg",
+      "gitBlob": "31b62c92804b76aa2896dfd4bfca252255667332",
+      "sha256": "e5d2738bbaa5543c4684001a558dc53165da9b636144827b28db1dcfacf81aa8",
+      "bytes": 2599
+    },
+    {
+      "sourcePath": "apps/simulator/public/vite.svg",
+      "path": "public/vite.svg",
+      "gitBlob": "e7b8dfb1b2a60bd50538bec9f876511b9cac21e3",
+      "sha256": "4a748afd443918bb16591c834c401dae33e87861ab5dbad0811c3a3b4a9214fb",
+      "bytes": 1497
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/.clang-format",
+      "path": "qemu-peripherals/.clang-format",
+      "gitBlob": "e82f1cdeece46f4aeb152dddfa7bf8866a726656",
+      "sha256": "430c1e7bad264f5dca165ccc852871e659ba57059a88a54ac20a8f632f21c938",
+      "bytes": 89
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/INTEGRATION.md",
+      "path": "qemu-peripherals/INTEGRATION.md",
+      "gitBlob": "52094fca20cf494229606862284600fd65dab30f",
+      "sha256": "6616c4910a3ec0128a67425102193a61875822292bc367a8e757d7889186fc85",
+      "bytes": 8307
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/README.md",
+      "path": "qemu-peripherals/README.md",
+      "gitBlob": "8cb0d43cd3a19bac1ace2fff4a80d33cb1814655",
+      "sha256": "2a1ee55076c2ca52abd1dd10f63aae1b7451013f5184a24f4b6a3e93a272b49e",
+      "bytes": 4893
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/chsc6440.c",
+      "path": "qemu-peripherals/chsc6440.c",
+      "gitBlob": "ee92aeed458818c789e6657babb6b97919d35bbd",
+      "sha256": "67e6081a345468b8c6a3d2e8e7948e7e20db80fcbb43da78c6bf8987a3aa8226",
+      "bytes": 13262
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/display-Kconfig.fragment",
+      "path": "qemu-peripherals/display-Kconfig.fragment",
+      "gitBlob": "d27c93eba5d482a73a9475d944164894754a5592",
+      "sha256": "a34715e9f494cfa8c19554ddb15cf3a0a83a7f9113a2ab5e9224fe59663412c5",
+      "bytes": 102
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/display-meson.fragment",
+      "path": "qemu-peripherals/display-meson.fragment",
+      "gitBlob": "4df0e8ab983f5645fdcbaadf72fcbbcea7145de6",
+      "sha256": "a217e606c7e4f307a202b310b800c6826c2f51e6d53953f647e10a79f0be4c50",
+      "bytes": 161
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32_gpio.c",
+      "path": "qemu-peripherals/esp32_gpio.c",
+      "gitBlob": "8b298f41f5313dd79ad73c0aa10b855b1d6077a7",
+      "sha256": "5cfc2d2a8692ec2223c0b992c1cef29496564fde8c3b85cebe35f492562b4338",
+      "bytes": 5497
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32_gpio.h",
+      "path": "qemu-peripherals/esp32_gpio.h",
+      "gitBlob": "36451ce6934557ad7267f13f26cd83d805ecc914",
+      "sha256": "960e174244ddd8ed639f273fb4d36cc30c1debdadc9cf9bd451ba3e362af1f4c",
+      "bytes": 1009
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32_i2c.c",
+      "path": "qemu-peripherals/esp32_i2c.c",
+      "gitBlob": "141d7dbddb8d733dc66f3c478df9599755ff38f1",
+      "sha256": "574ee9aa118ed7002c15e54753da75fac0f9fead5028bbf5588423556d57608b",
+      "bytes": 12355
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32_i2c.h",
+      "path": "qemu-peripherals/esp32_i2c.h",
+      "gitBlob": "eb54deec1cd165fab37fa4a4c6052d76ab5d73cb",
+      "sha256": "b4a6405dac46d81a4fd5731ab494e355992fabdda9a0538060d38589d30c3987",
+      "bytes": 3133
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32s3-soc-machine.patch",
+      "path": "qemu-peripherals/esp32s3-soc-machine.patch",
+      "gitBlob": "382570bb29459b7839b58b4c687eb8807a87ef44",
+      "sha256": "16723a0aa697420a4a055605a080eee1da0c3f5f47d50011a0d6090b6499d968",
+      "bytes": 249079
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32s3_gpio.c",
+      "path": "qemu-peripherals/esp32s3_gpio.c",
+      "gitBlob": "bf63fc124adbd49eb6fd222977e6775aa1845321",
+      "sha256": "f61e8ad68947b94c659bd02d8f7bc0533ae5da2836b8e37774fc22f51a20d85e",
+      "bytes": 1288
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/esp32s3_gpspi2.c",
+      "path": "qemu-peripherals/esp32s3_gpspi2.c",
+      "gitBlob": "83a112f7af71aaf7272dacfd7e2c399b71e296d1",
+      "sha256": "d2e4219766fd0ab5539b52129e57a306e0488b9f8cf1e70af2ebf957820510e4",
+      "bytes": 32260
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/ft6336u.c",
+      "path": "qemu-peripherals/ft6336u.c",
+      "gitBlob": "306796c499b808de704ea8ac191094a92dea5327",
+      "sha256": "6969d276f2b4c2fb4889fe2b966c1340d9a1667e850c903246beb2d63019bdb8",
+      "bytes": 13353
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/gpspi2-Kconfig.fragment",
+      "path": "qemu-peripherals/gpspi2-Kconfig.fragment",
+      "gitBlob": "b3502cc4ed88c1c2b7992af758836754a453f9c6",
+      "sha256": "317bd08e5ae8faf08e540e7437620b90d287ad4ffcff64b1ff410c3c3da2d90a",
+      "bytes": 46
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/gpspi2-meson.fragment",
+      "path": "qemu-peripherals/gpspi2-meson.fragment",
+      "gitBlob": "7f60bb3e5255ec44348d2cf485f0615b85d16e06",
+      "sha256": "5459a217761b1ec0bde952bdf74a0ca0da37643ca9f9b206e2a3fca23e043c39",
+      "bytes": 81
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/hw_xtensa_esp32s3.c",
+      "path": "qemu-peripherals/hw_xtensa_esp32s3.c",
+      "gitBlob": "7b8d1992be6057d6dd832d68f9957c6a3788e9b1",
+      "sha256": "24113dd3652ae54d08e8d980b6321db4dd98b7a4d936bd5c508b2f07c55088cf",
+      "bytes": 197111
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_bq27220.c",
+      "path": "qemu-peripherals/lilygo_bq27220.c",
+      "gitBlob": "95f5a76ca3ed3c1f276a43e3088604ec54b2b045",
+      "sha256": "175dcda184d107b41cf49233b7b2717d6bf4bf4b1128c4fe7a573453a0d70a23",
+      "bytes": 9516
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_bq27220.h",
+      "path": "qemu-peripherals/lilygo_bq27220.h",
+      "gitBlob": "7e42e86714abf86049379894bf2a7988cd97efac",
+      "sha256": "9550dd127f6fa0ab7be78780d6e2059e75ebc15ea69a11ce47954e70d763d8f9",
+      "bytes": 2076
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_display_input.c",
+      "path": "qemu-peripherals/lilygo_display_input.c",
+      "gitBlob": "d584ea0418c5a55a099e55fde6f0ea98cba469c1",
+      "sha256": "ebee3c4caf07f31e6136ea9803de47841c53b9793eccca696d803df5276888e3",
+      "bytes": 28664
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_display_input.h",
+      "path": "qemu-peripherals/lilygo_display_input.h",
+      "gitBlob": "bac7fbbcc3eb25876545f5be095cfb219a69d37f",
+      "sha256": "73706297cfe86125fa0e263db077ef6bd76ed89c7407beeddf8e1048948530ff",
+      "bytes": 6902
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_gnss_chardev.c",
+      "path": "qemu-peripherals/lilygo_gnss_chardev.c",
+      "gitBlob": "ec1ea878018cb9911e233b2450f0cd656e4bd9b2",
+      "sha256": "bba88d356b777042356a79c33ff6b679f288f6e7198fcc8dfdaf650929f06ce9",
+      "bytes": 5412
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_gnss_chardev.h",
+      "path": "qemu-peripherals/lilygo_gnss_chardev.h",
+      "gitBlob": "dc9db2533f49f440daf451fb0b77e7b12b253372",
+      "sha256": "3c70a123826103bc1f1f827dcfaf11045d31e559ba0b681131c44b5ea0164e0c",
+      "bytes": 360
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_gnss_uart.c",
+      "path": "qemu-peripherals/lilygo_gnss_uart.c",
+      "gitBlob": "dea043acd9b748d6ccbf94cc26085c3626e85df1",
+      "sha256": "cfa3fb5553bc8efed98ba0354921ecfff1874547be52afd6704579463cf1bb66",
+      "bytes": 7071
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_gnss_uart.h",
+      "path": "qemu-peripherals/lilygo_gnss_uart.h",
+      "gitBlob": "0541cf9bd96368970aa7340258a08340b55b9729",
+      "sha256": "ce894f3c0df55edd0fd6162b11e3bc4bac5c159e5597c7a624446e022186fa98",
+      "bytes": 2133
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_i2c_probe.c",
+      "path": "qemu-peripherals/lilygo_i2c_probe.c",
+      "gitBlob": "adf8897cc2e6441d72e926e8e15b4e1619447e38",
+      "sha256": "d1aea93a142974e37c322b4078a701c32a0b7337e02bcd5506ab11bafd812049",
+      "bytes": 10542
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_i2c_probe.h",
+      "path": "qemu-peripherals/lilygo_i2c_probe.h",
+      "gitBlob": "f4f120ba4548afa64d70fd0554aac15eeaf3d23f",
+      "sha256": "7c699dd0a781946e4e9464e7a402149ffc98e4887186399a4707dafd3c452686",
+      "bytes": 258
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_peripheral_control.c",
+      "path": "qemu-peripherals/lilygo_peripheral_control.c",
+      "gitBlob": "fa8aa9fdec79e2bfcaf291ac0022aea2d1f4894a",
+      "sha256": "da0d6d3e5f4c90879405de5b4a648e69afbb02d6dc48372a569422ccbe5f1192",
+      "bytes": 7729
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_peripheral_control.h",
+      "path": "qemu-peripherals/lilygo_peripheral_control.h",
+      "gitBlob": "cade0cb8dbf4c0f549a4a2de55884541e83166c0",
+      "sha256": "db2762a6552026589d59a96a76c03863bd0d41eb8b48e7c66a9d564e861c3038",
+      "bytes": 2137
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_power_rtc.c",
+      "path": "qemu-peripherals/lilygo_power_rtc.c",
+      "gitBlob": "dfe6e81d5d5aecdc04ded9362f6f795a6e4ae284",
+      "sha256": "f30147698f00ba312d482ed23e3c6d62d855f089a3f41516a77428a0e5bae283",
+      "bytes": 17206
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_power_rtc.h",
+      "path": "qemu-peripherals/lilygo_power_rtc.h",
+      "gitBlob": "3081a037686fed48c4aad22c636bcd856d81aece",
+      "sha256": "ef95d924a5951802ec740ba0c6ae7d0b5e7a1e27e3f4b293c536d07ae905fef9",
+      "bytes": 3495
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_sx1262.c",
+      "path": "qemu-peripherals/lilygo_sx1262.c",
+      "gitBlob": "0f9a43e90fe61949d2cf462ed64be5a200756a5b",
+      "sha256": "0520ec6fdd70e5d9cb6769c0b7365fc17261bc0547f547b38368a4cd51ca1630",
+      "bytes": 33467
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/lilygo_sx1262.h",
+      "path": "qemu-peripherals/lilygo_sx1262.h",
+      "gitBlob": "08d5936e332704a5703bb100ad149cca256a765d",
+      "sha256": "ab14f1ea4f5372fb7d18c550e42d910d3c0656161de9a44f4ae38ac3d27b402a",
+      "bytes": 4777
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/mofei-sim-addrs.h",
+      "path": "qemu-peripherals/mofei-sim-addrs.h",
+      "gitBlob": "9bd4bd5ffcf10a4ff813558fbcbfe235fa88ec0f",
+      "sha256": "a9b6f4888b294c40106edc8616ac479b2a6fc41b45fa9ae6cdde9318741d2da7",
+      "bytes": 30738
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/sd.c",
+      "path": "qemu-peripherals/sd.c",
+      "gitBlob": "8e7bf9cdd4625d4f348bef6e3aac24ce259545fa",
+      "sha256": "2bcaa4c791ff2559eb3022f6088a249dd974e9318cfbcef6b22fd7dc5fce65ea",
+      "bytes": 96371
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/sensor-Kconfig.fragment",
+      "path": "qemu-peripherals/sensor-Kconfig.fragment",
+      "gitBlob": "76a864a25accc6d617038c6990bee304428224a2",
+      "sha256": "2346140158a2f38b5152d44110f91c22bc3bbba0c48b4906e962180ba6b269fb",
+      "bytes": 108
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/sensor-meson.fragment",
+      "path": "qemu-peripherals/sensor-meson.fragment",
+      "gitBlob": "5c87da806ae35f2893e62c61b4fcdf61f69da948",
+      "sha256": "35a85cd3aa57eb01b73bbb06c7f3f7d96bb8f40fa8fa2b3f9ef049f662d0cb14",
+      "bytes": 148
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/ssd1677_gdeq0426t82.c",
+      "path": "qemu-peripherals/ssd1677_gdeq0426t82.c",
+      "gitBlob": "da71a832f7ac82cdd8ad83c23335b0680dfadcea",
+      "sha256": "b73ce5d8d872230271f5752bef18665c971589da3de15e667d9622da888eb553",
+      "bytes": 42788
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/target_xtensa_exc_helper.c",
+      "path": "qemu-peripherals/target_xtensa_exc_helper.c",
+      "gitBlob": "f493629500077ba28cd089dacb4ce59cb42c1e3c",
+      "sha256": "b286dde3f6ea825345f6c25489ab30d46bb128d912197eb9fdec1dce63cffe21",
+      "bytes": 205700
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/target_xtensa_exc_helper_stub.c",
+      "path": "qemu-peripherals/target_xtensa_exc_helper_stub.c",
+      "gitBlob": "174d36a215e363d2d695d3b70b4982c03e1c746e",
+      "sha256": "8c9158dc68b69dcac67ea7adde11ed575f9cdcca117bc03bd150239013a53e2e",
+      "bytes": 300
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/target_xtensa_helper.h",
+      "path": "qemu-peripherals/target_xtensa_helper.h",
+      "gitBlob": "823fc88d2ff788401ba11f66096532de9d36397e",
+      "sha256": "bc32cfa9825125e4a366968b51b4650694ae8293ec3631f3d65ddc8bd16c6a23",
+      "bytes": 12131
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/target_xtensa_translate.c",
+      "path": "qemu-peripherals/target_xtensa_translate.c",
+      "gitBlob": "3d3e9293f4190f8711de89086faec6c571d23fb9",
+      "sha256": "a7139153527fb234c6d4d5de55e6e46e56d3e9730ee369fcfb526c376e49edd3",
+      "bytes": 303698
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/uc8253c.c",
+      "path": "qemu-peripherals/uc8253c.c",
+      "gitBlob": "d36e96c12c0b520a0d405edff3a4b9cf740c06bb",
+      "sha256": "65bfda6ac715d56d45bee5dcc989cd2133609e1cd78c9c42dd1882bb9b299836",
+      "bytes": 25595
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/xtensa-Kconfig.fragment",
+      "path": "qemu-peripherals/xtensa-Kconfig.fragment",
+      "gitBlob": "f2b246d40204c59b3db957da396f75dde5c589b5",
+      "sha256": "4199b1d5c36c54703da15c0a2546a2b5a38582e21409f2668d3b2f9115423e69",
+      "bytes": 680
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-peripherals/xtensa-reset-vector.patch",
+      "path": "qemu-peripherals/xtensa-reset-vector.patch",
+      "gitBlob": "98c168b485fd136102f37785008b41e65737d09f",
+      "sha256": "74a6ef53a65e0e4c7bf1d3457405a6a270d7aac4a4532cb89b0113c0e0b39fe8",
+      "bytes": 529601
+    },
+    {
+      "sourcePath": "apps/simulator/qemu-runtime.env",
+      "path": "qemu-runtime.env",
+      "gitBlob": "f1ce580071ed85315934107098ec4e0b793c8f5f",
+      "sha256": "8d66aa4ce9b77980a4cb91c7572b40482f2564bb1022d666d5fcad8a19f38a34",
+      "bytes": 263
+    },
+    {
+      "sourcePath": "apps/simulator/run",
+      "path": "run",
+      "gitBlob": "c5681df1d025d1f6a7c4622f9e7594e194bfc86c",
+      "sha256": "dd52ccd73122526a81f55886c1028dd2423e303e3947bdc9a8f40d7ba4586d8b",
+      "bytes": 9225
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/build-qemu-wasm.sh",
+      "path": "scripts/build-qemu-wasm.sh",
+      "gitBlob": "a531adfb13fc21f05fc6a822ccd0d1b68e0a7cd4",
+      "sha256": "b5740cc0888aee5bca3e37ca3d99ac600d9c2e9e9a55d6e53d3637d3e9b86d05",
+      "bytes": 69427
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/build-qemu.sh",
+      "path": "scripts/build-qemu.sh",
+      "gitBlob": "9b89a6be0d392d9192ba138ecd4e8b194c8ba0eb",
+      "sha256": "a3c738317b90b37b857f1465b30b3f218b770f59718da771c64cb50172ee294c",
+      "bytes": 11369
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/build-sim-test",
+      "path": "scripts/build-sim-test",
+      "gitBlob": "80658d6a5c6cb98da054f6d296279ad357b3cc9c",
+      "sha256": "39b80b2d73ab4c385656715bc378b3499b3d2495b5aa17b70fa1430b589f2f7f",
+      "bytes": 1657
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/check-browser-sd-card.mjs",
+      "path": "scripts/check-browser-sd-card.mjs",
+      "gitBlob": "3570d5b1e4635e0fba7b100d79415b5f597cd06f",
+      "sha256": "3f7ea3afe7b35c8d958958be53713f84bf69f92fa3f144874eff3d4900785812",
+      "bytes": 6799
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/check-framebuffer-contract.mjs",
+      "path": "scripts/check-framebuffer-contract.mjs",
+      "gitBlob": "3ab761abf6d1054f128e0ae34331c2402572e155",
+      "sha256": "8b2fa3586181576d0e5f4d04c7b724bde973c6c559e9522fb038d91c7b538a74",
+      "bytes": 3660
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/integrate-peripherals.sh",
+      "path": "scripts/integrate-peripherals.sh",
+      "gitBlob": "92296bf20553ab002d0e0bdfbca2d01c861ca35d",
+      "sha256": "a1a748dfc821cb4239360080e41d7bb44313582eca7a35dcf08fb32c81e776f8",
+      "bytes": 25264
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/qemu-wasm-mofei-bridge.js",
+      "path": "scripts/qemu-wasm-mofei-bridge.js",
+      "gitBlob": "9335ba9b502e54d0d736504f0ed73fa96d16276d",
+      "sha256": "3be95a8602ab553abb0437d46b1292ca57fd3080c35971eccebfee0d0afe1515",
+      "bytes": 306
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/sync-theme.mjs",
+      "path": "scripts/sync-theme.mjs",
+      "gitBlob": "edb5cef3f9fcf5d0245aab258ae412415594a964",
+      "sha256": "f4d205464082a7de2d3bc17056b9213b3ee1227fe170c78552ecd1ca85cd5eb8",
+      "bytes": 750
+    },
+    {
+      "sourcePath": "apps/simulator/scripts/write-qemu-wasm-artifact-manifest.mjs",
+      "path": "scripts/write-qemu-wasm-artifact-manifest.mjs",
+      "gitBlob": "1a3bfbe136c06ec3c8483edb94ff25f4717d2cab",
+      "sha256": "bc312982f405475dea3ed84b1e1f6df2a0bb1616f5271f6d4af551bcf41893f2",
+      "bytes": 12249
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/.gitignore",
+      "path": "src-tauri/.gitignore",
+      "gitBlob": "b21bd681d99748c046b14202ab79bd8da0143302",
+      "sha256": "88707cda7ba4226eda3ffa91d8284f1a0d12b827f06fb9bc48425cc0d4af04af",
+      "bytes": 166
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/Cargo.lock",
+      "path": "src-tauri/Cargo.lock",
+      "gitBlob": "c56c9d86623a6ee1868450ab2537fa89901ee0e6",
+      "sha256": "af3854b043f78cc13cbe4d7acb25d55332871f46ce0844274800907683da292d",
+      "bytes": 128328
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/Cargo.toml",
+      "path": "src-tauri/Cargo.toml",
+      "gitBlob": "842d8baffb2796b7c8124e383e9cf4db8c69670a",
+      "sha256": "c3431a2f8946de1a2a50db35848993897ddb001f0e21ed3d8459e9487563f0ca",
+      "bytes": 876
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/build.rs",
+      "path": "src-tauri/build.rs",
+      "gitBlob": "d860e1e6a7cac333c3cc0bc9cb67faf286b07d69",
+      "sha256": "487059eaf8a947b80f20a9aacac038a5047b2ad69d2401b827376c67d6fe847f",
+      "bytes": 39
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/capabilities/default.json",
+      "path": "src-tauri/capabilities/default.json",
+      "gitBlob": "778bfb5a652bf2f3539ae2ac70a221881bbaa643",
+      "sha256": "2d3380b5f539ea2927767f2f4511c6f4c0c51d8583dbb9bdf305c7888bf750f0",
+      "bytes": 242
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/128x128.png",
+      "path": "src-tauri/icons/128x128.png",
+      "gitBlob": "6be5e50e9b9ae84d9e2ee433f32ef446495eaf3b",
+      "sha256": "19b4fec485db7df51a691fcce72a3dd6f983e754fc4262da7154e4a4c688f69e",
+      "bytes": 3512
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/128x128@2x.png",
+      "path": "src-tauri/icons/128x128@2x.png",
+      "gitBlob": "e81becee571e96f76aa5667f9324c05e5e7a4479",
+      "sha256": "6c7660390d65217fe8de0892862254f47aee77e0af7096c75b8bfe168c5403f7",
+      "bytes": 7012
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/32x32.png",
+      "path": "src-tauri/icons/32x32.png",
+      "gitBlob": "a437dd51741e9e56e14b5d6024493cb2abfd5259",
+      "sha256": "1c6782dc65c8111c12cbc1882a0fea5e71ab8e51b18da2ce9580f5c88860ed02",
+      "bytes": 974
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square107x107Logo.png",
+      "path": "src-tauri/icons/Square107x107Logo.png",
+      "gitBlob": "0ca4f27198838968bd60ed7d371bfa23496b7fe5",
+      "sha256": "54f7a0f58c96a4b023c1edc4b53fc443e27dace50e345f6936fa29bc20f785ca",
+      "bytes": 2863
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square142x142Logo.png",
+      "path": "src-tauri/icons/Square142x142Logo.png",
+      "gitBlob": "b81f820394d1504ff4b4091473a8263542c9edc4",
+      "sha256": "fec1e2080ca73cd4c4a123b23b1cd364059a8a8efeba3076e21dfefed390693b",
+      "bytes": 3858
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square150x150Logo.png",
+      "path": "src-tauri/icons/Square150x150Logo.png",
+      "gitBlob": "624c7bfba0498dcebbc8a020fe06f08cfff2384a",
+      "sha256": "65fb570cb0e61ffce02ad67784cb200a0bf058400300980a46fa0d0c8f43a77a",
+      "bytes": 3966
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square284x284Logo.png",
+      "path": "src-tauri/icons/Square284x284Logo.png",
+      "gitBlob": "c021d2ba76619c08969ab688db3b27f29257aa6f",
+      "sha256": "ea0b7c5d4b1d1ab9c91d2f7c9b069c8dfbf4557b0649a5777d47332cde610262",
+      "bytes": 7737
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square30x30Logo.png",
+      "path": "src-tauri/icons/Square30x30Logo.png",
+      "gitBlob": "621970023096ed9f494ba18ace15421a45cd65fa",
+      "sha256": "cc72279c41b4ed343e8db7e7541ceef7b6b23edaa83d4e7338421dfcb8d63c33",
+      "bytes": 903
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square310x310Logo.png",
+      "path": "src-tauri/icons/Square310x310Logo.png",
+      "gitBlob": "f9bc04839491e66c07b16ab03743c0c53b4109cc",
+      "sha256": "9733a89c539115de3c49bd06720bfc99639d9a918f5df48a810e267cf3554119",
+      "bytes": 8591
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square44x44Logo.png",
+      "path": "src-tauri/icons/Square44x44Logo.png",
+      "gitBlob": "d5fbfb2ab4e57e8a75620cded43bddc1a15daa99",
+      "sha256": "10be9840e58fb018eb9029601d42008e16c0c9cfa66b8f9467fee94f600160d4",
+      "bytes": 1299
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square71x71Logo.png",
+      "path": "src-tauri/icons/Square71x71Logo.png",
+      "gitBlob": "63440d7984936a9caa89275928d8dce97e4d033b",
+      "sha256": "2937fc83324cd9a1fddcfefd5927c791af31996a6840bfb3e2f1d578ad4129de",
+      "bytes": 2011
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/Square89x89Logo.png",
+      "path": "src-tauri/icons/Square89x89Logo.png",
+      "gitBlob": "f3f705af2f2e044682ac042b37dba6682a0c8a6b",
+      "sha256": "12aed0e7ee06cb631427dc9da72c0c7ecf03857fbc4884d0c31f78314feb6c7f",
+      "bytes": 2468
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/StoreLogo.png",
+      "path": "src-tauri/icons/StoreLogo.png",
+      "gitBlob": "455638826192851ad1ae604d66f2ca352979442c",
+      "sha256": "91a54024dd47230991546088f2e75d3e3199b3ccc9fe40f3f6b7d3bf1cbf7776",
+      "bytes": 1523
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/icon.icns",
+      "path": "src-tauri/icons/icon.icns",
+      "gitBlob": "12a5bcee268851fdab744ec4a31f75d3d008e031",
+      "sha256": "3dc10493b7de48a61de58f768f8a5708d3a44a068c148cedf0502b9b9b71ba5d",
+      "bytes": 98451
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/icon.ico",
+      "path": "src-tauri/icons/icon.ico",
+      "gitBlob": "b3636e4b22ba65db9061cd60a77b02c92022dfd6",
+      "sha256": "392206b573a809997f3ff16fe68f456a52e931c372107eade9572b329bbe3321",
+      "bytes": 86642
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/icons/icon.png",
+      "path": "src-tauri/icons/icon.png",
+      "gitBlob": "e1cd2619e0b5ec089cbba5ec7b03ddf2b1dfceb6",
+      "sha256": "273cd669e07c455ad1c7c095890a37984652157cee73128a867300067dfb80e7",
+      "bytes": 14183
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/src/debug_transport.rs",
+      "path": "src-tauri/src/debug_transport.rs",
+      "gitBlob": "360e474cba4ebc3fb2b420c7f2d6f4f66341a168",
+      "sha256": "518c08a5b7ce1336e513daa4a31f929fc3ed0028fe03086984072a88bd69153f",
+      "bytes": 22244
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/src/ipc.rs",
+      "path": "src-tauri/src/ipc.rs",
+      "gitBlob": "baae262d6ce0eca32f20091b2138d1e3859316a8",
+      "sha256": "66fe87f0562465d0b2fa754d636630cd72d87d4c19ae3810863a305d8b6337f3",
+      "bytes": 12206
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/src/lib.rs",
+      "path": "src-tauri/src/lib.rs",
+      "gitBlob": "14f0767a4a9f04fa4801bc16ed935e4c6d5a6caf",
+      "sha256": "663236e4aaa83d67553c07c8ef3836da9f149d02f9dbfcd894c182135df883f9",
+      "bytes": 40948
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/src/main.rs",
+      "path": "src-tauri/src/main.rs",
+      "gitBlob": "96fdc42e6eeafa7a473711f03c5b8db1c7d3b517",
+      "sha256": "740b7c1e9de2b7ab6c6314ab8a7ad0fd56c4266465a34ccb965c234032ca51b1",
+      "bytes": 184
+    },
+    {
+      "sourcePath": "apps/simulator/src-tauri/tauri.conf.json",
+      "path": "src-tauri/tauri.conf.json",
+      "gitBlob": "ef6758493fb775203d702b7f3459b7bb09dd16e3",
+      "sha256": "bde994d8df19fb54c7cd92828d2cc0679f14bf43fa1bf05ef3867a057f515b24",
+      "bytes": 703
+    },
+    {
+      "sourcePath": "apps/simulator/src/App.css",
+      "path": "src/App.css",
+      "gitBlob": "da90970b217b4c6be9a89023ad9561ac51e2ca27",
+      "sha256": "21ad6da1379906277a989f98f9bbb8ae6b39e765f83f635cb16225ab335d7b62",
+      "bytes": 9691
+    },
+    {
+      "sourcePath": "apps/simulator/src/App.tsx",
+      "path": "src/App.tsx",
+      "gitBlob": "f7dff511ddbb7def740e667636cab5074b719a42",
+      "sha256": "713131c23c99ecb753c52c88f70bf978150a39867e9feb4839faaf67bdf06801",
+      "bytes": 193
+    },
+    {
+      "sourcePath": "apps/simulator/src/assets/react.svg",
+      "path": "src/assets/react.svg",
+      "gitBlob": "6c87de9bb3358469122cc991d5cf578927246184",
+      "sha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5",
+      "bytes": 4126
+    },
+    {
+      "sourcePath": "apps/simulator/src/boards.ts",
+      "path": "src/boards.ts",
+      "gitBlob": "82b58294dfbaf793904b6987eb7f9c026fe1ba4f",
+      "sha256": "906d0b38cf9f61d64bb0d3fc5c041d50e29a17337fee2b318a80f012e5035ef5",
+      "bytes": 1821
+    },
+    {
+      "sourcePath": "apps/simulator/src/browserSimulatorHostBridge.ts",
+      "path": "src/browserSimulatorHostBridge.ts",
+      "gitBlob": "b1c6f18b5361de467ee47777b14d5bf2f7c66013",
+      "sha256": "ebecbfdf37fa8f2f92ec3e6d846df135e9c7e67213d43bf910c0ef0995a1e54e",
+      "bytes": 2394
+    },
+    {
+      "sourcePath": "apps/simulator/src/browserSimulatorRuntime.ts",
+      "path": "src/browserSimulatorRuntime.ts",
+      "gitBlob": "19b64436c88920c8ec43635ef93189a6a6e2b647",
+      "sha256": "1e2c68f3cfd33393389762c4df4211d8319653a6b7d4d8592548cf425fb4aa05",
+      "bytes": 31520
+    },
+    {
+      "sourcePath": "apps/simulator/src/browserSimulatorRuntimeWorker.js",
+      "path": "src/browserSimulatorRuntimeWorker.js",
+      "gitBlob": "5f7ea0668aab4b6ed90baa4c49269ca32846c2ab",
+      "sha256": "c4970f5d076804ad00557b5cc88af06b93c4e72515fe2c7fad47b59fb8dc9c51",
+      "bytes": 46640
+    },
+    {
+      "sourcePath": "apps/simulator/src/components/PanelCanvas.tsx",
+      "path": "src/components/PanelCanvas.tsx",
+      "gitBlob": "1cff7922d368ac8040224bdc5ae7a415ce3736cf",
+      "sha256": "d4cea17dc74ba515650a85ccc4ce6b0b691672eec0d71f198560996df463d33e",
+      "bytes": 8529
+    },
+    {
+      "sourcePath": "apps/simulator/src/components/SimulatorDevicePane.tsx",
+      "path": "src/components/SimulatorDevicePane.tsx",
+      "gitBlob": "5b3d37f7e332e5334c73a14dc7275b4877847804",
+      "sha256": "50722d4073cf4784048e0f8dec3256ceacdd70904c718034422c17afc2bb8bfe",
+      "bytes": 34004
+    },
+    {
+      "sourcePath": "apps/simulator/src/i18n.ts",
+      "path": "src/i18n.ts",
+      "gitBlob": "5dea3295737389dd5fafb555bbef96a7450d4c9e",
+      "sha256": "911c5b9e7400aa4ecb727df834dd72ad3cfcb63ec50911acf439e6b2b4cfa9cf",
+      "bytes": 9586
+    },
+    {
+      "sourcePath": "apps/simulator/src/main.tsx",
+      "path": "src/main.tsx",
+      "gitBlob": "2be325ed2578821637e991b3c3f2eaaf47632f51",
+      "sha256": "bfcf131d8fb04a4dadcdd633c0bdbefea3f3a7af5bb35d34dc55588991887654",
+      "bytes": 229
+    },
+    {
+      "sourcePath": "apps/simulator/src/simulatorBridge.ts",
+      "path": "src/simulatorBridge.ts",
+      "gitBlob": "2547b42044ba24e5cd7e3eb704682fd68fdf7502",
+      "sha256": "1c5aff949e164fb32e781dd9814160db500f6414587a8fd4734dbe6de4e8904d",
+      "bytes": 953
+    },
+    {
+      "sourcePath": "apps/simulator/src/simulatorBridgeTypes.ts",
+      "path": "src/simulatorBridgeTypes.ts",
+      "gitBlob": "f049c0860c3d875e70377fe4a5a7afc6cfd5aad7",
+      "sha256": "86916e68d9e21c9c16155aa9a79d9f504bb535dd71a0dc3be66c20533a4a09a4",
+      "bytes": 2097
+    },
+    {
+      "sourcePath": "apps/simulator/src/tauriSimulatorHostBridge.ts",
+      "path": "src/tauriSimulatorHostBridge.ts",
+      "gitBlob": "4c761fe0f65da5381501794ce817c1ffecffe0c9",
+      "sha256": "4f4d762c073fc15a14e7849dd515772ff4e1dc02d22b64b9d7fd5a057989857b",
+      "bytes": 3045
+    },
+    {
+      "sourcePath": "apps/simulator/src/vite-env.d.ts",
+      "path": "src/vite-env.d.ts",
+      "gitBlob": "11f02fe2a0061d6e6e1f271b21da95423b448b32",
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5",
+      "bytes": 38
+    },
+    {
+      "sourcePath": "apps/simulator/tsconfig.json",
+      "path": "tsconfig.json",
+      "gitBlob": "a7fc6fbf23de2a53e36754bc4a2c306d0291d7b2",
+      "sha256": "980d6cbe977ddfb52d3ab1bdd3fba30f8c1db9371b3b14aa4557d32bb00ce54b",
+      "bytes": 605
+    },
+    {
+      "sourcePath": "apps/simulator/tsconfig.node.json",
+      "path": "tsconfig.node.json",
+      "gitBlob": "42872c59f5b01c9155864572bc2fbd5833a7406c",
+      "sha256": "9e2abb169ea87b7190613a1d4da57ca608463a453bd4231fa3aeee5e308370dd",
+      "bytes": 213
+    },
+    {
+      "sourcePath": "apps/simulator/vite.config.ts",
+      "path": "vite.config.ts",
+      "gitBlob": "1d69f397f8945f0e4eb4f8019e23f72658377504",
+      "sha256": "a8662b9482515a7f66fa8c5c98c4381ab0fa5caf44149e69ed59c7817907ac8e",
+      "bytes": 926
+    },
+    {
+      "sourcePath": "LICENSE",
+      "path": "LICENSE",
+      "sha256": "920af4390c829b11bb38259a9fc58fce0260333419374b5b47fe5c0a8c69c5ff",
+      "bytes": 6842
+    },
+    {
+      "sourcePath": "apps/shared/panda-ide/panda-ide.css",
+      "path": "packages/ui-tokens/panda-ide.css",
+      "sha256": "bb16f823a05f9b6fdeeea134f1c4043958a93fc50ee589f030d48254cfcf6076",
+      "bytes": 10520
+    }
+  ],
+  "excluded": [
+    ".acceptance-run.mjs",
+    "untracked files",
+    "build/cache directories",
+    "firmware/ROM/font/book assets"
+  ]
+}

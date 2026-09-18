@@ -1,0 +1,52 @@
+#ifndef HW_MISC_LILYGO_PERIPHERAL_CONTROL_H
+#define HW_MISC_LILYGO_PERIPHERAL_CONTROL_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#define LILYGO_PERIPHERAL_CONTROL_VERSION 1
+#define LILYGO_PERIPHERAL_CONTROL_MAX_PAYLOAD 64
+#define LILYGO_I2C_CONTROL_MAX_PAYLOAD LILYGO_PERIPHERAL_CONTROL_MAX_PAYLOAD
+#define LILYGO_I2C_OPERATION_SET_STATE LILYGO_PERIPHERAL_OPERATION_SET_STATE
+#define LILYGO_I2C_OPERATION_SET_FAULT LILYGO_PERIPHERAL_OPERATION_SET_FAULT
+#define LILYGO_I2C_OPERATION_RESET LILYGO_PERIPHERAL_OPERATION_RESET
+#define LILYGO_I2C_OPERATION_QUERY LILYGO_PERIPHERAL_OPERATION_QUERY
+#define LILYGO_BQ25896_CONTROL_DEVICE 6
+#define LILYGO_PCF8563_CONTROL_DEVICE 7
+#define LILYGO_GNSS_CONTROL_DEVICE 8
+#define LILYGO_TPS651851_CONTROL_DEVICE 9
+
+typedef enum LilygoPeripheralControlOperation {
+  LILYGO_PERIPHERAL_OPERATION_SET_STATE = 1,
+  LILYGO_PERIPHERAL_OPERATION_SET_FAULT = 2,
+  LILYGO_PERIPHERAL_OPERATION_RESET = 3,
+  LILYGO_PERIPHERAL_OPERATION_QUERY = 4,
+} LilygoPeripheralControlOperation;
+
+typedef enum LilygoPeripheralControlMessage {
+  LILYGO_PERIPHERAL_MESSAGE_ACK = 0x80,
+  LILYGO_PERIPHERAL_MESSAGE_TRACE = 0x81,
+  LILYGO_PERIPHERAL_MESSAGE_RADIO_TX = 0x84,
+} LilygoPeripheralControlMessage;
+
+typedef enum LilygoPeripheralControlError {
+  LILYGO_PERIPHERAL_ERROR_NONE = 0,
+  LILYGO_PERIPHERAL_ERROR_UNSUPPORTED_VERSION = 1,
+  LILYGO_PERIPHERAL_ERROR_UNKNOWN_DEVICE = 2,
+  LILYGO_PERIPHERAL_ERROR_UNKNOWN_OPERATION = 3,
+  LILYGO_PERIPHERAL_ERROR_PAYLOAD_TOO_LARGE = 4,
+  LILYGO_PERIPHERAL_ERROR_MALFORMED = 5,
+  LILYGO_PERIPHERAL_ERROR_UNKNOWN_FIELD = 6,
+  LILYGO_PERIPHERAL_ERROR_INVALID_VALUE = 7,
+  LILYGO_PERIPHERAL_ERROR_NOT_READY = 8,
+} LilygoPeripheralControlError;
+
+void lilygo_peripheral_control_dispatch(const uint8_t* payload, uint32_t len);
+void lilygo_peripheral_control_set_ipc_sender(void (*sender)(const uint8_t* payload, uint32_t len));
+void lilygo_peripheral_control_emit(const uint8_t* payload, uint32_t len);
+
+bool esp32s3_gpspi2_control(const uint8_t* payload, uint32_t len);
+bool esp32s3_gpspi2_transaction_active(void);
+bool lilygo_sd_control(const uint8_t* payload, uint32_t len);
+
+#endif

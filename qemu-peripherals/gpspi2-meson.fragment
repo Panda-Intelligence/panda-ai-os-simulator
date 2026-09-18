@@ -1,0 +1,1 @@
+system_ss.add(when: 'CONFIG_ESP32S3_GPSPI2', if_true: files('esp32s3_gpspi2.c'))

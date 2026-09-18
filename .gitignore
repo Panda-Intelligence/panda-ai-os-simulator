@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Browser WASM runtime output. The Worker shim is source-controlled under
+# public/simulator-runtime/, but qemu-wasm emits large generated JS/WASM/data
+# files under this generated subdirectory.
+public/simulator-runtime/qemu/
+
+# QEMU build cache (Espressif fork, built by scripts/build-qemu.sh)
+.qemu-cache/
+
+# QEMU WASM build cache (ktock/qemu-wasm + local Mofei overlay).
+.qemu-wasm-cache/
+
+# Host-backed SD card directory for local simulator runs.
+sdcard/
+
+# Cargo target dirs (src-tauri target is gitignored by Tauri's own setup;
+# headless target needs explicit exclusion)
+headless/target/
+
+# User-supplied firmware fixtures (binaries are kept out of git)
+firmware-fixtures/*.bin
+firmware-fixtures/*.elf
+!firmware-fixtures/.gitkeep
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Generated from apps/shared/panda-ide (see scripts/sync-theme.mjs)
+src/panda-ide.css

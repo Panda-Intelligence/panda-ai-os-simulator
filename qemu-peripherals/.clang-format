@@ -1,0 +1,4 @@
+BasedOnStyle: InheritParentConfig
+IncludeBlocks: Preserve
+SortIncludes:
+  Enabled: false

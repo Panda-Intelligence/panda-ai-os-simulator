@@ -1,0 +1,33 @@
+{
+  "name": "simulator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "sync:theme": "node scripts/sync-theme.mjs",
+    "dev": "node scripts/sync-theme.mjs && vite",
+    "build": "node scripts/sync-theme.mjs && tsc && vite build",
+    "build:wasm": "bash scripts/build-qemu-wasm.sh",
+    "build:wasm:firmware": "bash scripts/build-qemu-wasm.sh --firmware-only",
+    "build:wasm:probe": "bash scripts/build-qemu-wasm.sh --probe-only",
+    "check:browser-sd": "node scripts/check-browser-sd-card.mjs",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "js-fatfs": "^0.2.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "typescript": "~5.8.3",
+    "vite": "^8.0.16"
+  }
+}

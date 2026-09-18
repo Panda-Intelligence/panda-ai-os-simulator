@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Build the bare-metal sim_test firmware for QEMU.
+# Uses an installed Xtensa ESP32-S3 GCC toolchain directly (no Arduino/ESP-IDF).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FIXTURE_DIR="$(cd "${SCRIPT_DIR}/../firmware-fixtures" && pwd)"
+if command -v xtensa-esp32s3-elf-gcc >/dev/null 2>&1; then
+    TOOLCHAIN="$(dirname "$(command -v xtensa-esp32s3-elf-gcc)")"
+else
+    TOOLCHAIN="$(dirname "$(find "${HOME}/.espressif/tools" -type f -name xtensa-esp32s3-elf-gcc 2>/dev/null | sort -V | tail -n 1)")"
+fi
+
+if [[ ! -x "${TOOLCHAIN}/xtensa-esp32s3-elf-gcc" ]]; then
+    echo "ERROR: xtensa-esp32s3-elf-gcc not found" >&2
+    exit 1
+fi
+
+CC="${TOOLCHAIN}/xtensa-esp32s3-elf-gcc"
+OBJCOPY="${TOOLCHAIN}/xtensa-esp32s3-elf-objcopy"
+SRC="${FIXTURE_DIR}/sim_test.cpp"
+BUILD="${FIXTURE_DIR}/sim_test"
+
+mkdir -p "${BUILD}"
+
+echo "[build] Compiling start.S"
+"${CC}" -c -mtext-section-literals -o "${BUILD}/start.o" "${BUILD}/start.S"
+
+echo "[build] Compiling sim_test.cpp"
+"${CC}" -c \
+    -std=gnu++2a \
+    -fno-exceptions \
+    -fno-rtti \
+    -Os \
+    -mtext-section-literals \
+    -Wall \
+    -Wextra \
+    -Wno-unused-parameter \
+    -Wno-volatile \
+    -o "${BUILD}/sim_test.o" \
+    "${SRC}"
+
+echo "[build] Linking sim_test.elf"
+"${CC}" \
+    -T "${BUILD}/esp32s3.ld" \
+    -nostdlib \
+    -nodefaultlibs \
+    -Wl,--no-warn-rwx-segments \
+    -o "${BUILD}/sim_test.elf" \
+    "${BUILD}/start.o" \
+    "${BUILD}/sim_test.o"
+
+"${OBJCOPY}" -O binary "${BUILD}/sim_test.elf" "${BUILD}/sim_test.bin"
+
+echo "[build] Done: ${BUILD}/sim_test.elf"
+"${TOOLCHAIN}/xtensa-esp32s3-elf-size" "${BUILD}/sim_test.elf"

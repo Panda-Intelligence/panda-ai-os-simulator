@@ -1,0 +1,15 @@
+# Add the following lines to the existing `config XTENSA_ESP32S3`
+# block in hw/xtensa/Kconfig. Activation goes via `select` from the SoC
+# (not `default y if XTENSA_ESP32S3` from the device side, which would
+# create a Kconfig cycle through `BITBANG_I2C select I2C` and `FT6336U_MOFEI
+# depends on I2C`).
+#
+# Both board peripheral sets are compiled into the single QEMU binary; the
+# SoC machine instantiates only the set matching the selected board
+# (mofei → SSD1677 + FT6336U; s37uc → UC8253C + CHSC6440). GPSPI2 is shared.
+    select ESP32S3_GPSPI2
+    select SSI_SD
+    select FT6336U_MOFEI
+    select SSD1677_GDEQ0426
+    select CHSC6440_S37UC
+    select UC8253C_S37UC

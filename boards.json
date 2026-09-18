@@ -1,0 +1,152 @@
+{
+  "$schema": "./boards.schema.json",
+  "defaultBoard": "mofei",
+  "defaultHeadlessBin": "apps/simulator/headless/target/debug/mofei-sim-headless",
+  "defaultCaseRoot": "test/simulator_e2e",
+  "boards": [
+    {
+      "id": "mofei",
+      "displayName": "Mofei (GDEQ0426 800x480)",
+      "murphyBoard": "default",
+      "firmware": "apps/panda-os/device/build/panda_os.bin",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 480,
+      "outputHeight": 800,
+      "touchI2cAddr": "0x38",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "ft6336u"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.dual", "button.left", "button.down", "button.up"],
+      "keyMap": [
+        { "id": 1, "label": "Enter" },
+        { "id": 2, "label": "Next" },
+        { "id": 0, "label": "ESC" }
+      ]
+    },
+    {
+      "id": "s3r8",
+      "displayName": "S3R8 / Mofei (GDEQ0426 800x480)",
+      "murphyBoard": "mofei",
+      "firmware": "apps/panda-os/device/build/panda_os.bin",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 480,
+      "outputHeight": 800,
+      "touchI2cAddr": "0x38",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "ft6336u"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.dual", "button.left", "button.down", "button.up"],
+      "keyMap": [
+        { "id": 1, "label": "Enter" },
+        { "id": 2, "label": "Next" },
+        { "id": 0, "label": "ESC" }
+      ]
+    },
+    {
+      "id": "s3wroom",
+      "displayName": "ESP32-S3-WROOM-1 (GDEQ0426 800x480 bring-up)",
+      "murphyBoard": "s3wroom",
+      "firmware": "apps/panda-os/device/build-s3wroom/panda_os.bin",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 480,
+      "outputHeight": 800,
+      "touchI2cAddr": "0x38",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "ft6336u"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.dual", "button.left", "button.down", "button.up"],
+      "keyMap": [
+        { "id": 1, "label": "Enter" },
+        { "id": 2, "label": "Next" },
+        { "id": 0, "label": "ESC" }
+      ]
+    },
+    {
+      "id": "s37uc",
+      "displayName": "s37uc (UC8253C 240x416 portrait)",
+      "murphyBoard": "s37uc",
+      "firmware": "apps/panda-os/device/build-s37uc/panda_os.bin",
+      "rawWidth": 416,
+      "rawHeight": 240,
+      "framebufferWidth": 416,
+      "framebufferHeight": 240,
+      "framebufferFormat": "mono1",
+      "outputWidth": 240,
+      "outputHeight": 416,
+      "touchI2cAddr": "0x40",
+      "qemu": {
+        "displayType": "uc8253c",
+        "touchType": "chsc6440"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.single"],
+      "keyMap": [
+        { "id": 0, "label": "SIDEKEY" },
+        { "id": 1, "label": "SIDEKEY1" }
+      ]
+    },
+    {
+      "id": "m5papers3",
+      "displayName": "M5Stack PaperS3 (ED047TC1 4.7-inch Gray16)",
+      "murphyBoard": "m5papers3",
+      "firmware": "apps/panda-os/device/build-sim-m5papers3/panda_os.bin",
+      "rawWidth": 960,
+      "rawHeight": 540,
+      "framebufferWidth": 540,
+      "framebufferHeight": 960,
+      "framebufferFormat": "gray16",
+      "outputWidth": 540,
+      "outputHeight": 960,
+      "touchI2cAddr": "0x5D",
+      "qemu": {
+        "displayType": "direct-framebuffer",
+        "touchType": "gt911"
+      },
+      "capabilities": ["input.touch", "display.gray16", "storage.sdspi", "time.rtc"],
+      "keyMap": [
+        { "id": 0, "label": "PWR", "aliases": ["power", "pwr"] }
+      ]
+    },
+
+    {
+      "id": "lilygo-t5s3-pro",
+      "displayName": "LilyGo T5S3 Pro (ED047TC1 4.7-inch Gray16)",
+      "murphyBoard": "lilygo-t5s3-pro",
+      "firmware": "apps/panda-os/device/build-sim-lilygo-t5s3-pro/panda_os.bin",
+      "rawWidth": 960,
+      "rawHeight": 540,
+      "framebufferWidth": 540,
+      "framebufferHeight": 960,
+      "framebufferFormat": "gray16",
+      "outputWidth": 540,
+      "outputHeight": 960,
+      "e2eCoordinateWidth": 480,
+      "e2eCoordinateHeight": 800,
+      "touchI2cAddr": "0x5D",
+      "qemu": {
+        "displayType": "direct-framebuffer",
+        "touchType": "gt911"
+      },
+      "capabilities": ["input.touch", "display.gray16", "radio.lora", "storage.sdspi", "location.gnss", "power.charger", "time.rtc", "power.epd-status"],
+      "keyMap": [
+        { "id": 1, "label": "IO48", "aliases": ["confirm", "function", "io48"] },
+        { "id": 0, "label": "BOOT", "aliases": ["back", "boot"] },
+        { "id": 6, "label": "PWR", "aliases": ["home", "power", "pwr"] }
+      ]
+    }
+  ]
+}
