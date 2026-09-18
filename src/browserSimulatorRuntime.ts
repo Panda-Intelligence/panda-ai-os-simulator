@@ -4,6 +4,7 @@ import type {
   SimulatorSdDirectory,
   SimulatorSdEntry,
   SimulatorSdFile,
+  SimulatorSdImage,
   SimulatorTouchInput,
   SimulatorUnlisten,
 } from "./simulatorBridgeTypes";
@@ -59,7 +60,9 @@ export type BrowserSimulatorRuntimeCommand =
   | { type: "readSdFile"; requestId: number; boardId: string; path: string }
   | { type: "writeSdFile"; requestId: number; boardId: string; path: string; bytes: Uint8Array }
   | { type: "createSdDirectory"; requestId: number; boardId: string; path: string }
-  | { type: "deleteSdPath"; requestId: number; boardId: string; path: string; recursive?: boolean };
+  | { type: "deleteSdPath"; requestId: number; boardId: string; path: string; recursive?: boolean }
+  | { type: "exportSdImage"; requestId: number; boardId: string }
+  | { type: "importSdImage"; requestId: number; boardId: string; bytes: Uint8Array };
 
 export type BrowserSimulatorRuntimeEvent =
   | { type: "ready"; manifest: BrowserSimulatorRuntimeManifest }
@@ -97,6 +100,8 @@ type BrowserSimulatorRuntimeAdapter = {
   writeSdFile(boardId: string, path: string, bytes: Uint8Array): Promise<void>;
   createSdDirectory(boardId: string, path: string): Promise<void>;
   deleteSdPath(boardId: string, path: string, recursive?: boolean): Promise<void>;
+  exportSdImage(boardId: string): Promise<SimulatorSdImage>;
+  importSdImage(boardId: string, bytes: Uint8Array): Promise<void>;
 };
 
 const DEFAULT_RUNTIME_MANIFEST: BrowserSimulatorRuntimeManifest = {
@@ -196,6 +201,17 @@ class UnavailableBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRunti
     void boardId;
     void path;
     void recursive;
+    throw new Error(BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE);
+  }
+
+  async exportSdImage(boardId: string): Promise<SimulatorSdImage> {
+    void boardId;
+    throw new Error(BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE);
+  }
+
+  async importSdImage(boardId: string, bytes: Uint8Array): Promise<void> {
+    void boardId;
+    void bytes;
     throw new Error(BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE);
   }
 
@@ -330,13 +346,34 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
     if (!result.ok) throw this.commandError("deleteSdPath", result);
   }
 
+  async exportSdImage(boardId: string): Promise<SimulatorSdImage> {
+    const result = await this.sendCommand({
+      type: "exportSdImage",
+      requestId: this.allocateRequestId(),
+      boardId,
+    });
+    if (!result.ok) throw this.commandError("exportSdImage", result);
+    return parseSdImage(result.data);
+  }
+
+  async importSdImage(boardId: string, bytes: Uint8Array): Promise<void> {
+    const transferBytes = bytes.slice();
+    const result = await this.sendCommand({
+      type: "importSdImage",
+      requestId: this.allocateRequestId(),
+      boardId,
+      bytes: transferBytes,
+    }, [transferBytes.buffer]);
+    if (!result.ok) throw this.commandError("importSdImage", result);
+  }
+
   private allocateRequestId(): number {
     const requestId = this.nextRequestId;
     this.nextRequestId += 1;
     return requestId;
   }
 
-  private async sendCommand(command: BrowserSimulatorRuntimeCommand): Promise<BrowserSimulatorRuntimeResultEvent> {
+  private async sendCommand(command: BrowserSimulatorRuntimeCommand, transfer: Transferable[] = []): Promise<BrowserSimulatorRuntimeResultEvent> {
     const worker = this.ensureWorker();
     if (!worker) {
       return {
@@ -352,7 +389,7 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
       worker.postMessage({
         ...command,
         manifest: this.manifest,
-      });
+      }, transfer);
     });
   }
 
@@ -526,6 +563,14 @@ export class BrowserSimulatorRuntimeHost {
 
   async deleteSdPath(boardId: string, path: string, recursive?: boolean): Promise<void> {
     return (await this.runtimeAdapter()).deleteSdPath(boardId, path, recursive);
+  }
+
+  async exportSdImage(boardId: string): Promise<SimulatorSdImage> {
+    return (await this.runtimeAdapter()).exportSdImage(boardId);
+  }
+
+  async importSdImage(boardId: string, bytes: Uint8Array): Promise<void> {
+    return (await this.runtimeAdapter()).importSdImage(boardId, bytes);
   }
 
   async startSim(boardId: string, firmwarePath: string, hostLocation: SimulatorHostLocation): Promise<string> {
@@ -961,6 +1006,28 @@ function parseSdFile(value: unknown): SimulatorSdFile {
     throw new Error("browser_sd_file_bytes_invalid");
   }
   return { path, bytes };
+}
+
+function parseSdImage(value: unknown): SimulatorSdImage {
+  if (!value || typeof value !== "object") {
+    throw new Error("browser_sd_image_payload_invalid");
+  }
+  const record = value as Record<string, unknown>;
+  const parsed = parseSdFile(value);
+  const byteLength = typeof record.byteLength === "number" && Number.isSafeInteger(record.byteLength)
+    ? record.byteLength
+    : parsed.bytes.byteLength;
+  if (byteLength !== parsed.bytes.byteLength || byteLength < 1) {
+    throw new Error("browser_sd_image_size_invalid");
+  }
+  return {
+    path: parsed.path,
+    byteLength,
+    bytes: parsed.bytes,
+    templateFingerprint: typeof record.templateFingerprint === "string" ? record.templateFingerprint : null,
+    storedTemplateFingerprint: typeof record.storedTemplateFingerprint === "string" ? record.storedTemplateFingerprint : null,
+    templateConflict: record.templateConflict === true,
+  };
 }
 
 function isBrowserSimulatorRuntimeEvent(payload: unknown): payload is BrowserSimulatorRuntimeEvent {

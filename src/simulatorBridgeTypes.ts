@@ -39,6 +39,15 @@ export type SimulatorSdFile = {
   bytes: ArrayBuffer;
 };
 
+export type SimulatorSdImage = {
+  path: string;
+  byteLength: number;
+  bytes: ArrayBuffer;
+  templateFingerprint: string | null;
+  storedTemplateFingerprint: string | null;
+  templateConflict: boolean;
+};
+
 export type SimulatorHostBridge = {
   chooseFirmware(boardId: string, filterName: string): Promise<string | undefined>;
   readSdRootPath(): Promise<string>;
@@ -47,6 +56,8 @@ export type SimulatorHostBridge = {
   writeSdFile(boardId: string, path: string, bytes: Uint8Array): Promise<void>;
   createSdDirectory(boardId: string, path: string): Promise<void>;
   deleteSdPath(boardId: string, path: string, recursive?: boolean): Promise<void>;
+  exportSdImage?: (boardId: string) => Promise<SimulatorSdImage>;
+  importSdImage?: (boardId: string, bytes: Uint8Array) => Promise<void>;
   startSim(boardId: string, firmwarePath: string, hostLocation: SimulatorHostLocation): Promise<string>;
   stopSim(): Promise<string>;
   fullRebootSim(boardId: string, firmwarePath: string, hostLocation: SimulatorHostLocation): Promise<string>;

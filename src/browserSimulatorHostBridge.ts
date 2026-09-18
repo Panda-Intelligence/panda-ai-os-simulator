@@ -26,6 +26,12 @@ export const browserSimulatorHostBridge: SimulatorHostBridge = {
   async deleteSdPath(boardId, path, recursive) {
     return browserSimulatorRuntimeHost.deleteSdPath(boardId, path, recursive);
   },
+  async exportSdImage(boardId) {
+    return browserSimulatorRuntimeHost.exportSdImage(boardId);
+  },
+  async importSdImage(boardId, bytes) {
+    return browserSimulatorRuntimeHost.importSdImage(boardId, bytes);
+  },
   async startSim(boardId, firmwarePath, hostLocation) {
     return browserSimulatorRuntimeHost.startSim(boardId, firmwarePath, hostLocation);
   },

@@ -1,4 +1,4 @@
-import { readSdImage, writeSdImage } from "./sd-card-store.js";
+import { readSdImage, validateSdImageBytes, writeSdImage } from "./sd-card-store.js";
 const RUNTIME_STATUS_READY = "ready";
 const RUNTIME_STATUS_RUNNING = "running";
 const QEMU_ARTIFACT_MISSING = "qemu_wasm_artifact_missing";
@@ -37,8 +37,23 @@ postMessage({
   },
 });
 
+// One command owns mutable runtime/SD state until its async work completes.
+// A bounded queue prevents start/import or two imports from racing across awaits.
+let commandTail = Promise.resolve();
+let queuedCommands = 0;
+let queuedBytes = 0;
 addEventListener("message", (event) => {
-  void handleCommand(event.data);
+  const command = event.data;
+  const bytes = command?.bytes?.byteLength ?? 0;
+  if (queuedCommands >= 16 || !Number.isSafeInteger(bytes) || bytes < 0 || queuedBytes + bytes > 256 * 1024 * 1024) {
+    result(command?.requestId, false, undefined, "browser_runtime_command_queue_full");
+    return;
+  }
+  ++queuedCommands;
+  queuedBytes += bytes;
+  commandTail = commandTail.then(() => handleCommand(command)).catch((error) => {
+    result(command?.requestId, false, undefined, sdErrorMessage(error));
+  }).finally(() => { --queuedCommands; queuedBytes -= bytes; });
 });
 
 async function handleCommand(command) {
@@ -76,6 +91,12 @@ async function handleCommand(command) {
     case "peripheralControl":
       injectPeripheralControl(command.payload);
       result(command.requestId, true, running ? "control_injected" : "not_running");
+      return;
+    case "exportSdImage":
+      await exportSdImage(command);
+      return;
+    case "importSdImage":
+      await importSdImage(command);
       return;
     default:
       result(command.requestId, false, undefined, `unsupported_command:${command.type}`);
@@ -122,6 +143,9 @@ async function startRuntime(command) {
     const flashImage = buildFlashImage({ bootloader, partitionTable, otaData, firmware });
     const rom = await fetchRom(manifest.qemuRom);
     const sdImage = await fetchSdImage(manifest.qemuSdImage);
+    if (sdImage?.templateConflict) {
+      throw new Error("browser_sd_card_template_conflict");
+    }
     qemuInstance = await loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage);
     startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null);
     running = true;
@@ -420,24 +444,34 @@ async function fetchSdImage(sdImageUrl) {
     return null;
   }
 
-  const artifactBytes = await fetchSdImageArtifacts(artifactUrls);
-  const templateBytes = await decodeSdImageArtifact(artifactUrls[0], artifactBytes);
+  const templateBytes = await fetchSdTemplateBytes(artifactUrls);
+  const expectedByteLength = runtimeManifest?.qemuSdRawBytes ?? templateBytes.byteLength;
+  validateSdImageBytes(templateBytes, expectedByteLength);
   const templateFingerprint = fingerprintBytes(templateBytes);
-  const storageKey = sdImageStorageKey(lastBoardId, artifactUrls);
-  const stored = await readStoredSdCard(storageKey);
-  const canUseStored =
-    stored &&
-    stored.templateFingerprint === templateFingerprint &&
-    stored.byteLength === templateBytes.byteLength &&
-    stored.bytes instanceof Uint8Array;
-  const bytes = canUseStored ? stored.bytes : templateBytes;
+  const storedRecord = await readStoredSdCardForTemplate(lastBoardId, artifactUrls);
+  const stored = storedRecord?.value;
+  if (stored) {
+    // A changed template must not make the old complete backup unexportable.
+    validateSdImageBytes(stored.bytes, stored.byteLength);
+  }
+  const templateConflict = Boolean(
+    stored && (stored.templateFingerprint !== templateFingerprint || stored.byteLength !== templateBytes.byteLength),
+  );
+  const bytes = stored?.bytes ?? templateBytes;
   return {
     path: "/mofei/sdcard.img",
     bytes,
-    storageKey,
+    storageKey: storedRecord?.storageKey ?? sdImageStorageKey(lastBoardId),
     templateFingerprint,
-    persisted: Boolean(canUseStored),
+    storedTemplateFingerprint: stored?.templateFingerprint ?? null,
+    persisted: Boolean(stored),
+    templateConflict,
   };
+}
+
+async function fetchSdTemplateBytes(artifactUrls) {
+  const artifactBytes = await fetchSdImageArtifacts(artifactUrls);
+  return decodeSdImageArtifact(artifactUrls[0], artifactBytes);
 }
 
 function normalizeSdImageArtifactUrls(value) {
@@ -451,9 +485,27 @@ function describeSdImageArtifact(value) {
   return urls ? (urls.length === 1 ? urls[0] : `${urls.length} compressed parts`) : "unavailable";
 }
 
-function sdImageStorageKey(boardId, artifactUrls) {
+function sdImageStorageKey(boardId) {
+  return `sdcard:${boardId}`;
+}
+
+function legacySdImageStorageKey(boardId, artifactUrls) {
   const artifactIdentity = artifactUrls.length === 1 ? artifactUrls[0] : JSON.stringify(artifactUrls);
   return `sdcard:${boardId}:${artifactIdentity}`;
+}
+
+async function readStoredSdCardForTemplate(boardId, artifactUrls) {
+  const stableKey = sdImageStorageKey(boardId);
+  const stable = await readStoredSdCard(stableKey);
+  if (stable) {
+    return { storageKey: stableKey, value: stable };
+  }
+  const legacyKey = legacySdImageStorageKey(boardId, artifactUrls);
+  if (legacyKey === stableKey) {
+    return null;
+  }
+  const legacy = await readStoredSdCard(legacyKey);
+  return legacy ? { storageKey: stableKey, value: legacy } : null;
 }
 
 async function fetchSdImageArtifacts(urls) {
@@ -575,6 +627,75 @@ async function persistActiveSdCard(reason) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     emitError(`[browser-qemu] failed to persist browser SD image: ${message}`);
+  }
+}
+
+async function exportSdImage(command) {
+  try {
+    if (running) {
+      throw new Error("browser_sd_card_busy_running");
+    }
+    if (!runtimeManifest || runtimeManifest.kind !== "wasm-worker") {
+      throw new Error("browser_wasm_runtime_manifest_missing");
+    }
+    lastBoardId = command.boardId || lastBoardId;
+    const sdImage = await fetchSdImage(runtimeManifest.qemuSdImage);
+    if (!sdImage) {
+      throw new Error("browser_sd_card_image_missing");
+    }
+    validateSdImageBytes(sdImage.bytes, sdImage.bytes.byteLength);
+    result(command.requestId, true, "sd_image_exported", undefined, {
+      path: sdImage.path,
+      byteLength: sdImage.bytes.byteLength,
+      templateFingerprint: sdImage.templateFingerprint ?? null,
+      storedTemplateFingerprint: sdImage.storedTemplateFingerprint ?? sdImage.templateFingerprint ?? null,
+      templateConflict: Boolean(sdImage.templateConflict),
+      bytes: sdImage.bytes.slice().buffer,
+    });
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
+  }
+}
+
+async function importSdImage(command) {
+  try {
+    if (running) {
+      throw new Error("browser_sd_card_busy_running");
+    }
+    if (!runtimeManifest || runtimeManifest.kind !== "wasm-worker") {
+      throw new Error("browser_wasm_runtime_manifest_missing");
+    }
+    lastBoardId = command.boardId || lastBoardId;
+    const bytes = command.bytes instanceof ArrayBuffer
+      ? new Uint8Array(command.bytes)
+      : command.bytes instanceof Uint8Array
+        ? command.bytes
+        : null;
+    if (!bytes) {
+      throw new Error("browser_sd_image_payload_missing");
+    }
+    const artifactUrls = normalizeSdImageArtifactUrls(runtimeManifest.qemuSdImage);
+    if (!artifactUrls) {
+      throw new Error("browser_sd_card_image_missing");
+    }
+    const templateBytes = await fetchSdTemplateBytes(artifactUrls);
+    const expectedByteLength = runtimeManifest.qemuSdRawBytes ?? templateBytes.byteLength;
+    validateSdImageBytes(templateBytes, expectedByteLength);
+    validateSdImageBytes(bytes, expectedByteLength);
+    const storageKey = sdImageStorageKey(lastBoardId);
+    const templateFingerprint = fingerprintBytes(templateBytes);
+    await writeStoredSdCard(storageKey, {
+      bytes,
+      byteLength: bytes.byteLength,
+      templateFingerprint,
+      savedAt: Date.now(),
+    });
+    result(command.requestId, true, "sd_image_imported", undefined, {
+      byteLength: bytes.byteLength,
+      templateConflict: false,
+    });
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
   }
 }
 
@@ -982,12 +1103,21 @@ function cacheBustUrl(path) {
   return url.toString();
 }
 
-function result(requestId, ok, status, error) {
+function sdErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function result(requestId, ok, status, error, data) {
   if (typeof requestId !== "number") {
     return;
   }
   if (ok) {
-    postMessage({ type: "result", requestId, ok: true, status });
+    const message = { type: "result", requestId, ok: true, status, data };
+    if (data?.bytes instanceof ArrayBuffer) {
+      postMessage(message, [data.bytes]);
+    } else {
+      postMessage(message);
+    }
     return;
   }
   postMessage({ type: "result", requestId, ok: false, error: error || "browser_qemu_runtime_error" });

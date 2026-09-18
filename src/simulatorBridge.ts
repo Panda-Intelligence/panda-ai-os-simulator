@@ -6,6 +6,7 @@ import type {
   SimulatorSdDirectory,
   SimulatorSdEntry,
   SimulatorSdFile,
+  SimulatorSdImage,
   SimulatorTouchInput,
   SimulatorUnlisten,
 } from "./simulatorBridgeTypes";
@@ -17,6 +18,7 @@ export type {
   SimulatorSdDirectory,
   SimulatorSdEntry,
   SimulatorSdFile,
+  SimulatorSdImage,
   SimulatorTouchInput,
   SimulatorUnlisten,
 };

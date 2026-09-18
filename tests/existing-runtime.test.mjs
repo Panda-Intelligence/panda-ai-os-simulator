@@ -16,7 +16,8 @@ function fixture(){
     writeFileSync(join(qemuDir,name),bytes);
     return {fileName:name,relativePath:name,bytes:Buffer.byteLength(bytes),sha256:digest(bytes)};
   };
-  const js='function _mofei_wasm_ipc_send(channel,flags,payloadPtr,payloadLen){if(typeof Module["_mofeiWasmIpcSend"]==="function"){Module["_mofeiWasmIpcSend"](channel>>>0,flags>>>0,payloadPtr>>>0,payloadLen>>>0)}};var knownHandlers=[];export default Module;';
+  const wrappers=`function ffi_call_js(cif,fn,rvalue,avalue){var orig_stack_ptr=stackSave();var cur_stack_ptr=orig_stack_ptr;var args=[],ret_by_arg=false,rtype_id=1;stackRestore(cur_stack_ptr);var result=getWasmTableEntry(fn).apply(null,args);stackRestore(orig_stack_ptr);return result;}function invoke_iii(index,a1,a2){var sp=stackSave();try{return dynCall_iii(index,a1,a2);}catch(e){stackRestore(sp);if(e!==e+0)throw e;_setThrew(1,0);}}`;
+  const js=wrappers+'function _mofei_wasm_ipc_send(channel,flags,payloadPtr,payloadLen){if(typeof Module["_mofeiWasmIpcSend"]==="function"){Module["_mofeiWasmIpcSend"](channel>>>0,flags>>>0,payloadPtr>>>0,payloadLen>>>0)}};var knownHandlers=[];export default Module;';
   const artifacts=[artifact("qemu-system-xtensa.js",js),...["qemu-system-xtensa.wasm","qemu-system-xtensa.worker.js","bootloader.bin","partition-table.bin","ota_data_initial.bin","esp32s3_rev0_rom.bin"].map(name=>artifact(name,"fixture"))];
   const firmware={bin:artifact("firmware.bin","bin"),kernel:artifact("firmware-kernel.img","kernel"),symbols:artifact("firmware-symbols.txt","symbols")};
   const provenance={board:"default",sourceRevision:revision,sourceElfSha256:"b".repeat(64),sourceBinSha256:firmware.bin.sha256,publishedBinSha256:firmware.bin.sha256,publishedKernelSha256:firmware.kernel.sha256,publishedSymbolsSha256:firmware.symbols.sha256};

@@ -38,7 +38,10 @@ fi
 FIRMWARE_INPUT_DIR="${QEMU_WASM_FIRMWARE_DIR:-}"
 ARTIFACT_MANIFEST="${OUTPUT_DIR}/qemu-wasm-artifacts.json"
 JOBS="${QEMU_WASM_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
+QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v2"
+export QEMU_WASM_RUNTIME_REVISION
 CONTAINER_STARTED=0
+CONTAINER_ID=""
 
 RUNTIME_JS="${OUTPUT_DIR}/qemu-system-xtensa.js"
 RUNTIME_WASM="${OUTPUT_DIR}/qemu-system-xtensa.wasm"
@@ -88,6 +91,8 @@ Environment:
                          firmware[.<board>]-symbols.txt, and qemu-wasm-artifacts.json without
                          rebuilding qemu-wasm
   --firmware-dir=DIR     Use one explicit coherent firmware artifact directory with --firmware-only
+  --runtime-only        Build runtime independently; output must be a new directory
+  QEMU_WASM_LINK_DEBUG   1 emits names and source map for diagnosis (default0)
 
 Output:
   ${OUTPUT_DIR}/qemu-system-xtensa.js
@@ -109,10 +114,12 @@ FORCE=0
 PROBE_ONLY=0
 NO_BUILD=0
 FIRMWARE_ONLY=0
+RUNTIME_ONLY=0
 for arg in "$@"; do
   case "${arg}" in
     --force) FORCE=1 ;;
     --firmware-only) FIRMWARE_ONLY=1 ;;
+    --runtime-only) RUNTIME_ONLY=1 ;;
     --probe-only) PROBE_ONLY=1 ;;
     --no-build) NO_BUILD=1 ;;
     --firmware-dir=*) FIRMWARE_INPUT_DIR="${arg#*=}" ;;
@@ -120,6 +127,8 @@ for arg in "$@"; do
     *) echo "[build-qemu-wasm] unknown flag: ${arg}" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+[[ "${RUNTIME_ONLY}" -eq 0 || "${FIRMWARE_ONLY}" -eq 0 ]] || { echo "--runtime-only and --firmware-only are mutually exclusive" >&2; exit 2; }
 
 DEFAULT_FIRMWARE_BUILD_DIR="${QEMU_WASM_FIRMWARE_BUILD_DIR:-${FIRMWARE_INPUT_DIR:-${SIM_ROOT}/firmware}}"
 DEFAULT_FIRMWARE_BIN="${QEMU_WASM_FIRMWARE_BIN:-${DEFAULT_FIRMWARE_BUILD_DIR}/panda_os.bin}"
@@ -748,6 +757,7 @@ overlay_mofei_peripherals() {
   copy_if_present "${src}/target_xtensa_translate.c" "${QEMU_WASM_SRC_DIR}/target/xtensa/translate.c"
   copy_if_present "${src}/target_xtensa_exc_helper.c" "${QEMU_WASM_SRC_DIR}/target/xtensa/exc_helper.c"
   copy_if_present "${src}/target_xtensa_helper.h" "${QEMU_WASM_SRC_DIR}/target/xtensa/helper.h"
+  python3 "${SCRIPT_DIR}/select-xtensa-helper.py" "${QEMU_WASM_SRC_DIR}"
   copy_if_present "${src}/mofei-sim-addrs.h" "${QEMU_WASM_SRC_DIR}/include/hw/xtensa/mofei-sim-addrs.h"
   copy_if_present "${src}/mofei-sim-addrs.h" "${QEMU_WASM_SRC_DIR}/hw/xtensa/mofei-sim-addrs.h"
   copy_if_present "${src}/mofei-sim-addrs.h" "${QEMU_WASM_SRC_DIR}/target/xtensa/mofei-sim-addrs.h"
@@ -757,6 +767,9 @@ overlay_mofei_peripherals() {
   mkdir -p "${QEMU_WASM_SRC_DIR}/hw/sensor"
   copy_if_present "${src}/ft6336u.c" "${QEMU_WASM_SRC_DIR}/hw/sensor/ft6336u.c"
   copy_if_present "${src}/chsc6440.c" "${QEMU_WASM_SRC_DIR}/hw/sensor/chsc6440.c"
+  copy_if_present "${src}/esp32_gpio.c" "${QEMU_WASM_SRC_DIR}/hw/gpio/esp32_gpio.c"
+  copy_if_present "${src}/esp32s3_gpio.c" "${QEMU_WASM_SRC_DIR}/hw/gpio/esp32s3_gpio.c"
+  copy_if_present "${src}/esp32_gpio.h" "${QEMU_WASM_SRC_DIR}/include/hw/gpio/esp32_gpio.h"
   copy_if_present "${src}/esp32_i2c.c" "${QEMU_WASM_SRC_DIR}/hw/i2c/esp32_i2c.c"
   copy_if_present "${src}/esp32_i2c.h" "${QEMU_WASM_SRC_DIR}/include/hw/i2c/esp32_i2c.h"
   copy_if_present "${src}/lilygo_i2c_probe.c" "${QEMU_WASM_SRC_DIR}/hw/i2c/lilygo_i2c_probe.c"
@@ -780,6 +793,12 @@ overlay_mofei_peripherals() {
 
   append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/i2c/meson.build" "lilygo_i2c_probe.c" \
     "system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('lilygo_i2c_probe.c'))"
+  append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/i2c/meson.build" "lilygo_display_input.c" \
+    "system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('lilygo_display_input.c'))"
+  append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/i2c/meson.build" "lilygo_bq27220.c" \
+    "system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('lilygo_bq27220.c'))"
+  append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/ssi/meson.build" "lilygo_sx1262.c" \
+    "system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('lilygo_sx1262.c'))"
   append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/i2c/meson.build" "lilygo_power_rtc.c" \
     "system_ss.add(when: 'CONFIG_XTENSA_ESP32S3', if_true: files('lilygo_power_rtc.c'))"
   append_line_if_missing "${QEMU_WASM_SRC_DIR}/hw/char/meson.build" "lilygo_gnss_uart.c" \
@@ -1423,6 +1442,7 @@ start_container() {
     -v "${QEMU_WASM_SRC_DIR}:/qemu" \
     -v "${SCRIPT_DIR}:${QEMU_WASM_SCRIPT_MOUNT}:ro" \
     "${QEMU_WASM_IMAGE}" >/dev/null
+  CONTAINER_ID="$(docker inspect --format '{{.Id}}' "${QEMU_WASM_CONTAINER}")"
   CONTAINER_STARTED=1
 }
 
@@ -1439,7 +1459,7 @@ configure_and_make() {
     emmalloc|dlmalloc|mimalloc) ;;
     *) die "QEMU_WASM_MALLOC must be emmalloc, dlmalloc, or mimalloc (got ${QEMU_WASM_MALLOC})" ;;
   esac
-  extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} --js-library=/build/node_modules/xterm-pty/emscripten-pty.js --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
+  extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} -sSTACK_OVERFLOW_CHECK=2 --js-library=/build/node_modules/xterm-pty/emscripten-pty.js --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
   step "configuring qemu-system-xtensa for wasm32"
   docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -lc "rm -rf ${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa* ${QEMU_WASM_BUILD_DIR}/config-host.mak ${QEMU_WASM_BUILD_DIR}/build.ninja"
   docker exec \
@@ -1512,20 +1532,29 @@ text = text[:known_handlers_match.start()] + "var knownHandlers=[" + ",".join(kn
 }
 
 copy_artifacts() {
-  rm -rf "${OUTPUT_DIR}"
+  if [[ "${RUNTIME_ONLY}" -eq 1 ]]; then
+    [[ ! -e "${OUTPUT_DIR}" ]] || die "runtime-only output must be new: ${OUTPUT_DIR}"
+  else
+    rm -rf "${OUTPUT_DIR}"
+  fi
   mkdir -p "${OUTPUT_DIR}"
 
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa.js" "${RUNTIME_JS}" 2>/dev/null || \
     docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa" "${RUNTIME_JS}"
   patch_qemu_wasm_runtime_env_bridge "${RUNTIME_JS}"
   patch_qemu_wasm_runtime_worker_bridge "${RUNTIME_JS}"
+  node "${SCRIPT_DIR}/patch-wasm-continuations.mjs" "${RUNTIME_JS}"
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa.wasm" "${RUNTIME_WASM}"
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa.worker.js" "${RUNTIME_WORKER}" 2>/dev/null || true
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa.data" "${RUNTIME_DATA}" 2>/dev/null || true
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/load.js" "${RUNTIME_LOAD_JS}" 2>/dev/null || true
   copy_if_present "${QEMU_WASM_SRC_DIR}/pc-bios/esp32s3_rev0_rom.bin" "${RUNTIME_ROM_BIN}"
 
-  refresh_firmware_artifacts
+  if [[ "${RUNTIME_ONLY}" -eq 1 ]]; then
+    python3 "${SCRIPT_DIR}/runtime-source-manifest.py" "${OUTPUT_DIR}" "${QEMU_WASM_SRC_DIR}" "${NATIVE_QEMU_DIR}" "${SIM_ROOT}" "${QEMU_WASM_IMAGE}"
+  else
+    refresh_firmware_artifacts
+  fi
   step "artifacts ready: ${OUTPUT_DIR}"
 }
 
@@ -1584,8 +1613,8 @@ runtime_supports_required_boards() {
     ! node -e '
       const fs = require("node:fs");
       const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-      process.exit(manifest.status === "ready" && manifest.wasmAllocator === process.argv[2] ? 0 : 1);
-    ' "${ARTIFACT_MANIFEST}" "${QEMU_WASM_MALLOC}"; then
+      process.exit(manifest.status === "ready" && manifest.wasmAllocator === process.argv[2] && manifest.runtimeBuildRevision === process.argv[3] ? 0 : 1);
+    ' "${ARTIFACT_MANIFEST}" "${QEMU_WASM_MALLOC}" "${QEMU_WASM_RUNTIME_REVISION}"; then
     return 1
   fi
 
@@ -1614,6 +1643,7 @@ assert_qemu_wasm_base
 overlay_espressif_sources
 restrict_qemu_wasm_xtensa_boards
 overlay_mofei_peripherals
+python3 "${SCRIPT_DIR}/patch-qemu-wasm-stack.py" "${QEMU_WASM_SRC_DIR}"
 overlay_espressif_crypto_helpers
 patch_qemu_wasm_browser_crypto_compat
 overlay_espressif_trace_events
@@ -1631,6 +1661,9 @@ fi
 
 patch_qemu_wasm_runtime_env_bridge "${RUNTIME_JS}"
 patch_qemu_wasm_runtime_worker_bridge "${RUNTIME_JS}"
+if [[ -f "${RUNTIME_JS}" ]]; then
+  node "${SCRIPT_DIR}/patch-wasm-continuations.mjs" "${RUNTIME_JS}"
+fi
 
 if [[ "${FORCE}" -eq 0 && -f "${RUNTIME_JS}" && -f "${RUNTIME_WASM}" && -f "${RUNTIME_ROM_BIN}" ]] &&
   runtime_supports_required_boards; then
