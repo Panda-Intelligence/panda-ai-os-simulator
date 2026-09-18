@@ -49,6 +49,8 @@ if (product && productById.size !== product.boards.length) throw new Error("Dupl
 const requestedProfile = process.env.QEMU_WASM_PROFILE || process.env.PANDA_PRODUCT_PROFILE || "default";
 const previousAllocator = typeof previousManifest?.wasmAllocator === "string" ? previousManifest.wasmAllocator : "";
 const requestedAllocator = process.env.QEMU_WASM_MALLOC || previousAllocator || (hasPreviousManifest ? "" : "emmalloc");
+const runtimeBuildRevision = process.env.QEMU_WASM_RUNTIME_REVISION || "";
+if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(runtimeBuildRevision)) throw new Error("QEMU_WASM_RUNTIME_REVISION is missing or invalid");
 if (requestedAllocator && !["emmalloc", "dlmalloc", "mimalloc"].includes(requestedAllocator)) {
   throw new Error(`invalid QEMU-WASM allocator: ${requestedAllocator}`);
 }
@@ -299,6 +301,7 @@ const manifest = {
   ...(profileIdentity ? { profile: profileIdentity } : {}),
   target: "xtensa-softmmu",
   status,
+  runtimeBuildRevision,
   ...(requestedAllocator ? { wasmAllocator: requestedAllocator } : {}),
   requiredBuildBoards,
   missingRequired: [...missingShared, ...boardErrors],

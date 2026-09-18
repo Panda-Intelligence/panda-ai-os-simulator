@@ -19,6 +19,13 @@ try{
     });
     const ensure=(condition,message)=>{if(!condition)throw new Error(message);};
     const data=new Uint8Array(128*1024*1024);data[0]=17;data[data.length-1]=93;
+    // A generated valid FAT16 volume, not arbitrary bytes bypassing the store contract.
+    const bpb=new DataView(data.buffer);
+    bpb.setUint16(11,512,true);data[13]=8;bpb.setUint16(14,1,true);data[16]=2;
+    bpb.setUint16(17,512,true);data[21]=0xf8;bpb.setUint16(22,128,true);
+    bpb.setUint32(32,data.length/512,true);data[510]=0x55;data[511]=0xaa;
+    data.set([0xf8,0xff,0xff,0xff],512);
+    data.set([0xf8,0xff,0xff,0xff],512*(1+128));
     await writeSdImage(open,storeName,key,{byteLength:data.length,bytes:data,templateFingerprint:"original",savedAt:2});
     const first=await readSdImage(open,storeName,key);
     ensure(first.byteLength===data.length && first.bytes[0]===17 && first.bytes[data.length-1]===93,"128MiB roundtrip");
@@ -44,8 +51,9 @@ try{
     await new Promise((resolve,reject)=>{const tx=db.transaction(storeName,"readwrite");tx.objectStore(storeName).put({bytes:new Uint8Array([1,2,3]).buffer,byteLength:3,templateFingerprint:"legacy",savedAt:1},"legacy");tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
     db.close();
     const legacy=await readSdImage(open,storeName,"legacy");ensure(legacy.bytes[2]===3,"legacy import");
-    await writeSdImage(open,storeName,"legacy",{bytes:new Uint8Array([4,5,6]),byteLength:3,templateFingerprint:"upgraded",savedAt:2});
-    const migrated=await readSdImage(open,storeName,"legacy");ensure(migrated.bytes[0]===4,"new-format read");
+    data[64]=4;
+    await writeSdImage(open,storeName,"legacy",{bytes:data,byteLength:data.length,templateFingerprint:"upgraded",savedAt:2});
+    const migrated=await readSdImage(open,storeName,"legacy");ensure(migrated.bytes[64]===4,"new-format read");
     const db2=await open();
     const preserved=await new Promise((resolve,reject)=>{const tx=db2.transaction(storeName);const request=tx.objectStore(storeName).get("legacy");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
     db2.close();ensure(new Uint8Array(preserved.bytes)[0]===1,"old readable snapshot retained");

@@ -35,7 +35,7 @@ const TAIPEI_HOST_LOCATION: SimulatorHostLocation = {
 };
 
 type StatusState = { kind: "message"; text: string } | { kind: "translation"; key: SimulatorTranslationKey };
-type SdBusyState = "idle" | "refresh" | "write" | "read" | "delete";
+type SdBusyState = "idle" | "refresh" | "write" | "read" | "delete" | "backup" | "restore";
 
 const boardButtonIdByLabel = (
   keyMap: { id: number; label: string; aliases?: string[] }[],
@@ -114,6 +114,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const logEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const sdImageInputRef = useRef<HTMLInputElement | null>(null);
   const firmwarePathRef = useRef("");
   const buttonClickTailRef = useRef<Promise<void>>(Promise.resolve());
   const pressedPointerButtonsRef = useRef<Set<number>>(new Set());
@@ -121,6 +122,9 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const statusText = status.kind === "message" ? status.text : t(status.key);
   const hostBridge = resolvedHostBridge;
   const browserSdAvailable = sdRoot.includes("Browser sandbox");
+  const browserSdTransferAvailable = browserSdAvailable
+    && typeof hostBridge.exportSdImage === "function"
+    && typeof hostBridge.importSdImage === "function";
   const panelDisplayScale = panelDisplayMode === "1x" ? 1 : panelDisplayMode === "2x" ? 2 : 0;
   const mainClassName = panelDisplayMode === "1x" ? "ide-main ide-main--display-one-to-one" : "ide-main";
   const deviceStageClassName = panelDisplayScale > 0
@@ -389,6 +393,50 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
       setSdMessage(msg);
     } finally {
       setSdBusy("idle");
+    }
+  };
+
+  const downloadSdImage = async () => {
+    if (running || !hostBridge.exportSdImage) return;
+    setSdBusy("backup");
+    setSdMessage("");
+    try {
+      const image = await hostBridge.exportSdImage(board.id);
+      const blob = new Blob([image.bytes], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `panda-${board.id}-sd-card.img`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setSdMessage(t(image.templateConflict ? "sdStatusConflictExported" : "sdStatusBackupDownloaded"));
+    } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error).message ?? String(e);
+      setSdMessage(msg);
+    } finally {
+      setSdBusy("idle");
+    }
+  };
+
+  const importSdImage = async (file: File | null) => {
+    if (!file || running || !hostBridge.importSdImage) return;
+    if (!window.confirm(t("sdImportConfirm"))) {
+      if (sdImageInputRef.current) sdImageInputRef.current.value = "";
+      return;
+    }
+    setSdBusy("restore");
+    setSdMessage("");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await hostBridge.importSdImage(board.id, bytes);
+      await refreshSdDirectory(sdPath);
+      setSdMessage(t("sdStatusRestored"));
+    } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error).message ?? String(e);
+      setSdMessage(msg);
+    } finally {
+      setSdBusy("idle");
+      if (sdImageInputRef.current) sdImageInputRef.current.value = "";
     }
   };
 
@@ -673,6 +721,39 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
             <section className="ide-sidebar__group">
               <h2 className="pds-section-title">{t("sdCardTitle")}</h2>
               <div className="ide-sdcard__path">{sdPath}</div>
+              {browserSdTransferAvailable && (
+                <div className="ide-sdcard__transfer">
+                  <p className="ide-sidebar__hint">{t("sdTransferDescription")}</p>
+                  <div className="ide-sdcard__actions">
+                    <button
+                      type="button"
+                      className="pds-btn ide-sdcard__action"
+                      disabled={running || sdBusy !== "idle"}
+                      onClick={() => void downloadSdImage()}
+                    >
+                      {t("sdButtonDownloadBackup")}
+                    </button>
+                    <button
+                      type="button"
+                      className="pds-btn ide-sdcard__action"
+                      disabled={running || sdBusy !== "idle"}
+                      onClick={() => {
+                        if (sdImageInputRef.current) sdImageInputRef.current.value = "";
+                        sdImageInputRef.current?.click();
+                      }}
+                    >
+                      {t("sdButtonImportBackup")}
+                    </button>
+                  </div>
+                  <input
+                    ref={sdImageInputRef}
+                    className="ide-sdcard__file-input"
+                    type="file"
+                    accept=".img,application/octet-stream"
+                    onChange={(event) => void importSdImage(event.currentTarget.files?.[0] ?? null)}
+                  />
+                </div>
+              )}
               <div className="ide-sdcard__actions">
                 <button
                   type="button"
@@ -774,7 +855,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   ))
                 )}
               </div>
-              {sdMessage ? <p className="ide-sidebar__hint">{sdMessage}</p> : null}
+              {sdMessage ? <p className="ide-sidebar__hint" role="status" aria-live="polite">{sdMessage}</p> : null}
               {running ? <p className="ide-sidebar__hint">{t("sdLockedWhileRunning")}</p> : null}
             </section>
             )}
