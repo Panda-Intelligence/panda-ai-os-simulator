@@ -5,10 +5,11 @@ import {
   browserSimulatorHostBridge,
   resolveDefaultSimulatorHostBridge,
   type SimulatorSdEntry,
+  type SimulatorFirmwareOption,
   type SimulatorHostBridge,
   type SimulatorHostLocation,
 } from "../simulatorBridge";
-import { DEFAULT_SIMULATOR_BOARD_ID, getSimulatorBoard, SIMULATOR_BOARDS, summarizeSimulatorBoard } from "../boards";
+import { DEFAULT_SIMULATOR_BOARD_ID, getSimulatorBoard, SIMULATOR_BOARDS, shortSimulatorBoardName, summarizeSimulatorBoard } from "../boards";
 import {
   resolveInitialSimulatorLocale,
   saveSimulatorLocalePreference,
@@ -24,6 +25,13 @@ const BUTTON_CLICK_HOLD_MS = 250;
 const BUTTON_CLICK_SETTLE_MS = 50;
 const GEOLOCATION_TIMEOUT_MS = 2500;
 const GEOLOCATION_MAXIMUM_AGE_MS = 5 * 60 * 1000;
+
+const formatByteSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MiB`;
+};
 
 type PanelDisplayMode = "fit" | "1x" | "2x";
 
@@ -105,6 +113,9 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelDisplayMode, setPanelDisplayMode] = useState<PanelDisplayMode>("fit");
   const [firmwareName, setFirmwareName] = useState<string | null>(null);
+  const [firmwareOptions, setFirmwareOptions] = useState<SimulatorFirmwareOption[]>([]);
+  const [selectedFirmwarePath, setSelectedFirmwarePath] = useState("");
+  const [sdDropActive, setSdDropActive] = useState(false);
   const [sdPath, setSdPath] = useState("/");
   const [sdEntries, setSdEntries] = useState<SimulatorSdEntry[]>([]);
   const [sdBusy, setSdBusy] = useState<SdBusyState>("idle");
@@ -125,6 +136,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const browserSdTransferAvailable = browserSdAvailable
     && typeof hostBridge.exportSdImage === "function"
     && typeof hostBridge.importSdImage === "function";
+  const firmwareCatalogAvailable = typeof hostBridge.listFirmwareOptions === "function";
   const panelDisplayScale = panelDisplayMode === "1x" ? 1 : panelDisplayMode === "2x" ? 2 : 0;
   const mainClassName = panelDisplayMode === "1x" ? "ide-main ide-main--display-one-to-one" : "ide-main";
   const deviceStageClassName = panelDisplayScale > 0
@@ -201,6 +213,30 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   }, [hostBridge]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!hostBridge.listFirmwareOptions) {
+      setFirmwareOptions([]);
+      setSelectedFirmwarePath("");
+      return () => { cancelled = true; };
+    }
+    void hostBridge.listFirmwareOptions(board.id)
+      .then((options) => {
+        if (cancelled) return;
+        setFirmwareOptions(options);
+        setSelectedFirmwarePath((current) => options.some((option) => option.path === current)
+          ? current
+          : (options[0]?.path ?? ""));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFirmwareOptions([]);
+          setSelectedFirmwarePath("");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [board.id, hostBridge]);
+
+  useEffect(() => {
     void hostBridge.readSdRootPath()
       .then((path) => {
         setSdRoot(path);
@@ -248,11 +284,13 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
     setError(null);
     try {
       const hostLocation = await resolveHostLocation();
-      const res = await hostBridge.startSim(board.id, "", hostLocation);
+      const firmwarePath = selectedFirmwarePath;
+      const res = await hostBridge.startSim(board.id, firmwarePath, hostLocation);
       setStatus({ kind: "message", text: `start_sim: ${res}` });
       if (res === "started" || res === "already_running") {
-        firmwarePathRef.current = "";
-        setFirmwareName(null);
+        firmwarePathRef.current = firmwarePath;
+        const selected = firmwareOptions.find((option) => option.path === firmwarePath);
+        setFirmwareName(selected?.label ?? (firmwarePath ? firmwarePath.split(/[\\/]/).pop() || firmwarePath : null));
         setRunning(true);
       } else if (res === BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE) {
         setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
@@ -317,6 +355,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
     setBoardId(nextBoard.id);
     firmwarePathRef.current = "";
     setFirmwareName(null);
+    setSelectedFirmwarePath("");
     setSdPath("/");
     setSdEntries([]);
   };
@@ -627,9 +666,6 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
               <button className="pds-btn pds-btn--primary" onClick={quickStartSim}>
                 {t("buttonQuickLaunch")}
               </button>
-              <button className="pds-btn" onClick={startSim}>
-                {t("buttonChooseFirmware")}
-              </button>
             </>
           ) : (
             <button className="pds-btn pds-btn--danger" onClick={stopSim}>
@@ -699,7 +735,53 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   </option>
                 ))}
               </select>
+              <div className="ide-board-list" aria-label={t("devicePickerAria")}>
+                {SIMULATOR_BOARDS.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    className={candidate.id === board.id ? "ide-board-card ide-board-card--active" : "ide-board-card"}
+                    disabled={running}
+                    onClick={() => handleBoardChange(candidate.id)}
+                  >
+                    <span className="ide-board-card__name">{shortSimulatorBoardName(candidate)}</span>
+                    <span className="ide-board-card__meta">
+                      {candidate.outputWidth}×{candidate.outputHeight} · {candidate.framebufferFormat}
+                    </span>
+                  </button>
+                ))}
+              </div>
               <p className="ide-sidebar__hint">{summarizeSimulatorBoard(board)}</p>
+            </section>
+
+            <section className="ide-sidebar__group">
+              <h2 className="pds-section-title">{t("firmwareLibraryTitle")}</h2>
+              {firmwareCatalogAvailable ? (
+                firmwareOptions.length > 0 ? (
+                  <select
+                    className="pds-select"
+                    name="simulatorFirmware"
+                    value={selectedFirmwarePath}
+                    disabled={running}
+                    onChange={(event) => {
+                      const path = event.currentTarget.value;
+                      setSelectedFirmwarePath(path);
+                      setFirmwareName(firmwareOptions.find((option) => option.path === path)?.label ?? null);
+                    }}
+                  >
+                    {firmwareOptions.map((option) => (
+                      <option key={option.id} value={option.path}>{option.label}</option>
+                    ))}
+                  </select>
+                ) : <p className="ide-sidebar__hint">{t("firmwareUnavailable")}</p>
+              ) : (
+                <button className="pds-btn" disabled={running} onClick={startSim}>
+                  {t("buttonChooseFirmware")}
+                </button>
+              )}
+              <p className="ide-sidebar__hint">
+                {firmwareCatalogAvailable ? t("firmwareBundledHint") : t("firmwareLocalHint")}
+              </p>
             </section>
 
             <section className="ide-sidebar__group">
@@ -772,23 +854,39 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   {t("sdButtonRefresh")}
                 </button>
               </div>
-              <div className="ide-sdcard__actions">
-                <button
-                  type="button"
-                  className="pds-btn ide-sdcard__action"
-                  disabled={running || sdBusy !== "idle"}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {t("sdButtonImportFiles")}
-                </button>
-                <button
-                  type="button"
-                  className="pds-btn ide-sdcard__action"
-                  disabled={running || sdBusy !== "idle"}
-                  onClick={() => folderInputRef.current?.click()}
-                >
-                  {t("sdButtonImportFolder")}
-                </button>
+              <div
+                className={sdDropActive ? "ide-sdcard__dropzone ide-sdcard__dropzone--active" : "ide-sdcard__dropzone"}
+                onDragEnter={(event) => { event.preventDefault(); if (!running) setSdDropActive(true); }}
+                onDragOver={(event) => { event.preventDefault(); if (!running) setSdDropActive(true); }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSdDropActive(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setSdDropActive(false);
+                  if (!running) void importSdFiles(event.dataTransfer.files, false);
+                }}
+              >
+                <strong>{t("sdDropTitle")}</strong>
+                <span>{t("sdDropHint")}</span>
+                <div className="ide-sdcard__actions">
+                  <button
+                    type="button"
+                    className="pds-btn ide-sdcard__action"
+                    disabled={running || sdBusy !== "idle"}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {t("sdButtonImportFiles")}
+                  </button>
+                  <button
+                    type="button"
+                    className="pds-btn ide-sdcard__action"
+                    disabled={running || sdBusy !== "idle"}
+                    onClick={() => folderInputRef.current?.click()}
+                  >
+                    {t("sdButtonImportFolder")}
+                  </button>
+                </div>
               </div>
               <input
                 ref={fileInputRef}
@@ -841,6 +939,9 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                       >
                         <span className="ide-sdcard__entry-kind">{entry.kind === "directory" ? "DIR" : "FILE"}</span>
                         <span className="ide-sdcard__entry-label">{entry.name}</span>
+                        {entry.kind === "file" ? (
+                          <span className="ide-sdcard__entry-size">{formatByteSize(entry.size)}</span>
+                        ) : null}
                       </button>
                       <button
                         type="button"

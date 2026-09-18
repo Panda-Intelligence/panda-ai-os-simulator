@@ -1,6 +1,7 @@
 import { browserSimulatorHostBridge } from "./browserSimulatorHostBridge";
 import type {
   SimulatorFramebufferEvent,
+  SimulatorFirmwareOption,
   SimulatorHostBridge,
   SimulatorHostLocation,
   SimulatorSdDirectory,
@@ -13,6 +14,7 @@ import type {
 
 export type {
   SimulatorFramebufferEvent,
+  SimulatorFirmwareOption,
   SimulatorHostBridge,
   SimulatorHostLocation,
   SimulatorSdDirectory,

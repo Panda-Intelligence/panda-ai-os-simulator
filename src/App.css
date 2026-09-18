@@ -167,6 +167,49 @@ body,
   line-height: 1.35;
 }
 
+.ide-board-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.ide-board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  color: var(--pds-ink);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ide-board-card:hover:not(:disabled) {
+  border-color: var(--pds-border-strong);
+  background: var(--pds-hover);
+}
+
+.ide-board-card--active {
+  border-color: var(--pds-accent);
+  box-shadow: inset 3px 0 0 var(--pds-accent);
+}
+
+.ide-board-card__name {
+  font-size: var(--pds-text-sm);
+  font-weight: 600;
+}
+
+.ide-board-card__meta {
+  color: var(--pds-muted);
+  font-family: var(--pds-font-mono);
+  font-size: 10px;
+}
+
 .ide-sdcard__path {
   overflow: hidden;
   border: 1px solid var(--pds-border);
@@ -200,6 +243,31 @@ body,
 
 .ide-sdcard__folder-input {
   flex: 1 1 auto;
+}
+
+.ide-sdcard__dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px dashed var(--pds-border-strong);
+  border-radius: var(--pds-radius-md);
+  background: color-mix(in srgb, var(--pds-panel-raised) 92%, var(--pds-accent) 8%);
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  line-height: 1.35;
+  padding: 10px;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.ide-sdcard__dropzone strong {
+  color: var(--pds-ink);
+  font-size: var(--pds-text-sm);
+}
+
+.ide-sdcard__dropzone--active {
+  border-color: var(--pds-accent);
+  background: color-mix(in srgb, var(--pds-panel-raised) 78%, var(--pds-accent) 22%);
+  transform: translateY(-1px);
 }
 
 .ide-sdcard__list {
@@ -259,6 +327,13 @@ body,
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ide-sdcard__entry-size {
+  flex: 0 0 auto;
+  color: var(--pds-muted);
+  font-family: var(--pds-font-mono);
+  font-size: 10px;
 }
 
 .ide-sdcard__delete {
@@ -326,6 +401,7 @@ body,
    The shell carries the device aspect ratio and fills the stage's height,
    so the device always fits without clipping. */
 .panel-shell {
+  --panel-accent: #202124;
   position: relative;
   display: flex;
   height: 100%;
@@ -333,11 +409,40 @@ body,
   max-width: 100%;
   box-sizing: border-box;
   aspect-ratio: 462 / 832;
-  border: 1px solid #000;
-  border-radius: 18px;
-  background: #0c0c0c;
-  padding: 16px 13px;
-  box-shadow: var(--pds-shadow-md);
+  border: 1px solid #050505;
+  border-radius: 22px;
+  background: linear-gradient(145deg, #1c1d20, #08090a 55%, #18191c);
+  padding: 18px 14px 26px;
+  box-shadow: 0 22px 48px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+.panel-shell--compact {
+  border-radius: 15px;
+  padding: 13px 10px 22px;
+}
+
+.panel-shell--papers3 {
+  border-color: #8f9297;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #e7e8ea, #aeb1b6 12%, #292b2f 16%, #17181b);
+}
+
+.panel-shell--t5s3 {
+  border-radius: 14px;
+  box-shadow: 0 22px 48px rgba(0,0,0,.42), inset 0 2px 0 var(--panel-accent);
+}
+
+.panel-screen-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: 5px;
+  background: #f5f3ea;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.55), inset 0 0 18px rgba(0,0,0,.12);
 }
 
 .panel-canvas {
@@ -352,12 +457,96 @@ body,
   touch-action: none;
 }
 
+.panel-device-mark {
+  position: absolute;
+  bottom: 7px;
+  left: 14px;
+  right: 14px;
+  overflow: hidden;
+  color: rgba(255,255,255,.52);
+  font-family: var(--pds-font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.panel-shell--papers3 .panel-device-mark {
+  color: rgba(255,255,255,.68);
+}
+
+.panel-physical-keys {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.panel-physical-key {
+  --panel-key-index: 0;
+  position: absolute;
+  top: calc(28% + var(--panel-key-index) * 54px);
+  right: -7px;
+  width: 8px;
+  height: 34px;
+  border: 1px solid #020202;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(90deg, #111, #35373b);
+  padding: 0;
+  box-shadow: 1px 1px 3px rgba(0,0,0,.6);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.panel-shell[data-button-side="left"] .panel-physical-key {
+  right: auto;
+  left: -7px;
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(270deg, #111, #35373b);
+}
+
+.panel-shell--papers3 .panel-physical-key {
+  top: 16%;
+  background: linear-gradient(90deg, #696c70, #25272a);
+}
+
+.panel-shell--t5s3 .panel-physical-key:first-child {
+  border-color: color-mix(in srgb, #000 70%, var(--panel-accent) 30%);
+}
+
+.panel-physical-key:active {
+  transform: translateX(-2px);
+  filter: brightness(1.35);
+}
+
+.panel-shell[data-button-side="left"] .panel-physical-key:active {
+  transform: translateX(2px);
+}
+
+.panel-physical-key__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .panel-shell--fixed-scale {
   flex: 0 0 auto;
-  width: calc(var(--panel-canvas-width) + 28px);
-  height: calc(var(--panel-canvas-height) + 34px);
+  width: calc(var(--panel-canvas-width) + 32px);
+  height: calc(var(--panel-canvas-height) + 46px);
   max-width: none;
   max-height: none;
+}
+
+.panel-shell--fixed-scale .panel-screen-frame {
+  width: var(--panel-canvas-width);
+  height: var(--panel-canvas-height);
+  flex: 0 0 auto;
 }
 
 .panel-shell--fixed-scale .panel-canvas {
