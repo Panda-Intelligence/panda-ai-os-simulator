@@ -7,6 +7,13 @@ const host = process.env.TAURI_DEV_HOST;
 const base = process.env.VITE_SIMULATOR_BASE || "/";
 
 // https://vite.dev/config/
+const isolationHeaders = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "X-Content-Type-Options": "nosniff",
+};
+
 export default defineConfig(async () => ({
   base,
   plugins: [react()],
@@ -16,7 +23,9 @@ export default defineConfig(async () => ({
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
+  preview: { headers: isolationHeaders },
   server: {
+    headers: isolationHeaders,
     port: 1420,
     strictPort: true,
     host: host || false,

@@ -9,10 +9,6 @@ export type SimulatorBoardKey = {
 export type SimulatorBoard = {
   id: string;
   displayName: string;
-  murphyBoard: string;
-  firmware: string;
-  headlessBin?: string;
-  caseRoot?: string;
   rawWidth: number;
   rawHeight: number;
   framebufferWidth: number;
@@ -30,8 +26,6 @@ export type SimulatorBoard = {
 
 type SimulatorBoardRegistry = {
   defaultBoard: string;
-  defaultHeadlessBin: string;
-  defaultCaseRoot: string;
   boards: SimulatorBoard[];
 };
 
@@ -57,5 +51,5 @@ export const SIMULATOR_BOARD_PROFILES = SIMULATOR_BOARDS;
 export const getSimulatorBoardProfile = getSimulatorBoard;
 
 export function summarizeSimulatorBoard(board: SimulatorBoard): string {
-  return `${board.outputWidth}x${board.outputHeight} - Panda Compatible Device ${board.murphyBoard} - ${board.qemu.displayType}/${board.qemu.touchType}`;
+  return `${board.outputWidth}x${board.outputHeight} - ${board.displayName} - ${board.qemu.displayType}/${board.qemu.touchType}`;
 }

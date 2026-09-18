@@ -15,6 +15,7 @@
 
 mod debug_transport;
 mod ipc;
+mod simulator_resolver;
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -70,12 +71,24 @@ struct BoardRegistry {
 #[serde(rename_all = "camelCase")]
 struct BoardProfile {
     id: String,
-    murphy_board: String,
-    firmware: String,
     framebuffer_width: u32,
     framebuffer_height: u32,
     framebuffer_format: ipc::FramebufferFormat,
     key_map: Vec<BoardKey>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IntegrationRegistry {
+    boards: Vec<IntegrationBoard>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IntegrationBoard {
+    id: String,
+    murphy_board: String,
+    firmware: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -109,12 +122,11 @@ impl Default for SimulatorLocation {
     }
 }
 
-fn project_root() -> PathBuf {
-    let mut p = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if p.ends_with("src-tauri") {
-        p.pop();
-    }
-    p
+fn standalone_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 fn board_registry() -> Result<BoardRegistry, String> {
@@ -142,31 +154,62 @@ fn simulator_board_profile(board_id: Option<&str>) -> Result<BoardProfile, Strin
         })
 }
 
-fn qemu_binary_path() -> PathBuf {
-    project_root().join(".qemu-cache/qemu/build/qemu-system-xtensa")
+fn qemu_binary_path() -> Result<PathBuf, String> {
+    simulator_resolver::qemu_path(None, &standalone_root())
 }
 
-fn board_firmware_path(profile: &BoardProfile) -> PathBuf {
-    let root = project_root();
-    let repo_root = root.join("../../");
-    let firmware = PathBuf::from(&profile.firmware);
-    if firmware.is_absolute() {
-        firmware
-    } else {
-        repo_root.join(firmware)
-    }
+fn integration_board(profile: &BoardProfile) -> Result<IntegrationBoard, String> {
+    let integration_path = simulator_resolver::integration_path()?.ok_or_else(|| {
+        format!(
+            "no quicklaunch firmware mapping for board '{}'; choose an explicit firmware file or set PANDA_SIMULATOR_INTEGRATION",
+            profile.id
+        )
+    })?;
+    let registry: IntegrationRegistry = serde_json::from_str(
+        &std::fs::read_to_string(&integration_path).map_err(|error| {
+            format!(
+                "failed to read PANDA_SIMULATOR_INTEGRATION {}: {}",
+                integration_path.display(), error
+            )
+        })?,
+    )
+    .map_err(|error| {
+        format!(
+            "failed to parse PANDA_SIMULATOR_INTEGRATION {}: {}",
+            integration_path.display(), error
+        )
+    })?;
+    registry
+        .boards
+        .into_iter()
+        .find(|board| board.id == profile.id)
+        .ok_or_else(|| {
+            format!(
+                "PANDA_SIMULATOR_INTEGRATION {} has no firmware mapping for board '{}'",
+                integration_path.display(), profile.id
+            )
+        })
+}
+
+fn board_firmware_path(profile: &BoardProfile) -> Result<PathBuf, String> {
+    let mapping = integration_board(profile)?;
+    let project_root = simulator_resolver::project_root()?;
+    simulator_resolver::project_path(&mapping.firmware, project_root.as_deref(), "firmware")
 }
 
 fn murphy_build_hint(profile: &BoardProfile) -> String {
-    let board_env = if profile.murphy_board == "default" {
+    let Ok(mapping) = integration_board(profile) else {
+        return "choose an explicit firmware file, or set PANDA_SIMULATOR_INTEGRATION and PANDA_SIMULATOR_PROJECT_ROOT".to_string();
+    };
+    let board_env = if mapping.murphy_board == "default" {
         "BOARD=default".to_string()
     } else {
-        format!("BOARD={}", profile.murphy_board)
+        format!("BOARD={}", mapping.murphy_board)
     };
-    let build_dir = if profile.murphy_board == "default" {
+    let build_dir = if mapping.murphy_board == "default" {
         "apps/panda-os/device/build".to_string()
     } else {
-        format!("apps/panda-os/device/build-{}", profile.murphy_board)
+        format!("apps/panda-os/device/build-{}", mapping.murphy_board)
     };
     format!("{board_env} PANDA_BUILD_DIR={build_dir} apps/panda-os/tools/build-device.sh")
 }
@@ -184,7 +227,7 @@ fn firmware_sibling_or_nested(build_dir: &Path, sibling: &str, nested: &str) -> 
 }
 
 fn default_sd_root() -> PathBuf {
-    project_root().join("sdcard")
+    standalone_root().join("sdcard")
 }
 
 fn simulator_sd_root() -> Result<PathBuf, String> {
@@ -824,18 +867,18 @@ fn start_sim_locked(
         });
     }
 
-    let qemu = qemu_binary_path();
+    let qemu = qemu_binary_path()?;
     if !qemu.exists() {
         return Err(format!(
             "QEMU binary not found at {}.\n\
-             Run `apps/simulator/scripts/build-qemu.sh` first.\n\
+             Run `scripts/build-qemu.sh` first.\n\
              Required deps (macOS): brew install ninja glib pixman libgcrypt pkg-config gnutls",
             qemu.display()
         ));
     }
 
     let firmware = if firmware_path.trim().is_empty() {
-        board_firmware_path(&board)
+        board_firmware_path(&board)?
     } else {
         PathBuf::from(firmware_path)
     };
@@ -1204,10 +1247,6 @@ mod tests {
     fn loads_s37uc_board_from_registry() {
         let board = simulator_board_profile(Some("s37uc")).unwrap();
 
-        assert_eq!(
-            board.firmware,
-            "apps/panda-os/device/build-s37uc/panda_os.bin"
-        );
         assert_eq!(board.framebuffer_width, 416);
         assert_eq!(board.framebuffer_height, 240);
         assert_eq!(

@@ -17,6 +17,12 @@ export type BrowserSimulatorRuntimeFirmwareArtifacts = Record<
   { bin: string; kernel: string | null; symbols: string | null }
 >;
 export type BrowserSimulatorRuntimeSdImage = string | string[];
+export type BrowserSimulatorRuntimeSource = {
+  kind: string;
+  revision: string | null;
+  label: string | null;
+  artifactManifestSha256: string | null;
+};
 
 export type BrowserSimulatorRuntimeManifest = {
   kind: "unavailable" | "wasm-worker";
@@ -35,6 +41,8 @@ export type BrowserSimulatorRuntimeManifest = {
   qemuSdImage?: BrowserSimulatorRuntimeSdImage | null;
   qemuWorkerScript?: string | null;
   artifactManifest?: string | null;
+  source?: BrowserSimulatorRuntimeSource | null;
+  digests?: Record<string, string> | null;
   reason?: string;
 };
 
@@ -99,10 +107,11 @@ const DEFAULT_RUNTIME_MANIFEST: BrowserSimulatorRuntimeManifest = {
   reason: "WASM firmware runtime artifact is not available yet.",
 };
 
-const DEFAULT_MANIFEST_URL = "/simulator/app/manifest.json";
+const DEFAULT_MANIFEST_URL = `${import.meta.env.BASE_URL.replace(/\/?$/, "/")}manifest.json`;
 const BROWSER_SD_LABEL = "Browser sandbox (qemu-wasm runtime)";
 const WORKER_NAME = "panda-browser-simulator-runtime";
 const PERIPHERAL_CONTROL_MAX_PAYLOAD = 64;
+const PRIVATE_RUNTIME_PATH = /(^|\/)(?:private|users|home|murphy|panda-cloud|shared|\.git|node_modules)(?:\/|$)/i;
 
 class UnavailableBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAdapter {
   constructor(
@@ -473,7 +482,7 @@ export class BrowserSimulatorRuntimeHost {
   private startupLogged = false;
 
   constructor(manifestUrl = DEFAULT_MANIFEST_URL) {
-    this.manifestUrl = manifestUrl;
+    this.manifestUrl = validateBrowserSimulatorManifestUrl(manifestUrl);
   }
 
   async chooseFirmware(boardId: string): Promise<string | undefined> {
@@ -606,7 +615,7 @@ export class BrowserSimulatorRuntimeHost {
         return DEFAULT_RUNTIME_MANIFEST;
       }
       const payload = await response.json();
-      return parseBrowserSimulatorRuntimeManifest(payload);
+      return resolveBrowserSimulatorRuntimeManifestUrls(parseBrowserSimulatorRuntimeManifest(payload), this.manifestUrl);
     } catch {
       return DEFAULT_RUNTIME_MANIFEST;
     }
@@ -662,6 +671,22 @@ export class BrowserSimulatorRuntimeHost {
 }
 
 export const browserSimulatorRuntimeHost = new BrowserSimulatorRuntimeHost();
+
+export function validateBrowserSimulatorManifestUrl(value: string, baseUrl = import.meta.env.BASE_URL): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("browser_runtime_manifest_url_missing");
+  }
+  const locationBase = typeof globalThis.location?.href === "string" ? globalThis.location.href : "http://localhost/";
+  const base = new URL(baseUrl, locationBase);
+  const resolved = new URL(value, base);
+  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+    throw new Error("browser_runtime_manifest_url_scheme_invalid");
+  }
+  if (resolved.origin !== base.origin || resolved.username || resolved.password || PRIVATE_RUNTIME_PATH.test(resolved.pathname)) {
+    throw new Error("browser_runtime_manifest_url_origin_invalid");
+  }
+  return resolved.toString();
+}
 
 export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserSimulatorRuntimeManifest {
   if (!payload || typeof payload !== "object") {
@@ -720,6 +745,8 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
     typeof runtimeRecord.artifactManifest === "string" && runtimeRecord.artifactManifest.trim()
       ? runtimeRecord.artifactManifest
       : null;
+  const source = parseRuntimeSource(runtimeRecord.source);
+  const digests = parseRuntimeDigests(runtimeRecord.digests);
   const reason = typeof runtimeRecord.reason === "string" && runtimeRecord.reason.trim()
     ? runtimeRecord.reason
     : undefined;
@@ -742,6 +769,8 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
       qemuSdImage,
       qemuWorkerScript,
       artifactManifest,
+      source,
+      digests,
       reason: reason ?? DEFAULT_RUNTIME_MANIFEST.reason,
     };
   }
@@ -763,7 +792,54 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
     qemuSdImage,
     qemuWorkerScript,
     artifactManifest,
+    source,
+    digests,
     reason,
+  };
+}
+
+export function resolveBrowserSimulatorRuntimeManifestUrls(
+  manifest: BrowserSimulatorRuntimeManifest,
+  manifestUrl: string,
+): BrowserSimulatorRuntimeManifest {
+  if (manifest.kind !== "wasm-worker") {
+    return manifest;
+  }
+  const resolveAsset = (value: string | null | undefined): string | null | undefined => {
+    if (!value) return value;
+    const resolved = new URL(value, manifestUrl);
+    const base = new URL(manifestUrl);
+    if (resolved.origin !== base.origin || resolved.username || resolved.password || PRIVATE_RUNTIME_PATH.test(resolved.pathname)) {
+      throw new Error("browser_runtime_asset_url_invalid");
+    }
+    return resolved.toString();
+  };
+  return {
+    ...manifest,
+    workerScript: resolveAsset(manifest.workerScript) ?? null,
+    firmwareArtifact: resolveAsset(manifest.firmwareArtifact) ?? null,
+    firmwareArtifacts: manifest.firmwareArtifacts
+      ? Object.fromEntries(Object.entries(manifest.firmwareArtifacts).map(([boardId, artifacts]) => [boardId, {
+        bin: resolveAsset(artifacts.bin) ?? "",
+        kernel: resolveAsset(artifacts.kernel) ?? null,
+        symbols: resolveAsset(artifacts.symbols) ?? null,
+      }]))
+      : null,
+    qemuScript: resolveAsset(manifest.qemuScript) ?? null,
+    qemuWasm: resolveAsset(manifest.qemuWasm) ?? null,
+    qemuKernel: resolveAsset(manifest.qemuKernel) ?? null,
+    qemuSymbols: resolveAsset(manifest.qemuSymbols) ?? null,
+    qemuBootloader: resolveAsset(manifest.qemuBootloader) ?? null,
+    qemuPartitionTable: resolveAsset(manifest.qemuPartitionTable) ?? null,
+    qemuOtaData: resolveAsset(manifest.qemuOtaData) ?? null,
+    qemuRom: resolveAsset(manifest.qemuRom) ?? null,
+    qemuSdImage: Array.isArray(manifest.qemuSdImage)
+      ? manifest.qemuSdImage.map((value) => resolveAsset(value) ?? "")
+      : typeof manifest.qemuSdImage === "string"
+        ? resolveAsset(manifest.qemuSdImage) ?? null
+        : null,
+    qemuWorkerScript: resolveAsset(manifest.qemuWorkerScript) ?? null,
+    artifactManifest: resolveAsset(manifest.artifactManifest) ?? null,
   };
 }
 
@@ -806,6 +882,29 @@ function parseRuntimeStatus(status: unknown): BrowserSimulatorRuntimeStatus {
     return status;
   }
   return "unavailable";
+}
+
+function parseRuntimeSource(value: unknown): BrowserSimulatorRuntimeSource | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return {
+    kind: typeof record.kind === "string" && record.kind ? record.kind : "unknown",
+    revision: typeof record.revision === "string" && record.revision ? record.revision : null,
+    label: typeof record.label === "string" && record.label ? record.label : null,
+    artifactManifestSha256:
+      typeof record.artifactManifestSha256 === "string" && /^[0-9a-f]{64}$/i.test(record.artifactManifestSha256)
+        ? record.artifactManifestSha256
+        : null,
+  };
+}
+
+function parseRuntimeDigests(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.some(([key, digest]) => !key || typeof digest !== "string" || !/^[0-9a-f]{64}$/i.test(digest))) {
+    return null;
+  }
+  return Object.fromEntries(entries.map(([key, digest]) => [key, digest as string]));
 }
 
 function parseSdDirectory(value: unknown): SimulatorSdDirectory {

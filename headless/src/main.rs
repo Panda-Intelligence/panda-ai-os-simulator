@@ -21,6 +21,8 @@
 //     received, exits with code 2 and writes nothing.
 
 mod debug_transport;
+#[path = "../../src-tauri/src/simulator_resolver.rs"]
+mod simulator_resolver;
 
 use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt;
@@ -324,8 +326,6 @@ struct BoardRegistry {
 #[serde(rename_all = "camelCase")]
 struct BoardProfile {
     id: String,
-    #[serde(default)]
-    murphy_board: String,
     raw_width: u32,
     raw_height: u32,
     framebuffer_width: u32,
@@ -691,7 +691,7 @@ impl Default for SimulatorLocation {
 #[derive(Parser, Clone, Debug)]
 #[command(version, about = "Mofei simulator headless screenshot harness")]
 struct Args {
-    /// Board registry id. Defaults to apps/simulator/boards.json defaultBoard.
+    /// Board registry id. Defaults to this checkout's boards.json defaultBoard.
     #[arg(long)]
     board: Option<String>,
 
@@ -700,10 +700,8 @@ struct Args {
     firmware: PathBuf,
 
     /// Path to the espressif/qemu fork's `qemu-system-xtensa` binary.
-    #[arg(
-        long,
-        default_value = "apps/simulator/.qemu-cache/qemu/build/qemu-system-xtensa"
-    )]
+    /// Defaults to PANDA_SIMULATOR_QEMU or this checkout's .qemu-cache path.
+    #[arg(long, default_value = ".qemu-cache/qemu/build/qemu-system-xtensa")]
     qemu: PathBuf,
 
     /// Override MOFEI_SIM_HEAP_MODE for the QEMU child. Missing value inherits the environment and defaults to device.
@@ -1012,7 +1010,7 @@ fn parse_touch_tap(value: &str) -> std::result::Result<TouchTap, String> {
 
 fn load_board_runtime(board_id: Option<&str>) -> Result<BoardRuntime> {
     let registry: BoardRegistry = serde_json::from_str(include_str!("../../boards.json"))
-        .context("parsing apps/simulator/boards.json")?;
+        .context("parsing standalone boards.json")?;
     let selected_id = board_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -1030,11 +1028,8 @@ fn load_board_runtime(board_id: Option<&str>) -> Result<BoardRuntime> {
         }
     }
 
-    let murphy_board = profile.murphy_board.trim().to_ascii_lowercase();
     if profile.id == "mofei"
         || profile.id == "s3r8"
-        || murphy_board == "default"
-        || murphy_board == "mofei"
     {
         button_ids_by_name.insert("back".to_string(), 0);
         button_ids_by_name.insert("lock".to_string(), 0);
@@ -1110,7 +1105,13 @@ fn canonical_existing_path(path: &Path, description: &str) -> Result<PathBuf> {
 
 fn normalize_args_paths(args: &Args) -> Result<Args> {
     let mut normalized = args.clone();
-    normalized.qemu = canonical_existing_path(&args.qemu, "QEMU binary")?;
+    let default_qemu = Path::new(simulator_resolver::QEMU_RELATIVE_PATH);
+    let qemu = if args.qemu == default_qemu {
+        simulator_resolver::qemu_path(None, &standalone_root_path()).map_err(anyhow::Error::msg)?
+    } else {
+        simulator_resolver::qemu_path(Some(&args.qemu), &standalone_root_path()).map_err(anyhow::Error::msg)?
+    };
+    normalized.qemu = canonical_existing_path(&qemu, "QEMU binary")?;
     normalized.firmware = canonical_existing_path(&args.firmware, "Firmware")?;
     normalized.socket = absolute_path(&args.socket)?;
     normalized.artifacts = absolute_path(&args.artifacts)?;
@@ -1148,7 +1149,14 @@ fn normalize_args_paths(args: &Args) -> Result<Args> {
 }
 
 fn default_sd_root() -> Result<PathBuf> {
-    Ok(std::env::current_dir()?.join("apps/simulator/sdcard"))
+    Ok(standalone_root_path().join("sdcard"))
+}
+
+fn standalone_root_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
 }
 
 fn simulator_sd_root(arg_root: Option<PathBuf>) -> Result<PathBuf> {
@@ -4930,22 +4938,11 @@ fn repo_relative_fixture_path(relative_path: &str) -> PathBuf {
         return path.to_path_buf();
     }
 
-    let cwd_path = std::env::current_dir()
-        .map(|cwd| cwd.join(path))
-        .unwrap_or_else(|_| path.to_path_buf());
-    if cwd_path.exists() {
-        return cwd_path;
-    }
-
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .join(path)
+    standalone_root_path().join(path)
 }
 
 fn repo_root_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .to_path_buf()
+    standalone_root_path()
 }
 
 fn seed_boot_copy_files(case: &E2ECase, sd_root: &Path) -> Result<()> {

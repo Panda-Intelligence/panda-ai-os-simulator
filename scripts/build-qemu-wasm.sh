@@ -10,7 +10,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIM_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(git -C "${SIM_ROOT}" rev-parse --show-toplevel)"
 
 QEMU_WASM_REPO_URL="${QEMU_WASM_REPO_URL:-https://github.com/ktock/qemu-wasm}"
 QEMU_WASM_REF="${QEMU_WASM_REF:-dev-wasm-j}"
@@ -36,15 +35,7 @@ if [ "${BOARD}" = "default" ]; then
 else
   FIRMWARE_SUFFIX="-${BOARD}"
 fi
-DEFAULT_FIRMWARE_BUILD_DIR="${QEMU_WASM_FIRMWARE_BUILD_DIR:-${REPO_ROOT}/apps/panda-os/device/build-sim}"
-DEFAULT_FIRMWARE_BIN="${QEMU_WASM_FIRMWARE_BIN:-${DEFAULT_FIRMWARE_BUILD_DIR}/panda_os.bin}"
-DEFAULT_FIRMWARE_ELF="${QEMU_WASM_FIRMWARE_ELF:-${DEFAULT_FIRMWARE_BUILD_DIR}/panda_os.elf}"
-if [[ -z "${QEMU_WASM_FIRMWARE_ELF:-}" && ! -f "${DEFAULT_FIRMWARE_ELF}" && -f "${DEFAULT_FIRMWARE_BUILD_DIR}/murphy_os.elf" ]]; then
-  DEFAULT_FIRMWARE_ELF="${DEFAULT_FIRMWARE_BUILD_DIR}/murphy_os.elf"
-fi
-DEFAULT_FIRMWARE_BOOTLOADER="${QEMU_WASM_FIRMWARE_BOOTLOADER:-${DEFAULT_FIRMWARE_BUILD_DIR}/bootloader/bootloader.bin}"
-DEFAULT_FIRMWARE_PARTITION_TABLE="${QEMU_WASM_FIRMWARE_PARTITION_TABLE:-${DEFAULT_FIRMWARE_BUILD_DIR}/partition_table/partition-table.bin}"
-DEFAULT_FIRMWARE_OTA_DATA="${QEMU_WASM_FIRMWARE_OTA_DATA:-${DEFAULT_FIRMWARE_BUILD_DIR}/ota_data_initial.bin}"
+FIRMWARE_INPUT_DIR="${QEMU_WASM_FIRMWARE_DIR:-}"
 ARTIFACT_MANIFEST="${OUTPUT_DIR}/qemu-wasm-artifacts.json"
 JOBS="${QEMU_WASM_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
 CONTAINER_STARTED=0
@@ -66,19 +57,23 @@ RUNTIME_OTA_DATA_BIN="${OUTPUT_DIR}/ota_data_initial${FIRMWARE_SUFFIX}.bin"
 usage() {
   cat <<EOF
 Usage:
-  apps/simulator/scripts/build-qemu-wasm.sh [--force] [--probe-only] [--no-build]
+  scripts/build-qemu-wasm.sh [--force] [--probe-only] [--no-build]
 
 Environment:
   QEMU_WASM_REF          ktock/qemu-wasm ref (default: dev-wasm-j)
   QEMU_WASM_OFFLINE      reuse the existing qemu-wasm checkout without fetching (default: 0)
   QEMU_WASM_IMAGE        Docker image name (default: murphy-qemu-wasm:<ref>)
   QEMU_WASM_CONTAINER    Docker container name (default: murphy-qemu-wasm-build)
-  QEMU_WASM_OUTPUT_DIR   Artifact output dir (default: apps/simulator/public/simulator-runtime/qemu)
+  QEMU_WASM_OUTPUT_DIR   Artifact output dir (default: public/simulator-runtime/qemu)
   BOARD                  Panda AI OS board value for firmware naming (default: default)
                          Non-default boards write firmware-<board>.bin; default writes firmware.bin
   QEMU_WASM_FIRMWARE_BUILD_DIR
                          Panda AI OS simulator build dir used for firmware refresh
-                         (default: apps/panda-os/device/build-sim)
+                         (default: standalone firmware build directory)
+  QEMU_WASM_FIRMWARE_DIR
+                         Coherent firmware artifact directory. The directory must contain
+                         panda_os.bin, panda_os.elf, bootloader/bootloader.bin,
+                         partition_table/partition-table.bin, and ota_data_initial.bin.
   QEMU_WASM_FIRMWARE_BIN Panda AI OS simulator app binary override
   QEMU_WASM_FIRMWARE_ELF Panda AI OS simulator ELF override used for kernel/symbol sidecars
   QEMU_WASM_REQUIRED_BOARDS
@@ -92,6 +87,7 @@ Environment:
   --firmware-only        Refresh firmware[.<board>].bin, firmware[.<board>]-kernel.img,
                          firmware[.<board>]-symbols.txt, and qemu-wasm-artifacts.json without
                          rebuilding qemu-wasm
+  --firmware-dir=DIR     Use one explicit coherent firmware artifact directory with --firmware-only
 
 Output:
   ${OUTPUT_DIR}/qemu-system-xtensa.js
@@ -119,10 +115,18 @@ for arg in "$@"; do
     --firmware-only) FIRMWARE_ONLY=1 ;;
     --probe-only) PROBE_ONLY=1 ;;
     --no-build) NO_BUILD=1 ;;
+    --firmware-dir=*) FIRMWARE_INPUT_DIR="${arg#*=}" ;;
     -h|--help) usage; exit 0 ;;
     *) echo "[build-qemu-wasm] unknown flag: ${arg}" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+DEFAULT_FIRMWARE_BUILD_DIR="${QEMU_WASM_FIRMWARE_BUILD_DIR:-${FIRMWARE_INPUT_DIR:-${SIM_ROOT}/firmware}}"
+DEFAULT_FIRMWARE_BIN="${QEMU_WASM_FIRMWARE_BIN:-${DEFAULT_FIRMWARE_BUILD_DIR}/panda_os.bin}"
+DEFAULT_FIRMWARE_ELF="${QEMU_WASM_FIRMWARE_ELF:-${DEFAULT_FIRMWARE_BUILD_DIR}/panda_os.elf}"
+DEFAULT_FIRMWARE_BOOTLOADER="${QEMU_WASM_FIRMWARE_BOOTLOADER:-${DEFAULT_FIRMWARE_BUILD_DIR}/bootloader/bootloader.bin}"
+DEFAULT_FIRMWARE_PARTITION_TABLE="${QEMU_WASM_FIRMWARE_PARTITION_TABLE:-${DEFAULT_FIRMWARE_BUILD_DIR}/partition_table/partition-table.bin}"
+DEFAULT_FIRMWARE_OTA_DATA="${QEMU_WASM_FIRMWARE_OTA_DATA:-${DEFAULT_FIRMWARE_BUILD_DIR}/ota_data_initial.bin}"
 
 step() { printf '[build-qemu-wasm] %s\n' "$*"; }
 die() { printf '[build-qemu-wasm] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -260,7 +264,7 @@ PY
 
 write_firmware_provenance() {
   local source_revision
-  source_revision="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+  source_revision="${QEMU_WASM_SOURCE_REVISION:-$(git -C "${SIM_ROOT}" rev-parse HEAD 2>/dev/null || printf 'standalone-unversioned')}"
   python3 - \
     "${RUNTIME_PROVENANCE_JSON}" \
     "${BOARD}" \
@@ -332,8 +336,10 @@ write_firmware_manifest() {
   [[ "${#required_boards[@]}" -gt 0 ]] || die "QEMU_WASM_REQUIRED_BOARDS must name at least one board"
 
   local manifest_allocator="${QEMU_WASM_MALLOC}"
+  local source_revision="${QEMU_WASM_SOURCE_REVISION:-$(git -C "${SIM_ROOT}" rev-parse HEAD 2>/dev/null || printf 'standalone-unversioned')}"
+  local allow_missing=0
   if [[ "${FIRMWARE_ONLY}" -eq 1 && -s "${ARTIFACT_MANIFEST}" ]]; then
-    # 固件-only 刷新不能把旧 WASM 二进制伪装成当前 allocator；保留已有 manifest 身份。
+    # Firmware-only refresh keeps the existing runtime allocator identity.
     manifest_allocator="$(node -e '
       const fs = require("node:fs");
       try {
@@ -346,12 +352,62 @@ write_firmware_manifest() {
   fi
 
   if [[ -n "${QEMU_WASM_REQUIRED_BOARDS:-}" || "${BOARD}" != "default" ]]; then
-    QEMU_WASM_MALLOC="${manifest_allocator}" node "${SCRIPT_DIR}/write-qemu-wasm-artifact-manifest.mjs" \
-      "${OUTPUT_DIR}" "${ARTIFACT_MANIFEST}" --allow-missing --require-boards "${required_boards[@]}"
-  else
-    QEMU_WASM_MALLOC="${manifest_allocator}" node "${SCRIPT_DIR}/write-qemu-wasm-artifact-manifest.mjs" \
-      "${OUTPUT_DIR}" "${ARTIFACT_MANIFEST}" --require-boards default
+    allow_missing=1
   fi
+  node --input-type=module - \
+    "${OUTPUT_DIR}" "${ARTIFACT_MANIFEST}" "${manifest_allocator}" "${source_revision}" \
+    "${SIM_ROOT}/boards.json" "${allow_missing}" "${required_boards[@]}" <<'NODE'
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+
+const [outputDirArg, manifestPathArg, allocator, sourceRevision, registryPath, allowMissing, ...requiredBuildBoards] = process.argv.slice(2);
+const outputDir = resolve(outputDirArg);
+const manifestPath = resolve(manifestPathArg);
+const registry = JSON.parse(readFileSync(registryPath, "utf8"));
+const requiredBoards = [...new Set(requiredBuildBoards.length ? requiredBuildBoards : ["default"])]
+  .filter((value) => value && !value.startsWith("--"));
+const artifactInfo = (fileName) => {
+  const path = join(outputDir, fileName);
+  if (!existsSync(path) || !statSync(path).isFile() || statSync(path).size === 0) return null;
+  return { fileName, relativePath: relative(outputDir, path), bytes: statSync(path).size,
+    sha256: createHash("sha256").update(readFileSync(path)).digest("hex") };
+};
+const sharedNames = ["qemu-system-xtensa.js", "qemu-system-xtensa.wasm", "bootloader.bin",
+  "partition-table.bin", "ota_data_initial.bin", "esp32s3_rev0_rom.bin"];
+const sharedArtifacts = Object.fromEntries(sharedNames.map((name) => [name, artifactInfo(name)]).filter(([, value]) => value));
+const missingRequired = sharedNames.filter((name) => !sharedArtifacts[name]);
+const boards = {};
+for (const buildBoard of requiredBoards) {
+  const profile = buildBoard === "default"
+    ? registry.boards.find((board) => board.id === "mofei")
+    : registry.boards.find((board) => board.id === buildBoard);
+  if (!profile) {
+    missingRequired.push(`${buildBoard}: board registry profile is missing`);
+    continue;
+  }
+  const suffix = buildBoard === "default" ? "" : `-${buildBoard}`;
+  const names = { bin: `firmware${suffix}.bin`, kernel: `firmware${suffix}-kernel.img`, symbols: `firmware${suffix}-symbols.txt`, provenance: `firmware${suffix}-provenance.json` };
+  const firmware = Object.fromEntries(Object.entries(names).slice(0, 3).map(([kind, name]) => [kind, artifactInfo(name)]));
+  const missing = Object.entries(firmware).filter(([, value]) => !value).map(([kind]) => kind);
+  const provenancePath = join(outputDir, names.provenance);
+  const provenance = existsSync(provenancePath) ? JSON.parse(readFileSync(provenancePath, "utf8")) : null;
+  if (!provenance) missing.push("provenance");
+  if (missing.length) missingRequired.push(`${buildBoard}: missing ${missing.join(", ")}`);
+  const boardId = buildBoard === "default" ? "mofei" : profile.id;
+  boards[boardId] = { status: missing.length === 0 ? "ready" : "missing", buildBoard,
+    framebuffer: { width: profile.framebufferWidth, height: profile.framebufferHeight, format: profile.framebufferFormat },
+    firmware, provenance };
+}
+const status = missingRequired.length === 0 ? "ready" : "missing";
+if (status !== "ready" && allowMissing !== "1") {
+  throw new Error(`Missing required qemu-wasm artifacts: ${missingRequired.join(" | ")}`);
+}
+writeFileSync(manifestPath, `${JSON.stringify({ schemaVersion: 2, generatedAt: new Date().toISOString(),
+  source: "ktock/qemu-wasm + standalone simulator overlay", sourceRevision, target: "xtensa-softmmu", status,
+  ...(allocator ? { wasmAllocator: allocator } : {}), requiredBuildBoards: requiredBoards,
+  missingRequired, artifacts: Object.values(sharedArtifacts), boards }, null, 2)}\n`);
+NODE
 }
 
 copy_tree_if_present() {
@@ -567,7 +623,7 @@ text = re.sub(r"-sMALLOC=(?:mimalloc|dlmalloc|emmalloc|__PANDA_WASM_MALLOC__)", 
 }
 
 overlay_espressif_sources() {
-  [[ -d "${NATIVE_QEMU_DIR}" ]] || die "native espressif/qemu checkout missing at ${NATIVE_QEMU_DIR}; run apps/simulator/scripts/build-qemu.sh first"
+  [[ -d "${NATIVE_QEMU_DIR}" ]] || die "native espressif/qemu checkout missing at ${NATIVE_QEMU_DIR}; build the standalone native runtime first"
 
   step "overlaying ESP32-S3 machine sources from ${NATIVE_QEMU_DIR}"
   local rel
@@ -1517,11 +1573,7 @@ write_probe_manifest() {
   local -a required_boards
   read -r -a required_boards <<<"${required_boards_text}"
   [[ "${#required_boards[@]}" -gt 0 ]] || die "QEMU_WASM_REQUIRED_BOARDS must name at least one board"
-  QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC}" node "${SCRIPT_DIR}/write-qemu-wasm-artifact-manifest.mjs" \
-    "${OUTPUT_DIR}" \
-    "${ARTIFACT_MANIFEST}" \
-    --allow-missing \
-    --require-boards "${required_boards[@]}"
+  QEMU_WASM_REQUIRED_BOARDS="${required_boards[*]}" FIRMWARE_ONLY=0 write_firmware_manifest
   step "probe manifest written: ${ARTIFACT_MANIFEST}"
 }
 

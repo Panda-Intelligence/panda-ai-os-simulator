@@ -1,13 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Murphy Simulator Board Registry",
+  "title": "Standalone Simulator Board Registry",
   "type": "object",
-  "required": ["defaultBoard", "defaultHeadlessBin", "defaultCaseRoot", "boards"],
+  "required": ["defaultBoard", "boards"],
   "properties": {
     "$schema": { "type": "string" },
     "defaultBoard": { "type": "string" },
-    "defaultHeadlessBin": { "type": "string" },
-    "defaultCaseRoot": { "type": "string" },
     "boards": {
       "type": "array",
       "minItems": 1,
@@ -21,8 +19,6 @@
       "required": [
         "id",
         "displayName",
-        "murphyBoard",
-        "firmware",
         "rawWidth",
         "rawHeight",
         "framebufferWidth",
@@ -37,15 +33,9 @@
       "properties": {
         "id": { "type": "string" },
         "displayName": { "type": "string" },
-        "murphyBoard": { "type": "string" },
-        "firmware": { "type": "string" },
-        "headlessBin": { "type": "string" },
-        "caseRoot": { "type": "string" },
         "rawWidth": { "type": "integer", "minimum": 1 },
         "rawHeight": { "type": "integer", "minimum": 1 },
         "outputWidth": { "type": "integer", "minimum": 1 },
-        "e2eCoordinateWidth": { "type": "integer", "minimum": 1 },
-        "e2eCoordinateHeight": { "type": "integer", "minimum": 1 },
         "framebufferWidth": { "type": "integer", "minimum": 1 },
         "framebufferHeight": { "type": "integer", "minimum": 1 },
         "framebufferFormat": { "enum": ["mono1", "gray16"] },
