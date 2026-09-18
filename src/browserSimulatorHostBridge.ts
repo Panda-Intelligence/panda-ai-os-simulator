@@ -4,6 +4,9 @@ import type { SimulatorHostBridge } from "./simulatorBridgeTypes";
 export { BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE } from "./browserSimulatorRuntime";
 
 export const browserSimulatorHostBridge: SimulatorHostBridge = {
+  async listFirmwareOptions(boardId) {
+    return browserSimulatorRuntimeHost.listFirmwareOptions(boardId);
+  },
   async chooseFirmware(boardId, filterName) {
     void filterName;
     return browserSimulatorRuntimeHost.chooseFirmware(boardId);

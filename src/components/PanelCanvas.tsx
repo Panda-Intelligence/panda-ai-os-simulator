@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { SimulatorFramebufferEvent, SimulatorHostBridge } from "../simulatorBridge";
-import type { SimulatorBoard } from "../boards";
+import { getSimulatorBoardVisual, type SimulatorBoard } from "../boards";
 
 const TOUCH_DOWN = 1;
 const TOUCH_MOVE = 2;
@@ -55,7 +55,7 @@ function transformFramebuffer(bytes: Uint8Array, width: number, height: number, 
  */
 type PanelCanvasProps = {
   ariaLabel: string;
-  hostBridge: Pick<SimulatorHostBridge, "injectTouch" | "subscribeFramebuffer">;
+  hostBridge: Pick<SimulatorHostBridge, "injectButton" | "injectTouch" | "subscribeFramebuffer">;
   board: SimulatorBoard;
   displayScale: 0 | 1 | 2;
 };
@@ -63,11 +63,13 @@ type PanelCanvasProps = {
 type PanelShellStyle = CSSProperties & {
   "--panel-canvas-width"?: string;
   "--panel-canvas-height"?: string;
+  "--panel-accent"?: string;
 };
 
 export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: PanelCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackingRef = useRef(new Map<number, { fingerId: number; x: number; y: number }>());
+  const visual = getSimulatorBoardVisual(board.id);
   const shellStyle: PanelShellStyle = {
     aspectRatio: `${board.outputWidth + 26} / ${board.outputHeight + 32}`,
     ...(displayScale > 0
@@ -77,7 +79,12 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: Pane
         }
       : {}),
   };
-  const shellClassName = displayScale > 0 ? "panel-shell panel-shell--fixed-scale" : "panel-shell";
+  const shellClassName = [
+    "panel-shell",
+    `panel-shell--${visual.family}`,
+    `panel-shell--finish-${visual.finish}`,
+    displayScale > 0 ? "panel-shell--fixed-scale" : "",
+  ].filter(Boolean).join(" ");
 
   // Subscribe to framebuffer events.
   useEffect(() => {
@@ -216,18 +223,56 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: Pane
     void sendTouch(TOUCH_UP, xy.x, xy.y, tracked.fingerId);
   };
 
+  const setHardwareKey = (buttonId: number, pressed: boolean) => {
+    void hostBridge.injectButton(buttonId, pressed).catch(() => false);
+  };
+
   return (
-    <div className={shellClassName} aria-label={ariaLabel} style={shellStyle}>
-      <canvas
-        ref={canvasRef}
-        width={board.outputWidth}
-        height={board.outputHeight}
-        className="panel-canvas"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPointer}
-        onPointerCancel={endPointer}
-      />
+    <div
+      className={shellClassName}
+      aria-label={ariaLabel}
+      style={{ ...shellStyle, "--panel-accent": visual.accent } as PanelShellStyle}
+      data-board={board.id}
+      data-button-side={visual.buttonSide}
+    >
+      <span className="panel-device-mark" aria-hidden="true">{visual.modelLabel}</span>
+      <div className="panel-screen-frame">
+        <canvas
+          ref={canvasRef}
+          width={board.outputWidth}
+          height={board.outputHeight}
+          className="panel-canvas"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endPointer}
+          onPointerCancel={endPointer}
+        />
+      </div>
+      <div className="panel-physical-keys" aria-label="Physical device keys">
+        {board.keyMap.map((key, index) => (
+          <button
+            key={key.id}
+            type="button"
+            className="panel-physical-key"
+            style={{ "--panel-key-index": index } as CSSProperties}
+            aria-label={key.label}
+            title={key.label}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setHardwareKey(key.id, true);
+            }}
+            onPointerUp={(event) => {
+              event.preventDefault();
+              setHardwareKey(key.id, false);
+            }}
+            onPointerCancel={() => setHardwareKey(key.id, false)}
+            onPointerLeave={() => setHardwareKey(key.id, false)}
+          >
+            <span className="panel-physical-key__label">{key.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

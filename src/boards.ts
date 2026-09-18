@@ -47,6 +47,35 @@ export function getSimulatorBoard(boardId: string): SimulatorBoard {
   return board;
 }
 
+
+export type SimulatorBoardVisual = {
+  family: "panda" | "compact" | "papers3" | "t5s3";
+  modelLabel: string;
+  finish: "matte-black" | "graphite" | "silver-black";
+  buttonSide: "left" | "right";
+  accent: string;
+};
+
+const BOARD_VISUALS: Record<string, SimulatorBoardVisual> = {
+  mofei: { family: "panda", modelLabel: "PANDA · MOFEI", finish: "matte-black", buttonSide: "right", accent: "#202124" },
+  s3r8: { family: "panda", modelLabel: "PANDA · S3R8", finish: "matte-black", buttonSide: "right", accent: "#202124" },
+  s3wroom: { family: "panda", modelLabel: "ESP32-S3 · DEV", finish: "matte-black", buttonSide: "right", accent: "#303238" },
+  s37uc: { family: "compact", modelLabel: "PANDA · S37UC", finish: "graphite", buttonSide: "right", accent: "#30343a" },
+  m5papers3: { family: "papers3", modelLabel: "M5STACK · PAPERS3", finish: "silver-black", buttonSide: "right", accent: "#d7d9dc" },
+  "lilygo-t5s3-pro": { family: "t5s3", modelLabel: "LILYGO · T5S3 PRO", finish: "matte-black", buttonSide: "left", accent: "#ec6b2d" },
+};
+
+export function getSimulatorBoardVisual(boardId: string): SimulatorBoardVisual {
+  return BOARD_VISUALS[boardId] ?? {
+    family: "panda", modelLabel: boardId.toUpperCase(), finish: "matte-black",
+    buttonSide: "right", accent: "#202124",
+  };
+}
+
+export function shortSimulatorBoardName(board: SimulatorBoard): string {
+  return board.displayName.split(" (", 1)[0];
+}
+
 export const SIMULATOR_BOARD_PROFILES = SIMULATOR_BOARDS;
 export const getSimulatorBoardProfile = getSimulatorBoard;
 

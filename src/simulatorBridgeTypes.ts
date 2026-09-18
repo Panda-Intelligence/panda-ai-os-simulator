@@ -48,8 +48,18 @@ export type SimulatorSdImage = {
   templateConflict: boolean;
 };
 
+export type SimulatorFirmwareOption = {
+  id: string;
+  boardId: string;
+  label: string;
+  path: string;
+  bundled: boolean;
+  sourceLabel?: string;
+};
+
 export type SimulatorHostBridge = {
   chooseFirmware(boardId: string, filterName: string): Promise<string | undefined>;
+  listFirmwareOptions?: (boardId: string) => Promise<SimulatorFirmwareOption[]>;
   readSdRootPath(): Promise<string>;
   listSdDirectory(boardId: string, path: string): Promise<SimulatorSdDirectory>;
   readSdFile(boardId: string, path: string): Promise<SimulatorSdFile>;

@@ -1,5 +1,6 @@
 import type {
   SimulatorFramebufferEvent,
+  SimulatorFirmwareOption,
   SimulatorHostLocation,
   SimulatorSdDirectory,
   SimulatorSdEntry,
@@ -522,6 +523,26 @@ export class BrowserSimulatorRuntimeHost {
 
   constructor(manifestUrl = DEFAULT_MANIFEST_URL) {
     this.manifestUrl = validateBrowserSimulatorManifestUrl(manifestUrl);
+  }
+
+  async listFirmwareOptions(boardId: string): Promise<SimulatorFirmwareOption[]> {
+    const manifest = await this.runtimeManifest();
+    if (manifest.kind !== "wasm-worker") return [];
+    const boardArtifact = manifest.firmwareArtifacts?.[boardId];
+    const path = boardArtifact?.bin
+      ?? ((boardId === "mofei" || boardId === "s3r8") ? manifest.firmwareArtifact : null);
+    if (!path) return [];
+    const sourceLabel = manifest.source?.label
+      || (manifest.source?.revision ? manifest.source.revision.slice(0, 10) : "bundled");
+    const fileName = path.split("/").pop() || path;
+    return [{
+      id: "bundled:" + boardId + ":" + fileName,
+      boardId,
+      label: fileName + " · " + sourceLabel,
+      path,
+      bundled: true,
+      sourceLabel,
+    }];
   }
 
   async chooseFirmware(boardId: string): Promise<string | undefined> {
