@@ -65,3 +65,12 @@ commits identify intentional edits. `audit:export` is a pattern scan, not legal
 or complete secret clearance. `check:publication` remains blocked pending G0.
 The simulator cannot qualify real e-ink ghosting, electrical, radio or USB behavior.
 Launch materials under `docs/launch` are embargoed preparation, not posted claims.
+
+## Continued split and runtime evidence
+
+See `docs/continuation-verification-20260918.md` and `docs/OWNER_HANDOFF.md`.
+The native minimal guest and no-SD browser guest have actually executed.
+Atomic chunked browser persistence passed a real 128 MiB IndexedDB test.
+A separate supplied-runtime RCU assertion still blocks SD-backed reading (issue #5);
+this candidate is not ready for public release. Repository settings and Cloudflare
+publication remain with the owner. The code and guest licenses are unchanged.

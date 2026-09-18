@@ -1,0 +1,62 @@
+{
+  "date": "2026-09-18",
+  "nodeCases": 21,
+  "standaloneHeadlessCases": 97,
+  "productHeadlessCasesIncludingStandalone": 112,
+  "tauriCases": 15,
+  "murphyProductSeedCases": 5,
+  "murphyMappingCases": 6,
+  "nativeUartGuestExecuted": true,
+  "browserNoSdGuestAndInputPassed": true,
+  "browser128MiBChunkPersistencePassed": true,
+  "sdBackedGuestPassed": false,
+  "runtimeIssue": 5,
+  "guestSource": "9eedee8c943581f7260c8e94af9f60f199126bcb",
+  "wasmSha256": "9c9928239e231827ef9c5b8071f7f88fba2c0bfc7dc7130bd4a98f932dcc2b7d",
+  "repositorySettingsChanged": false,
+  "cloudflarePublished": false,
+  "opticalOrDevicePerformanceQualified": false,
+  "productFixtureQualification": "Explicit isolated inputs; generated original multipage TC seed, not the historical performance book. Prior missing-fixture failures retained.",
+  "logs": {
+    "final-node.log": {
+      "bytes": 1977,
+      "sha256": "c3262a8cc2414201d2eaccddde071d9d870a562eafff86c3b734eae208b1a595"
+    },
+    "final-ui.log": {
+      "bytes": 1465,
+      "sha256": "df1ee5c640a380d1130c52aa130cc20084da25cfd06e2ad6ff10f0b4377ee323"
+    },
+    "final-worker-types.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "headless-standalone.log": {
+      "bytes": 7499,
+      "sha256": "726f9f03b90681ff663f66ddfcaa3383f187d527d1ce8bfb2e4b15a9f1c24901"
+    },
+    "headless-product-complete.log": {
+      "bytes": 8518,
+      "sha256": "d1af580c3a4f9263544cb2c79347743e024655de302cdee6d60bc7e5cbb742f1"
+    },
+    "tauri-final.log": {
+      "bytes": 9018,
+      "sha256": "6afb2c9cf5e776ca59ff8cbbc02aed5f04f97b1530947e81fd3e2ec5f302aeef"
+    },
+    "browser-storage-fixed.log": {
+      "bytes": 160,
+      "sha256": "d06721d90afa11694ffc467aaa9c1ab99c54b5591a1a84af5adaded30baa4800"
+    },
+    "browser-no-sd-final.log": {
+      "bytes": 1674,
+      "sha256": "0a25081477ea3df0911018b9824aac86d2bd5af14c539a569c1c005b8a5f2253"
+    },
+    "browser-with-sd-final.log": {
+      "bytes": 1699,
+      "sha256": "7765278417bf54f85bb6a7eab7c79764f0cda5aad2d4c884ce030fbccc37e69e"
+    },
+    "uart-qemu-fixed.log": {
+      "bytes": 201,
+      "sha256": "2939350acdb71c30a10fe0930abca6b01682b3b77112d8abf59cc7746da43a4e"
+    }
+  }
+}

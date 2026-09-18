@@ -4938,11 +4938,14 @@ fn repo_relative_fixture_path(relative_path: &str) -> PathBuf {
         return path.to_path_buf();
     }
 
-    standalone_root_path().join(path)
+    repo_root_path().join(path)
 }
 
 fn repo_root_path() -> PathBuf {
-    standalone_root_path()
+    std::env::var_os("PANDA_SIMULATOR_PROJECT_ROOT")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(standalone_root_path)
 }
 
 fn seed_boot_copy_files(case: &E2ECase, sd_root: &Path) -> Result<()> {
@@ -5173,6 +5176,10 @@ fn provision_mfp_fallback_case_font_packs(sd_root: &Path) -> Result<()> {
     // 26px role. It needs only this source-complete file, not a mirror of the
     // broad pack family that would exhaust the isolated FAT image.
     provision_murphy_font_packs(sd_root, "murphy/fonts", &PANDA_MFP_FALLBACK_CASE_PACKS)
+}
+
+fn case_needs_default_font_packs(case_id: &str) -> bool {
+    case_id.contains("epub") || case_id.contains("font") || case_id.contains("reader")
 }
 
 fn seeded_epub_fixture_for_case(case_id: &str) -> (&'static str, &'static str) {
@@ -5786,6 +5793,9 @@ fn seed_panda_lua_app_package(sd_root: &Path, fixture: PandaLuaFixtureApp) -> Re
 
 fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> {
     let case_id = case.id.trim().to_ascii_lowercase();
+    if case_needs_default_font_packs(&case_id) {
+        provision_murphy_default_font_packs(sd_root)?;
+    }
     let needs_books = case_id.starts_with(STORAGE_DIAGNOSTIC_CASE_PREFIX)
         || case_id.contains("file-browser")
         || case_id.contains("recent-reading")
@@ -6098,7 +6108,6 @@ async fn run_e2e_case(
     let monitor_arg = format!("unix:{},server=on,wait=off", monitor_socket.display());
     let sd_root = e2e_case_sd_root(args, &artifacts_dir)?;
     eprintln!("[e2e] simulator SD root: {}", sd_root.display());
-    provision_murphy_default_font_packs(&sd_root)?;
     seed_boot_copy_files(&case, &sd_root)?;
     seed_case_specific_sd_fixtures(&case, &sd_root)?;
     let _simulator_location = write_simulator_location(&sd_root)?;
@@ -7247,6 +7256,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn generic_e2e_cases_do_not_require_product_font_fixtures() {
+        assert!(!case_needs_default_font_packs("boot-framebuffer-smoke"));
+        assert!(case_needs_default_font_packs("reader-epub-smoke"));
+    }
+
     fn peripheral_step(value: serde_json::Value) -> CaseStep {
         serde_json::from_value(value).unwrap()
     }
@@ -7573,6 +7588,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn frontlight_selector_fixture_seeds_reader_txt_book() {
         let tmp_dir = temp_test_dir("frontlight-selector-fixture");
@@ -7631,6 +7647,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn cover_card_fixture_seeds_grid_layout_setting() {
         let tmp_dir = temp_test_dir("cover-card-grid-fixture");
@@ -7671,6 +7688,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn layout_grid_epub_books_fixture_seeds_renderable_epub_cover() {
         let tmp_dir = temp_test_dir("layout-grid-epub-books-fixture");
@@ -7707,6 +7725,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn persist_verifier_preserves_existing_settings_while_seeding_books() {
         let tmp_dir = temp_test_dir("persist-verifier-fixture");
@@ -7741,6 +7760,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn persist_verifier_seeds_persisted_grid_settings_when_isolated() {
         let tmp_dir = temp_test_dir("persist-verifier-isolated-fixture");
@@ -7808,6 +7828,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn migrated_reader_settings_fixtures_seed_epub_book() {
         for case_id in [
@@ -7822,6 +7843,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn reader_boundary_fixtures_seed_requested_content() {
         let large_dir = temp_test_dir("large-epub-fixture");
@@ -7857,6 +7879,7 @@ mod tests {
         fs::remove_dir_all(empty_txt_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn library_root_epub_reading_filter_fixture_seeds_unknown_total_progress() {
         let tmp_dir = temp_test_dir("library-root-epub-reading-filter-fixture");
@@ -7891,6 +7914,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn txt_touch_page_turn_fixture_uses_multipage_content() {
         let tmp_dir = temp_test_dir("txt-touch-page-turn-fixture");
@@ -7908,6 +7932,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn tc_benchmark_fixture_seeds_only_tc_epub_and_reader_settings() {
         let tmp_dir = temp_test_dir("tc-benchmark-fixture");
@@ -7936,6 +7961,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn ttf_fixture_keeps_picker_settings_and_font_file() {
         let tmp_dir = temp_test_dir("ttf-fixture-settings");
@@ -8010,6 +8036,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn panda_lua_app_fixture_installs_signed_pap_package() {
         for (case_id, fixture, expected_app_id, expected_name, storage_requested) in [
@@ -9184,6 +9211,7 @@ mod tests {
         assert!(safe_sd_relative_path("mofei/../thumb.bmp").is_err());
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn boot_copy_files_seed_repository_asset_inside_sd_root() {
         let tmp_dir = temp_test_dir("boot-copy-files");
@@ -9881,6 +9909,7 @@ mod tests {
         assert!(!PANDA_DEFAULT_FONT_PACKS.contains(&"notosans_tc_32_source_complete.mfp"));
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn default_font_fixture_uses_only_the_canonical_hidden_font_directory() {
         let tmp_dir = temp_test_dir("default-font-fixture-layout");
@@ -9892,6 +9921,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn mfp_fallback_fixture_seeds_only_its_legacy_source_complete_font() {
         let tmp_dir = temp_test_dir("mfp-fallback-font-fixture-layout");

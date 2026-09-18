@@ -12,6 +12,11 @@ path = "src/main.rs"
 name = "mofei-create-sd-image"
 path = "src/bin/create_sd_image.rs"
 
+[features]
+default = []
+# Consumer-owned fixture assertions, retained and required by Murphy integration.
+product-fixtures = []
+
 [dependencies]
 tokio = { version = "=1.43", features = ["rt-multi-thread", "macros", "net", "io-util", "process", "time", "signal", "sync"] }
 clap = { version = "4", features = ["derive"] }

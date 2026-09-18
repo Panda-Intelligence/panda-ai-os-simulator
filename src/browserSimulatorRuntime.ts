@@ -14,7 +14,7 @@ export type BrowserSimulatorRuntimeStatus = "unavailable" | "ready" | "running" 
 
 export type BrowserSimulatorRuntimeFirmwareArtifacts = Record<
   string,
-  { bin: string; kernel: string | null; symbols: string | null }
+  { bin: string; kernel: string | null; symbols: string | null; bootloader?: string | null; partitionTable?: string | null; otaData?: string | null }
 >;
 export type BrowserSimulatorRuntimeSdImage = string | string[];
 export type BrowserSimulatorRuntimeSource = {
@@ -39,6 +39,7 @@ export type BrowserSimulatorRuntimeManifest = {
   qemuOtaData?: string | null;
   qemuRom?: string | null;
   qemuSdImage?: BrowserSimulatorRuntimeSdImage | null;
+  qemuSdRawBytes?: number | null;
   qemuWorkerScript?: string | null;
   artifactManifest?: string | null;
   source?: BrowserSimulatorRuntimeSource | null;
@@ -418,12 +419,13 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
   };
 
   private readonly handleWorkerError = (event: ErrorEvent) => {
-    const message = event.message || "browser_wasm_worker_error";
-    this.emit({ type: "simulatorError", payload: message });
+    const message = `browser_wasm_worker_fatal: ${event.message || "worker terminated unexpectedly"}`;
     for (const [requestId, resolve] of this.pendingRequests) {
       resolve({ type: "result", requestId, ok: false, error: message });
     }
     this.pendingRequests.clear();
+    this.terminateWorker();
+    this.emit({ type: "simulatorError", payload: message });
   };
 
   private resolvePendingResult(result: BrowserSimulatorRuntimeResultEvent) {
@@ -737,6 +739,7 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
     ? runtimeRecord.qemuRom
     : null;
   const qemuSdImage = parseSdImageArtifacts(runtimeRecord.qemuSdImage);
+  const qemuSdRawBytes = typeof runtimeRecord.qemuSdRawBytes === "number" && Number.isSafeInteger(runtimeRecord.qemuSdRawBytes) && runtimeRecord.qemuSdRawBytes >= 512 && runtimeRecord.qemuSdRawBytes <= 256*1024*1024 ? runtimeRecord.qemuSdRawBytes : null;
   const qemuWorkerScript =
     typeof runtimeRecord.qemuWorkerScript === "string" && runtimeRecord.qemuWorkerScript.trim()
       ? runtimeRecord.qemuWorkerScript
@@ -767,6 +770,7 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
       qemuOtaData,
       qemuRom,
       qemuSdImage,
+      qemuSdRawBytes,
       qemuWorkerScript,
       artifactManifest,
       source,
@@ -790,6 +794,7 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
     qemuOtaData,
     qemuRom,
     qemuSdImage,
+    qemuSdRawBytes,
     qemuWorkerScript,
     artifactManifest,
     source,
@@ -823,6 +828,9 @@ export function resolveBrowserSimulatorRuntimeManifestUrls(
         bin: resolveAsset(artifacts.bin) ?? "",
         kernel: resolveAsset(artifacts.kernel) ?? null,
         symbols: resolveAsset(artifacts.symbols) ?? null,
+        bootloader: resolveAsset(artifacts.bootloader) ?? null,
+        partitionTable: resolveAsset(artifacts.partitionTable) ?? null,
+        otaData: resolveAsset(artifacts.otaData) ?? null,
       }]))
       : null,
     qemuScript: resolveAsset(manifest.qemuScript) ?? null,
@@ -872,6 +880,9 @@ function parseFirmwareArtifacts(value: unknown): BrowserSimulatorRuntimeFirmware
       bin,
       kernel: typeof record.kernel === "string" && record.kernel.trim() ? record.kernel : null,
       symbols: typeof record.symbols === "string" && record.symbols.trim() ? record.symbols : null,
+      bootloader: typeof record.bootloader === "string" && record.bootloader.trim() ? record.bootloader : null,
+      partitionTable: typeof record.partitionTable === "string" && record.partitionTable.trim() ? record.partitionTable : null,
+      otaData: typeof record.otaData === "string" && record.otaData.trim() ? record.otaData : null,
     };
   }
   return Object.keys(artifacts).length > 0 ? artifacts : null;

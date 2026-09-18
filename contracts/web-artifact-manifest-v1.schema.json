@@ -4,45 +4,116 @@
   "title": "Private standalone web simulator artifact manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "runtime", "guests"],
+  "required": [
+    "schemaVersion",
+    "runtime",
+    "guests"
+  ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": {
+      "const": 1
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "revision": { "type": "string", "pattern": "^[0-9a-fA-F]{7,64}$" },
-        "label": { "type": "string", "minLength": 1, "maxLength": 100 }
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{7,64}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
       }
     },
     "publication": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "visibility": { "const": "private" }
+        "visibility": {
+          "const": "private"
+        }
       }
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workerScript", "qemu"],
+      "required": [
+        "workerScript",
+        "qemu"
+      ],
       "properties": {
-        "workerScript": { "$ref": "#/$defs/artifact" },
+        "workerScript": {
+          "$ref": "#/$defs/artifact"
+        },
         "qemu": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["script", "wasm", "worker", "bootloader", "partitionTable", "otaData", "rom"],
+          "required": [
+            "script",
+            "wasm",
+            "worker",
+            "bootloader",
+            "partitionTable",
+            "otaData",
+            "rom"
+          ],
           "properties": {
-            "script": { "$ref": "#/$defs/artifact" },
-            "wasm": { "$ref": "#/$defs/artifact" },
-            "worker": { "$ref": "#/$defs/artifact" },
-            "data": { "$ref": "#/$defs/artifact" },
-            "bootloader": { "$ref": "#/$defs/artifact" },
-            "partitionTable": { "$ref": "#/$defs/artifact" },
-            "otaData": { "$ref": "#/$defs/artifact" },
-            "rom": { "$ref": "#/$defs/artifact" },
-            "sdImage": { "$ref": "#/$defs/artifact" }
+            "script": {
+              "$ref": "#/$defs/artifact"
+            },
+            "wasm": {
+              "$ref": "#/$defs/artifact"
+            },
+            "worker": {
+              "$ref": "#/$defs/artifact"
+            },
+            "data": {
+              "$ref": "#/$defs/artifact"
+            },
+            "bootloader": {
+              "$ref": "#/$defs/artifact"
+            },
+            "partitionTable": {
+              "$ref": "#/$defs/artifact"
+            },
+            "otaData": {
+              "$ref": "#/$defs/artifact"
+            },
+            "rom": {
+              "$ref": "#/$defs/artifact"
+            },
+            "sdImage": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/artifact"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 16,
+                  "items": {
+                    "$ref": "#/$defs/artifact"
+                  }
+                }
+              ]
+            },
+            "sdRawBytes": {
+              "type": "integer",
+              "minimum": 512,
+              "maximum": 268435456
+            }
+          },
+          "dependentRequired": {
+            "sdRawBytes": [
+              "sdImage"
+            ]
           }
+        },
+        "sdStoreScript": {
+          "$ref": "#/$defs/artifact"
         }
       }
     },
@@ -52,26 +123,72 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "firmware", "kernel", "symbols", "provenance"],
+        "required": [
+          "id",
+          "firmware",
+          "kernel",
+          "symbols",
+          "provenance"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
-          "firmware": { "$ref": "#/$defs/artifact" },
-          "kernel": { "$ref": "#/$defs/artifact" },
-          "symbols": { "$ref": "#/$defs/artifact" },
-          "provenance": { "$ref": "#/$defs/artifact" }
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+          },
+          "firmware": {
+            "$ref": "#/$defs/artifact"
+          },
+          "kernel": {
+            "$ref": "#/$defs/artifact"
+          },
+          "symbols": {
+            "$ref": "#/$defs/artifact"
+          },
+          "provenance": {
+            "$ref": "#/$defs/artifact"
+          },
+          "bootloader": {
+            "$ref": "#/$defs/artifact"
+          },
+          "partitionTable": {
+            "$ref": "#/$defs/artifact"
+          },
+          "otaData": {
+            "$ref": "#/$defs/artifact"
+          }
         }
-      }
+      },
+      "maxItems": 16
+    },
+    "basePath": {
+      "type": "string",
+      "pattern": "^/(?:[a-zA-Z0-9_-]+/)*$"
     }
   },
   "$defs": {
     "artifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "bytes", "sha256"],
+      "required": [
+        "path",
+        "bytes",
+        "sha256"
+      ],
       "properties": {
-        "path": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "bytes": { "type": "integer", "minimum": 1, "maximum": 268435456 },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     }
   }
