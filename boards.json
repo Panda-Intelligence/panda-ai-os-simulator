@@ -1,14 +1,10 @@
 {
   "$schema": "./boards.schema.json",
   "defaultBoard": "mofei",
-  "defaultHeadlessBin": "apps/simulator/headless/target/debug/mofei-sim-headless",
-  "defaultCaseRoot": "test/simulator_e2e",
   "boards": [
     {
       "id": "mofei",
       "displayName": "Mofei (GDEQ0426 800x480)",
-      "murphyBoard": "default",
-      "firmware": "apps/panda-os/device/build/panda_os.bin",
       "rawWidth": 800,
       "rawHeight": 480,
       "framebufferWidth": 800,
@@ -31,8 +27,6 @@
     {
       "id": "s3r8",
       "displayName": "S3R8 / Mofei (GDEQ0426 800x480)",
-      "murphyBoard": "mofei",
-      "firmware": "apps/panda-os/device/build/panda_os.bin",
       "rawWidth": 800,
       "rawHeight": 480,
       "framebufferWidth": 800,
@@ -55,8 +49,6 @@
     {
       "id": "s3wroom",
       "displayName": "ESP32-S3-WROOM-1 (GDEQ0426 800x480 bring-up)",
-      "murphyBoard": "s3wroom",
-      "firmware": "apps/panda-os/device/build-s3wroom/panda_os.bin",
       "rawWidth": 800,
       "rawHeight": 480,
       "framebufferWidth": 800,
@@ -79,8 +71,6 @@
     {
       "id": "s37uc",
       "displayName": "s37uc (UC8253C 240x416 portrait)",
-      "murphyBoard": "s37uc",
-      "firmware": "apps/panda-os/device/build-s37uc/panda_os.bin",
       "rawWidth": 416,
       "rawHeight": 240,
       "framebufferWidth": 416,
@@ -102,8 +92,6 @@
     {
       "id": "m5papers3",
       "displayName": "M5Stack PaperS3 (ED047TC1 4.7-inch Gray16)",
-      "murphyBoard": "m5papers3",
-      "firmware": "apps/panda-os/device/build-sim-m5papers3/panda_os.bin",
       "rawWidth": 960,
       "rawHeight": 540,
       "framebufferWidth": 540,
@@ -125,8 +113,6 @@
     {
       "id": "lilygo-t5s3-pro",
       "displayName": "LilyGo T5S3 Pro (ED047TC1 4.7-inch Gray16)",
-      "murphyBoard": "lilygo-t5s3-pro",
-      "firmware": "apps/panda-os/device/build-sim-lilygo-t5s3-pro/panda_os.bin",
       "rawWidth": 960,
       "rawHeight": 540,
       "framebufferWidth": 540,

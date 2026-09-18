@@ -48,3 +48,9 @@ firmware-fixtures/*.elf
 
 # Generated from apps/shared/panda-ide (see scripts/sync-theme.mjs)
 src/panda-ide.css
+
+.codex/
+.trellis/
+node_modules/
+artifacts/
+.runtime/

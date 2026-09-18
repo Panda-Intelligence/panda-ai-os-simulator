@@ -1,14 +1,11 @@
-// Copies the canonical Panda IDE shared stylesheet into this app.
-// Single source of truth: apps/shared/panda-ide/panda-ide.css
-// Generated destination (git-ignored): apps/simulator/src/panda-ide.css
-// Runs as the first step of `dev` / `build` (see package.json).
+// 将独立 UI token 样式表复制到应用生成样式表，避免依赖仓库外路径。
 import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..");
-const src = resolve(appRoot, "..", "shared", "panda-ide", "panda-ide.css");
+const src = resolve(appRoot, "packages", "ui-tokens", "panda-ide.css");
 const dest = resolve(appRoot, "src", "panda-ide.css");
 
 mkdirSync(dirname(dest), { recursive: true });

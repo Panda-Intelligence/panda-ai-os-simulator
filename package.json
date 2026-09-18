@@ -1,5 +1,5 @@
 {
-  "name": "simulator",
+  "name": "@panda-intelligence/ai-os-simulator",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,7 +12,13 @@
     "build:wasm:probe": "bash scripts/build-qemu-wasm.sh --probe-only",
     "check:browser-sd": "node scripts/check-browser-sd-card.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "node --test tests/*.test.mjs",
+    "pack:web": "node scripts/pack-web.mjs",
+    "serve:standalone": "node scripts/serve-dist.mjs",
+    "audit:export": "node scripts/audit-export.mjs",
+    "check:publication": "node scripts/audit-export.mjs --publication",
+    "build:example": "bash scripts/build-example.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

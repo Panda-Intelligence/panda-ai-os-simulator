@@ -1,74 +1,67 @@
-# Murphy Simulator
+# Panda AI OS Simulator
 
-iPhone-Simulator-style development environment for Murphy-supported ESP32-S3
-e-paper boards.
+**Private extraction candidate — not yet a public open-source release.**
 
-Runs simulator firmware targets under QEMU full emulation, with virtual e-ink
-and touch peripherals bridged to a Tauri webview UI for display,
-mouse/keyboard input, and SD-card-as-local-directory.
+This repository separates the simulator platform from Murphy: React browser UI,
+Tauri host, Rust headless harness, and QEMU peripheral/native/WASM tooling.
+The current inherited license still applies. Proposed open-source licensing,
+ROM and official guest redistribution require the approval tracked in issue #1.
+No complete Panda AI OS source tree, user books, fonts, ROM or guest binary is
+included. A missing runtime is shown as unavailable, never a fabricated boot.
 
-> **Status (2026-06-19): Panda AI OS simulator firmware boot and release-gate E2E are active.**
-> The firmware build uses Panda AI OS device artifacts from `apps/panda-os`.
-> The release flow builds Panda AI OS and runs the full simulator E2E suite as a
-> blocking gate before building release firmware.
-> The simulator can represent framebuffer output, touch/buttons, host-backed SD,
-> deterministic network fixtures, coarse battery/charging state, frontlight and
-> buzzer traces, and deterministic sensor readings. Physical e-ink waveform
-> quality, ghosting, real USB enumeration, BLE radio behavior, ADC noise, charger
-> electrical behavior, and SD signal integrity remain hardware-only validation.
-> For the Mofei SSD1677 path, native QEMU also models the firmware command-level
-> panel sequence, including lock-transition `0xD7`/`0xCF` profiles, RAM writes,
-> activation count, and BUSY timing. This validates routing and timing intent,
-> not the panel's optical flash phases.
+## Standalone frontend
 
-## Board registry
-
-`boards.json` is the single source of truth for simulator board metadata. The
-Python runners, React/Tauri app, Tauri backend, and headless harness all load
-that file directly.
-
-| Board | Panda AI OS board | Firmware artifact | Raw FB | UI output | QEMU display/touch |
-|-------|-----------------|-------------------|--------|-----------|--------------------|
-| `mofei` (default) | `default` | `apps/panda-os/device/build/panda_os.bin` | 800x480 | 480x800 | `ssd1677-gdeq0426` / `ft6336u` |
-| `s3r8` | `mofei` | `apps/panda-os/device/build/panda_os.bin` | 800x480 | 480x800 | `ssd1677-gdeq0426` / `ft6336u` |
-| `s37uc` | `s37uc` | `apps/panda-os/device/build-s37uc/panda_os.bin` | 416x240 | 240x416 | `uc8253c` / `chsc6440` |
-
-The Tauri UI exposes the same list through the device picker. Stop the
-simulator before switching boards so the backend can restart with the matching
-firmware default, framebuffer geometry, and key map.
-
-## Headless usage
-
-```bash
-scripts/run_e2e.py --target simulator --board mofei --case test/simulator_e2e/dashboard/navigation/dashboard_dashboard_grid_navigation_smoke.json
-scripts/run_e2e.py --target simulator --board s3r8 --case test/simulator_e2e/dashboard/navigation/dashboard_dashboard_grid_navigation_smoke.json
-scripts/run_e2e.py --target simulator --board s37uc --case test/simulator_e2e/dashboard/navigation/dashboard_dashboard_grid_navigation_smoke.json
-scripts/run_simulator_e2e_parallel.py --board mofei
-scripts/run_simulator_e2e_parallel.py --board s3r8 --groups dashboard
-scripts/run_simulator_e2e_parallel.py --board s37uc --groups dashboard
+```sh
+npm ci --ignore-scripts --no-audit --no-fund
+npm test
+npm run build
+npm run serve:standalone -- --root ./dist
 ```
 
-### LilyGo SDSPI owner matrix
+The preview binds only to loopback and serves cross-origin isolation headers.
+This builds the real UI, not a running QEMU guest. Supplying reviewed runtime and
+guest artifacts is a separate step; without them startup remains unavailable.
+Node 24 is the CI target. Native QEMU, Rust/Tauri, browser and product journeys
+have separate qualification gates; frontend success does not imply those pass.
 
-Build a simulator-console LilyGo firmware and run the storage-owned cases with an explicit ELF:
+## Explicit runtime inputs
 
-```bash
-PANDA_SIMULATOR=1 BOARD=lilygo-t5s3-pro \
-  PANDA_BUILD_DIR=apps/panda-os/device/build-sim-lilygo-storage-owner \
-  apps/panda-os/tools/build-device.sh
-cargo build --manifest-path apps/simulator/headless/Cargo.toml
-python3 scripts/run_simulator_e2e_parallel.py \
-  --board lilygo-t5s3-pro \
-  --firmware apps/panda-os/device/build-sim-lilygo-storage-owner/murphy_os.elf \
-  --case-root test/simulator_board_e2e/lilygo-t5s3-pro \
-  --groups storage \
-  --artifacts-root .codex/lilygo-storage-fault-matrix \
-  --jobs 1 \
-  --step-timeout 45
+Native overrides: `PANDA_SIMULATOR_QEMU`, `PANDA_SIMULATOR_PROJECT_ROOT`, and
+`PANDA_SIMULATOR_INTEGRATION`. Product-specific board/firmware paths live in the
+consumer repository, not the public board registry. See docs below.
+
+## Package a private site from explicit artifacts
+
+```sh
+npm run pack:web -- --manifest ./artifact-input.json \
+  --runtime-dir ./approved-runtime --guest-dir ./approved-guest \
+  --output-dir ./artifacts/dist --ui-dir ./dist
 ```
 
-These cases require `storage.sdspi` and cover seeded read/write persistence, initial absence, removal/reinsertion, read
-and write faults, and invalid FAT recovery. They prove firmware-visible behavior only, not electrical timing, signal
-integrity, throughput, wear, or physical power-loss durability.
+Create the output parent first. Only a new directory or a directory previously
+owned by this packer can be replaced. A per-output lock rejects concurrent packs.
+A crash can leave a lock/staging directory: inspect it before manual recovery;
+this is not a power-loss-durable release installer. Hashes verify bytes, not
+publisher identity or copyright. The output remains private/local-only.
 
-## One-time setup
+`contracts/web-artifact-manifest-v1.schema.json` describes the input. All roles
+are explicit; no cached ROM, firmware, private SD or Panda Cloud path is scanned.
+The packer holds bounded verified bytes, rejects symlink ancestors, traversals,
+wrong digests and excessive aggregate sizes, and optionally copies built UI.
+Public deployment is intentionally not configured in `deploy/wrangler.jsonc`.
+
+## Minimal buildable example
+
+`examples/uart-demo` compiles assembly without Murphy/ESP-IDF sources. Set
+`XTENSA_CC` to an installed Xtensa compiler and run `scripts/build-example.sh`
+with a new output directory. Building its ELF is not a runtime boot assertion.
+
+## Boundaries and participation
+
+See `docs/extraction-boundaries.md`, `docs/licensing-review.md`,
+`THIRD_PARTY_NOTICES.md`, `CONTRIBUTING.md`, and `SECURITY.md`.
+`provenance/export-manifest.json` records the exact original export; subsequent
+commits identify intentional edits. `audit:export` is a pattern scan, not legal
+or complete secret clearance. `check:publication` remains blocked pending G0.
+The simulator cannot qualify real e-ink ghosting, electrical, radio or USB behavior.
+Launch materials under `docs/launch` are embargoed preparation, not posted claims.
