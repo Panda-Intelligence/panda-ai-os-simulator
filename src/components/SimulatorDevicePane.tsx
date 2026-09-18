@@ -171,6 +171,10 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         });
         const nextErrorUnlisten = await hostBridge.subscribeSimulatorError((payload) => {
           setError(payload);
+          if (payload.startsWith("browser_wasm_worker_fatal:")) {
+            setRunning(false);
+            setStatus({ kind: "translation", key: "statusStartError" });
+          }
         });
         if (disposed) {
           nextSerialUnlisten();

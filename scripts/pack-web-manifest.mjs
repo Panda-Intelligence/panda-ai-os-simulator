@@ -90,36 +90,48 @@ function assertSource(source) {
 
 export function parseWebArtifactManifest(payload) {
   assertObject(payload, "manifest");
-  assertKeys(payload, new Set(["schemaVersion", "source", "publication", "runtime", "guests"]), "manifest");
+  assertKeys(payload, new Set(["schemaVersion", "basePath", "source", "publication", "runtime", "guests"]), "manifest");
   if (payload.schemaVersion !== 1) fail("schema_version_unsupported");
   assertSource(payload.source);
+  if (payload.basePath !== undefined && (typeof payload.basePath !== "string" || !/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(payload.basePath))) fail("base_path_invalid");
   if (payload.publication !== undefined) {
     assertObject(payload.publication, "publication");
     assertKeys(payload.publication, new Set(["visibility"]), "publication");
     if (payload.publication.visibility !== "private") fail("public_publish_gate_requires_private_pack");
   }
   assertObject(payload.runtime, "runtime");
-  assertKeys(payload.runtime, new Set(["workerScript", "qemu"]), "runtime");
+  assertKeys(payload.runtime, new Set(["workerScript", "sdStoreScript", "qemu"]), "runtime");
   assertArtifactShape(payload.runtime.workerScript, "runtime_workerScript");
+  if(payload.runtime.sdStoreScript)assertArtifactShape(payload.runtime.sdStoreScript,"runtime_sdStoreScript");
   assertObject(payload.runtime.qemu, "runtime_qemu");
-  assertKeys(payload.runtime.qemu, new Set(["script", "wasm", "worker", "data", "bootloader", "partitionTable", "otaData", "rom", "sdImage"]), "runtime_qemu");
+  assertKeys(payload.runtime.qemu, new Set(["script", "wasm", "worker", "data", "bootloader", "partitionTable", "otaData", "rom", "sdImage", "sdRawBytes"]), "runtime_qemu");
   for (const role of ["script", "wasm", "worker", "bootloader", "partitionTable", "otaData", "rom"]) {
     assertArtifactShape(payload.runtime.qemu[role], `runtime_qemu_${role}`);
   }
-  for (const role of ["data", "sdImage"]) {
-    if (payload.runtime.qemu[role] !== undefined) assertArtifactShape(payload.runtime.qemu[role], `runtime_qemu_${role}`);
+  if (payload.runtime.qemu.data !== undefined) assertArtifactShape(payload.runtime.qemu.data, "runtime_qemu_data");
+  const sd = payload.runtime.qemu.sdImage;
+  if (sd !== undefined) {
+    if (Array.isArray(sd)) {
+      if (sd.length < 2 || sd.length > 16) fail("sd_parts_invalid");
+      sd.forEach((entry,index) => assertArtifactShape(entry, `runtime_qemu_sdImage_${index}`));
+    } else assertArtifactShape(sd,"runtime_qemu_sdImage");
   }
+  const sdRawBytes = payload.runtime.qemu.sdRawBytes;
+  if (sdRawBytes !== undefined && (!Number.isSafeInteger(sdRawBytes) || sdRawBytes < 512 || sdRawBytes > MAX_ARTIFACT_BYTES || sd === undefined)) fail("sd_raw_size_invalid");
   if (!Array.isArray(payload.guests) || payload.guests.length === 0 || payload.guests.length > 16) fail("guests_missing");
   const boardIds = new Set();
   for (const [index, guest] of payload.guests.entries()) {
     assertObject(guest, `guest_${index}`);
-    assertKeys(guest, new Set(["id", "firmware", "kernel", "symbols", "provenance"]), `guest_${index}`);
+    assertKeys(guest, new Set(["id", "firmware", "kernel", "symbols", "provenance", "bootloader", "partitionTable", "otaData"]), `guest_${index}`);
     if (typeof guest.id !== "string" || !/^[a-z0-9][a-z0-9-]{0,31}$/.test(guest.id) || boardIds.has(guest.id)) {
       fail(`guest_${index}_id_invalid_or_duplicate`);
     }
     boardIds.add(guest.id);
     for (const role of ["firmware", "kernel", "symbols", "provenance"]) {
       assertArtifactShape(guest[role], `guest_${guest.id}_${role}`);
+    }
+    for (const role of ["bootloader", "partitionTable", "otaData"]) {
+      if (guest[role] !== undefined) assertArtifactShape(guest[role], `guest_${guest.id}_${role}`);
     }
   }
   return payload;
@@ -133,24 +145,30 @@ function collectEntries(manifest) {
     entries.push({ artifact, root, output, label });
   };
   add(manifest.runtime.workerScript, "runtime", "simulator-runtime/browser-simulator-worker.js", "runtime_workerScript");
+  if(manifest.runtime.sdStoreScript)add(manifest.runtime.sdStoreScript,"runtime","simulator-runtime/sd-card-store.js","runtime_sdStoreScript");
   const qemu = manifest.runtime.qemu;
   const qemuOutputs = {
-    script: "simulator-runtime/qemu-system-xtensa.js",
-    wasm: "simulator-runtime/qemu-system-xtensa.wasm",
-    worker: "simulator-runtime/qemu-system-xtensa.worker.js",
-    data: "simulator-runtime/qemu-system-xtensa.data",
-    bootloader: "simulator-runtime/bootloader.bin",
-    partitionTable: "simulator-runtime/partition-table.bin",
-    otaData: "simulator-runtime/ota_data_initial.bin",
-    rom: "simulator-runtime/esp32s3_rev0_rom.bin",
-    sdImage: "simulator-runtime/sdcard.img",
+    script: "simulator-runtime/qemu/qemu-system-xtensa.js",
+    wasm: "simulator-runtime/qemu/qemu-system-xtensa.wasm",
+    worker: "simulator-runtime/qemu/qemu-system-xtensa.worker.js",
+    data: "simulator-runtime/qemu/qemu-system-xtensa.data",
+    bootloader: "simulator-runtime/qemu/bootloader.bin",
+    partitionTable: "simulator-runtime/qemu/partition-table.bin",
+    otaData: "simulator-runtime/qemu/ota_data_initial.bin",
+    rom: "simulator-runtime/qemu/esp32s3_rev0_rom.bin",
   };
   for (const role of Object.keys(qemuOutputs)) {
     if (qemu[role] !== undefined) add(qemu[role], "runtime", qemuOutputs[role], `runtime_qemu_${role}`);
   }
+  if (Array.isArray(qemu.sdImage)) {
+    qemu.sdImage.forEach((entry,index) => add(entry,"runtime",`simulator-runtime/qemu/sdcard.img.gz.part${String(index).padStart(2,"0")}`,`runtime_qemu_sdImage_${index}`));
+  } else if (qemu.sdImage) {
+    add(qemu.sdImage,"runtime",`simulator-runtime/qemu/sdcard.img${qemu.sdImage.path.endsWith(".gz") ? ".gz" : ""}`,"runtime_qemu_sdImage");
+  }
   for (const guest of manifest.guests) {
-    for (const role of ["firmware", "kernel", "symbols", "provenance"]) {
-      add(guest[role], "guest", `simulator-runtime/${role === "firmware" ? `firmware-${guest.id}.bin` : `${role}-${guest.id}.${role === "kernel" ? "img" : role === "symbols" ? "txt" : "json"}`}`, `guest_${guest.id}_${role}`);
+    for (const role of ["firmware", "kernel", "symbols", "provenance", "bootloader", "partitionTable", "otaData"]) {
+      if (!guest[role]) continue;
+      add(guest[role], "guest", `simulator-runtime/qemu/${role === "firmware" ? `firmware-${guest.id}.bin` : `${role}-${guest.id}.${role === "kernel" ? "img" : role === "symbols" ? "txt" : role === "provenance" ? "json" : "bin"}`}`, `guest_${guest.id}_${role}`);
     }
   }
   const outputs = new Set();
@@ -180,11 +198,14 @@ function copyEntry(entry, roots, outputDir) {
 
 function toRuntimeManifest(manifest, copiedEntries, artifactManifestSha256) {
   const byLabel = new Map(copiedEntries.map((entry) => [entry.label, entry]));
-  const pathFor = (label) => byLabel.get(label)?.output ?? null;
+  const pathFor = (label) => byLabel.has(label) ? `${manifest.basePath ?? ""}${byLabel.get(label).output}` : null;
   const firmwareArtifacts = Object.fromEntries(manifest.guests.map((guest) => [guest.id, {
     bin: pathFor(`guest_${guest.id}_firmware`),
     kernel: pathFor(`guest_${guest.id}_kernel`),
     symbols: pathFor(`guest_${guest.id}_symbols`),
+    bootloader: pathFor(`guest_${guest.id}_bootloader`),
+    partitionTable: pathFor(`guest_${guest.id}_partitionTable`),
+    otaData: pathFor(`guest_${guest.id}_otaData`),
   }]));
   const defaultGuest = manifest.guests[0];
   const source = {
@@ -210,9 +231,10 @@ function toRuntimeManifest(manifest, copiedEntries, artifactManifestSha256) {
       qemuPartitionTable: pathFor("runtime_qemu_partitionTable"),
       qemuOtaData: pathFor("runtime_qemu_otaData"),
       qemuRom: pathFor("runtime_qemu_rom"),
-      qemuSdImage: pathFor("runtime_qemu_sdImage"),
+      qemuSdImage: Array.isArray(manifest.runtime.qemu.sdImage) ? manifest.runtime.qemu.sdImage.map((_,i)=>pathFor(`runtime_qemu_sdImage_${i}`)) : pathFor("runtime_qemu_sdImage"),
+      qemuSdRawBytes: manifest.runtime.qemu.sdRawBytes ?? null,
       qemuWorkerScript: pathFor("runtime_qemu_worker"),
-      artifactManifest: "simulator-runtime/artifact-manifest.json",
+      artifactManifest: `${manifest.basePath ?? ""}simulator-runtime/artifact-manifest.json`,
       source,
       digests,
     },

@@ -18,7 +18,11 @@
     "serve:standalone": "node scripts/serve-dist.mjs",
     "audit:export": "node scripts/audit-export.mjs",
     "check:publication": "node scripts/audit-export.mjs --publication",
-    "build:example": "bash scripts/build-example.sh"
+    "build:example": "bash scripts/build-example.sh",
+    "pack:existing": "node scripts/pack-existing-runtime.mjs",
+    "test:headless": "cargo test --locked --manifest-path headless/Cargo.toml",
+    "test:product-fixtures": "cargo test --locked --manifest-path headless/Cargo.toml --features product-fixtures",
+    "test:browser": "node tests/browser-runtime.smoke.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

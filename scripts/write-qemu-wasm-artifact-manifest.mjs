@@ -34,11 +34,18 @@ requiredBuildBoards = [...new Set(requiredBuildBoards)];
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const simulatorDir = resolve(scriptDir, "..");
-const repoRoot = resolve(simulatorDir, "../..");
+const explicitProductRoot = process.env.PANDA_SIMULATOR_PROJECT_ROOT;
+const repoRoot = explicitProductRoot ? resolve(explicitProductRoot) : simulatorDir;
 const registry = JSON.parse(readFileSync(join(simulatorDir, "boards.json"), "utf8"));
-const currentSourceRevision = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
+const currentSourceRevision = process.env.QEMU_WASM_SOURCE_REVISION || execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
+if (!/^[0-9a-f]{40}$/.test(currentSourceRevision)) throw new Error("Explicit guest source revision must be a full Git SHA");
+const integrationPath = process.env.PANDA_SIMULATOR_INTEGRATION;
+const product = integrationPath ? JSON.parse(readFileSync(resolve(integrationPath), "utf8")) : null;
+if (product && (product.schemaVersion !== 1 || !Array.isArray(product.boards))) throw new Error("Invalid explicit product integration");
+const productById = new Map((product?.boards ?? []).map(entry => [entry.id, entry]));
+if (product && productById.size !== product.boards.length) throw new Error("Duplicate product board mapping");
 const requestedProfile = process.env.QEMU_WASM_PROFILE || process.env.PANDA_PRODUCT_PROFILE || "default";
 const previousAllocator = typeof previousManifest?.wasmAllocator === "string" ? previousManifest.wasmAllocator : "";
 const requestedAllocator = process.env.QEMU_WASM_MALLOC || previousAllocator || (hasPreviousManifest ? "" : "emmalloc");
@@ -83,6 +90,7 @@ const sourceInputCompatibility = new Map();
 function sourceInputsMatchCurrentRevision(sourceRevision) {
   if (sourceRevision === currentSourceRevision) return true;
   if (!/^[0-9a-f]{40}$/.test(sourceRevision)) return false;
+  if (!explicitProductRoot || !Array.isArray(product?.sourceInputs) || !product.sourceInputs.length) return false;
   if (sourceInputCompatibility.has(sourceRevision)) return sourceInputCompatibility.get(sourceRevision);
 
   let matches = false;
@@ -97,10 +105,7 @@ function sourceInputsMatchCurrentRevision(sourceRevision) {
         "--quiet",
         `${sourceRevision}..${currentSourceRevision}`,
         "--",
-        "apps/panda-os",
-        "apps/simulator",
-        "apps/shared",
-        ":(exclude)apps/simulator/scripts/write-qemu-wasm-artifact-manifest.mjs",
+        ...product.sourceInputs,
       ],
       { stdio: "ignore" },
     );
@@ -123,7 +128,8 @@ const sharedRequired = [
 const optionalArtifacts = ["qemu-system-xtensa.worker.js", "qemu-system-xtensa.data", "sdcard.img", "load.js"];
 
 function buildBoardForProfile(profile) {
-  return profile.murphyBoard === "mofei" ? "default" : profile.murphyBoard;
+  const mapped = productById.get(profile.id)?.murphyBoard;
+  return mapped === "mofei" ? "default" : mapped || (profile.id === registry.defaultBoard ? "default" : profile.id);
 }
 
 function profileForBuildBoard(buildBoard) {
@@ -260,6 +266,11 @@ for (const buildBoard of requiredBuildBoards) {
       format: profile.framebufferFormat,
     },
     firmware,
+    bootArtifacts: {
+      bootloader: artifactInfo(`bootloader${buildBoard === "default" ? "" : `-${buildBoard}`}.bin`),
+      partitionTable: artifactInfo(`partition-table${buildBoard === "default" ? "" : `-${buildBoard}`}.bin`),
+      otaData: artifactInfo(`ota_data_initial${buildBoard === "default" ? "" : `-${buildBoard}`}.bin`),
+    },
     provenance,
   };
 }

@@ -1,3 +1,4 @@
+import { readSdImage, writeSdImage } from "../public/simulator-runtime/sd-card-store.js";
 import createFatFs, * as FatFs from "js-fatfs";
 import fatFsWasmUrl from "js-fatfs/dist/fatfs.wasm?url";
 
@@ -158,9 +159,9 @@ async function startRuntime(command) {
     const firmware = await fetchFirmware(firmwareUrl);
     const kernel = await fetchKernel(kernelUrl);
     const symbols = await fetchSymbols(symbolsUrl);
-    const bootloader = await fetchBootloader(manifest.qemuBootloader);
-    const partitionTable = await fetchPartitionTable(manifest.qemuPartitionTable);
-    const otaData = await fetchOtaData(manifest.qemuOtaData);
+    const bootloader = await fetchBootloader(boardArtifacts?.bootloader || manifest.qemuBootloader);
+    const partitionTable = await fetchPartitionTable(boardArtifacts?.partitionTable || manifest.qemuPartitionTable);
+    const otaData = await fetchOtaData(boardArtifacts?.otaData || manifest.qemuOtaData);
     const flashImage = buildFlashImage({ bootloader, partitionTable, otaData, firmware });
     const rom = await fetchRom(manifest.qemuRom);
     const sdImage = await loadEditableSdCard(manifest, lastBoardId);
@@ -518,7 +519,20 @@ async function decodeSdImageArtifact(url, bytes) {
     throw new Error("browser_sd_card_gzip_unsupported");
   }
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const limit=runtimeManifest?.qemuSdRawBytes || 256*1024*1024;
+  const reader=stream.getReader();const chunks=[];let total=0;
+  try {
+    while(true) {
+      const {value,done}=await reader.read();if(done)break;
+      total+=value.byteLength;
+      if(total>limit){await reader.cancel();throw new Error("browser_sd_card_decoded_size_exceeded");}
+      chunks.push(value);
+    }
+  } finally {reader.releaseLock();}
+  if(runtimeManifest?.qemuSdRawBytes && total!==runtimeManifest.qemuSdRawBytes)throw new Error("browser_sd_card_decoded_size_mismatch");
+  const result=new Uint8Array(total);let offset=0;
+  for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
+  return result;
 }
 
 function isGzipArtifact(url, bytes) {
@@ -1026,59 +1040,11 @@ function fingerprintBytes(bytes) {
 }
 
 async function readStoredSdCard(storageKey) {
-  const db = await openSdCardDb().catch(() => null);
-  if (!db) {
-    return null;
-  }
-  return new Promise((resolve) => {
-    const tx = db.transaction(SD_CARD_STORE_NAME, "readonly");
-    const request = tx.objectStore(SD_CARD_STORE_NAME).get(storageKey);
-    request.onsuccess = () => {
-      const value = request.result;
-      if (!value || !(value.bytes instanceof ArrayBuffer)) {
-        resolve(null);
-        return;
-      }
-      resolve({
-        templateFingerprint: value.templateFingerprint,
-        byteLength: value.byteLength,
-        bytes: new Uint8Array(value.bytes),
-      });
-    };
-    request.onerror = () => resolve(null);
-    tx.oncomplete = () => db.close();
-    tx.onerror = () => db.close();
-    tx.onabort = () => db.close();
-  });
+  return readSdImage(openSdCardDb, SD_CARD_STORE_NAME, storageKey);
 }
 
 async function writeStoredSdCard(storageKey, value) {
-  const db = await openSdCardDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(SD_CARD_STORE_NAME, "readwrite");
-    const request = tx.objectStore(SD_CARD_STORE_NAME).put(
-      {
-        templateFingerprint: value.templateFingerprint,
-        byteLength: value.byteLength,
-        bytes: value.bytes.buffer.slice(value.bytes.byteOffset, value.bytes.byteOffset + value.bytes.byteLength),
-        savedAt: value.savedAt,
-      },
-      storageKey,
-    );
-    request.onerror = () => reject(request.error || new Error("indexeddb sdcard write failed"));
-    tx.oncomplete = () => {
-      db.close();
-      resolve();
-    };
-    tx.onerror = () => {
-      db.close();
-      reject(tx.error || new Error("indexeddb sdcard transaction failed"));
-    };
-    tx.onabort = () => {
-      db.close();
-      reject(tx.error || new Error("indexeddb sdcard transaction aborted"));
-    };
-  });
+  return writeSdImage(openSdCardDb, SD_CARD_STORE_NAME, storageKey, value);
 }
 
 function openSdCardDb() {

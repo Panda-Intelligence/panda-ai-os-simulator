@@ -1,0 +1,9 @@
+{
+  "sourceRepository": "Panda-Intelligence/murphy",
+  "sourceCommit": "34c208b44b0d9ccb42610fc368b07bba307ae90d",
+  "sourcePath": "apps/panda-cloud/scripts/build-simulator-web.mjs",
+  "extractedFunction": "patchQemuScriptForBrowserWorker",
+  "newPath": "scripts/patch-browser-qemu.mjs",
+  "newFileSha256": "e90fb1b53f69ae99f75846688d3df98704212d7794059eb1e29cd320de73936d",
+  "licenseReview": "inherits existing source terms; public relicensing not approved"
+}

@@ -9,17 +9,12 @@
 #   apps/simulator/run check        # verify prerequisites, report status
 set -euo pipefail
 
-# ── Resolve paths: SCRIPT_DIR self-locates this app; PROJECT_ROOT anchors to
-#    the git repo root (non-relative, survives relocating this directory). ──
+# ── Resolve paths from this standalone checkout. Never inspect a parent repo. ──
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel)"
 
 # ── Paths (all relative to project root) ──
 QEMU_CACHE_DIR="${QEMU_CACHE_DIR:-${SCRIPT_DIR}/.qemu-cache}"
 QEMU_BIN="${QEMU_CACHE_DIR}/qemu/build/qemu-system-xtensa"
-PANDA_OS_DIR="${PROJECT_ROOT}/apps/panda-os"
-PANDA_OS_BOARD="${PANDA_OS_BOARD:-${BOARD:-default}}"
-SIMULATOR_BOARD="${MOFEI_SIM_BOARD:-$([[ "${PANDA_OS_BOARD}" == "default" ]] && printf 'mofei' || printf '%s' "${PANDA_OS_BOARD}")}"
 HEADLESS_CARGO="${SCRIPT_DIR}/headless/Cargo.toml"
 QEMU_BUILD_SCRIPT="${SCRIPT_DIR}/scripts/build-qemu.sh"
 
@@ -28,8 +23,8 @@ DURATION="${MOFEI_SIM_DURATION:-${DURATION:-10}}"
 OUT_PATH="${MOFEI_SIM_OUT:-/tmp/mofei-sim-output.png}"
 MOFEI_SIM_SD_ROOT="${MOFEI_SIM_SD_ROOT:-${SCRIPT_DIR}/sdcard}"
 MOFEI_SIM_HEAP_MODE="${MOFEI_SIM_HEAP_MODE:-device}"
-export MOFEI_SIM_SD_ROOT MOFEI_SIM_HEAP_MODE
-export MOFEI_SIM_BOARD="${SIMULATOR_BOARD}"
+PANDA_SIMULATOR_FIRMWARE="${PANDA_SIMULATOR_FIRMWARE:-${PANDA_OS_FIRMWARE_ELF:-}}"
+PANDA_SIMULATOR_QEMU="${PANDA_SIMULATOR_QEMU:-${QEMU_BIN}}"
 
 # ── Colors ──
 GREEN='\033[0;32m'
@@ -42,30 +37,6 @@ step()  { printf "${YELLOW}→${RESET} %s\n" "$*"; }
 ok()    { printf "${GREEN}✓${RESET} %s\n" "$*"; }
 fail()  { printf "${RED}✗${RESET} %s\n" "$*" >&2; }
 die()   { fail "$@"; exit 1; }
-
-# The shared board registry owns stable simulator build roots. Explicit build
-# and firmware overrides remain authoritative for local diagnostics.
-if [[ -z "${PANDA_OS_BUILD_DIR:-}" ]]; then
-  PROFILE_FIRMWARE="$(python3 - "${PROJECT_ROOT}" "${SIMULATOR_BOARD}" <<'PY'
-import sys
-
-root, board = sys.argv[1:]
-sys.path.insert(0, f"{root}/scripts")
-from simulator_board_profiles import get_simulator_board_profile
-
-try:
-    print(get_simulator_board_profile(board).firmware)
-except ValueError as exc:
-    raise SystemExit(str(exc)) from exc
-PY
-)" || die "Unable to resolve simulator board profile '${SIMULATOR_BOARD}'"
-  if [[ "${PROFILE_FIRMWARE}" == /* ]]; then
-    PANDA_OS_BUILD_DIR="$(dirname "${PROFILE_FIRMWARE}")"
-  else
-    PANDA_OS_BUILD_DIR="${PROJECT_ROOT}/$(dirname "${PROFILE_FIRMWARE}")"
-  fi
-fi
-FIRMWARE_BIN="${PANDA_OS_FIRMWARE_ELF:-${PANDA_OS_BUILD_DIR}/panda_os.elf}"
 
 case "${MOFEI_SIM_HEAP_MODE}" in
   device|test) ;;
@@ -83,18 +54,31 @@ if [[ $# -gt 0 ]]; then
 fi
 SIMULATOR_ARGS=("$@")
 
+parse_launcher_args() {
+  local arg next
+  local remaining=()
+  while [[ $# -gt 0 ]]; do
+    arg="$1"
+    case "${arg}" in
+      --firmware=*) PANDA_SIMULATOR_FIRMWARE="${arg#--firmware=}" ;;
+      --firmware) [[ $# -ge 2 ]] || die "--firmware requires a path"; next="$2"; PANDA_SIMULATOR_FIRMWARE="${next}"; shift ;;
+      --qemu=*) PANDA_SIMULATOR_QEMU="${arg#--qemu=}" ;;
+      --qemu) [[ $# -ge 2 ]] || die "--qemu requires a path"; next="$2"; PANDA_SIMULATOR_QEMU="${next}"; shift ;;
+      --sd-root=*) MOFEI_SIM_SD_ROOT="${arg#--sd-root=}" ;;
+      --sd-root) [[ $# -ge 2 ]] || die "--sd-root requires a path"; next="$2"; MOFEI_SIM_SD_ROOT="${next}"; shift ;;
+      *) remaining+=("${arg}") ;;
+    esac
+    shift
+  done
+  SIMULATOR_ARGS=("${remaining[@]}")
+}
+parse_launcher_args "${SIMULATOR_ARGS[@]}"
+export MOFEI_SIM_SD_ROOT MOFEI_SIM_HEAP_MODE PANDA_SIMULATOR_QEMU
+
 # ── Prerequisite checks ──
 check_prerequisites() {
   local ok_count=0
   local fail_count=0
-
-  if command -v idf.py &>/dev/null || ls "${HOME}"/.espressif/tools/activate_idf_v*.sh &>/dev/null || [[ -n "${IDF_PATH:-}" ]]; then
-    ok "ESP-IDF build environment available"
-    ok_count=$((ok_count + 1))
-  else
-    fail "ESP-IDF not found (install ESP-IDF or source export.sh before building Panda AI OS)"
-    fail_count=$((fail_count + 1))
-  fi
 
   if command -v cargo &>/dev/null; then
     ok "cargo found"
@@ -104,45 +88,24 @@ check_prerequisites() {
     fail_count=$((fail_count + 1))
   fi
 
-  if QEMU_CACHE_DIR="${QEMU_CACHE_DIR}" "${QEMU_BUILD_SCRIPT}" --check; then
-    ok "Pinned QEMU runtime valid"
+  if [[ -x "${PANDA_SIMULATOR_QEMU}" ]]; then
+    ok "QEMU binary: ${PANDA_SIMULATOR_QEMU}"
     ok_count=$((ok_count + 1))
   else
-    fail "Pinned QEMU runtime invalid (run '$0 setup')"
+    fail "QEMU binary not executable: ${PANDA_SIMULATOR_QEMU}"
     fail_count=$((fail_count + 1))
   fi
-
-  local board_summary
-  if board_summary="$(python3 - "${PROJECT_ROOT}" "${SIMULATOR_BOARD}" "${PANDA_OS_BOARD}" <<'PY'
-import sys
-
-root, board, murphy_board = sys.argv[1:]
-sys.path.insert(0, f"{root}/scripts")
-from simulator_board_profiles import get_simulator_board_profile
-
-profile = get_simulator_board_profile(board)
-expected = "default" if board == "mofei" and murphy_board == "default" else profile.murphy_board
-if murphy_board != expected:
-    raise SystemExit(
-        f"board mapping mismatch: simulator={board} expects {profile.murphy_board}, got {murphy_board}"
-    )
-print(
-    f"{profile.board}: {profile.output_width}x{profile.output_height}; "
-    f"firmware={profile.firmware}; capabilities={','.join(profile.capabilities)}"
-)
-PY
-)"; then
-    ok "Board profile: ${board_summary}"
-    ok_count=$((ok_count + 1))
-  else
-    fail "Invalid simulator board profile '${SIMULATOR_BOARD}'"
-    fail_count=$((fail_count + 1))
-  fi
-
   ok "Heap mode: ${MOFEI_SIM_HEAP_MODE}"
-  ok "Panda AI OS board: ${PANDA_OS_BOARD}"
-  ok "Simulator board: ${SIMULATOR_BOARD}"
-  ok "Firmware ELF: ${FIRMWARE_BIN}"
+  ok "Simulator board: ${MOFEI_SIM_BOARD:-mofei}"
+  if [[ -n "${PANDA_SIMULATOR_FIRMWARE}" && -f "${PANDA_SIMULATOR_FIRMWARE}" ]]; then
+    ok "Firmware: ${PANDA_SIMULATOR_FIRMWARE}"
+  elif [[ "${MODE}" == "headless" || "${MODE}" == "tauri" ]]; then
+    fail "Firmware is required; pass --firmware PATH or PANDA_SIMULATOR_FIRMWARE"
+    fail_count=$((fail_count + 1))
+  else
+    ok "Firmware: not selected (required only for launch)"
+  fi
+  ok "SD root: ${MOFEI_SIM_SD_ROOT}"
 
   printf "\n  ${BOLD}%d ok, %d missing${RESET}\n\n" "${ok_count}" "${fail_count}"
   return "${fail_count}"
@@ -152,36 +115,16 @@ ensure_qemu_fresh() {
   QEMU_CACHE_DIR="${QEMU_CACHE_DIR}" "${QEMU_BUILD_SCRIPT}"
 }
 
-# ── Build firmware ──
-build_firmware() {
-  if [[ "${MOFEI_SIM_SKIP_FIRMWARE_BUILD:-0}" == "1" ]]; then
-    step "Skipping Panda AI OS firmware build (MOFEI_SIM_SKIP_FIRMWARE_BUILD=1)"
-  else
-    step "Building Panda AI OS firmware (${PANDA_OS_BOARD})..."
-    BOARD="${PANDA_OS_BOARD}" PANDA_BUILD_DIR="${PANDA_OS_BUILD_DIR}" PANDA_SIMULATOR=1 \
-      "${PANDA_OS_DIR}/tools/build-device.sh" || die "Panda AI OS firmware build failed"
-  fi
-
-  [[ -f "${FIRMWARE_BIN}" ]] || die "Panda AI OS firmware ELF not found at ${FIRMWARE_BIN}"
-  local size
-  size=$(du -h "${FIRMWARE_BIN}" 2>/dev/null | cut -f1 || echo "?")
-  ok "Firmware built (${size})"
-}
-
+# ── Prepare the caller-owned SD root ──
 ensure_sd_root() {
   mkdir -p "${MOFEI_SIM_SD_ROOT}"
-  "${PANDA_OS_DIR}/tools/provision-default-fonts.sh" --root "${MOFEI_SIM_SD_ROOT}" >/dev/null
-  mkdir -p "${MOFEI_SIM_SD_ROOT}/murphy"
-  cp -R "${MOFEI_SIM_SD_ROOT}/.murphy/fonts" "${MOFEI_SIM_SD_ROOT}/murphy/"
   ok "SD card root: ${MOFEI_SIM_SD_ROOT}"
 }
 
 # ── Build headless harness ──
 build_headless() {
   step "Building headless harness..."
-  cargo build --manifest-path "${HEADLESS_CARGO}" --release 2>&1 \
-    | grep -E "(Compiling mofei|Finished|error)" | tail -3 || true
-  ok "Harness built"
+  cargo build --locked --manifest-path "${HEADLESS_CARGO}" --release
 }
 
 case_artifact_screenshot_path() {
@@ -219,13 +162,13 @@ run_headless() {
   step "Running headless simulation (${DURATION}s)..."
   local board_args=()
   if ! simulator_args_have_board; then
-    board_args=(--board "${SIMULATOR_BOARD}")
+    board_args=(--board "${MOFEI_SIM_BOARD:-mofei}")
   fi
-  cargo run --manifest-path "${HEADLESS_CARGO}" --release --bin mofei-sim-headless -- \
-    --firmware "${FIRMWARE_BIN}" \
+  cargo run --locked --manifest-path "${HEADLESS_CARGO}" --release --bin mofei-sim-headless -- \
+    --firmware "${PANDA_SIMULATOR_FIRMWARE}" \
     "${board_args[@]}" \
     --heap-mode "${MOFEI_SIM_HEAP_MODE}" \
-    --qemu "${QEMU_BIN}" \
+    --qemu "${PANDA_SIMULATOR_QEMU}" \
     --duration "${DURATION}" \
     --out "${OUT_PATH}" \
     --sd-root "${MOFEI_SIM_SD_ROOT}" \
@@ -249,9 +192,9 @@ run_headless() {
 
 # ── Run Tauri GUI ──
 run_tauri() {
-  ensure_qemu_fresh
-  step "Installing npm dependencies..."
-  (cd "${SCRIPT_DIR}" && npm install --silent)
+  [[ -n "${PANDA_SIMULATOR_FIRMWARE}" ]] || die "Firmware is required; pass --firmware PATH or PANDA_SIMULATOR_FIRMWARE"
+  [[ -f "${PANDA_SIMULATOR_FIRMWARE}" ]] || die "Firmware not found at ${PANDA_SIMULATOR_FIRMWARE}"
+  export PANDA_SIMULATOR_FIRMWARE
   step "Launching Tauri dev..."
   (cd "${SCRIPT_DIR}" && npm run tauri dev)
 }
@@ -275,17 +218,14 @@ main() {
       run_setup
       ;;
     headless)
-      check_prerequisites || die "Prerequisites missing. Run '$0 setup' first."
-      ensure_qemu_fresh
+      check_prerequisites || die "Prerequisites missing. Pass explicit firmware and QEMU paths."
       ensure_sd_root
-      build_firmware
       build_headless
       run_headless
       ;;
     tauri)
-      check_prerequisites || die "Prerequisites missing. Run '$0 setup' first."
+      check_prerequisites || die "Prerequisites missing. Pass explicit firmware and QEMU paths."
       ensure_sd_root
-      build_firmware
       run_tauri
       ;;
   esac

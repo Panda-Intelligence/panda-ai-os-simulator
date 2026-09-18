@@ -12,6 +12,7 @@ export function copyBuiltUi(root, stage) {
   function walk(directory = "", depth = 0) {
     if (depth > 12) fail("depth_exceeded");
     for (const name of readdirSync(join(root, directory))) {
+      if (name === ".DS_Store") continue; // OS metadata is never a deployable asset.
       if (name.startsWith(".") || /[%?#\\\x00-\x1f]/.test(name)) fail("unsafe_name");
       const path = directory ? `${directory}/${name}` : name;
       // The verified artifact pack, not a previous generated copy, owns this.

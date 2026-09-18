@@ -192,6 +192,9 @@ fn integration_board(profile: &BoardProfile) -> Result<IntegrationBoard, String>
 }
 
 fn board_firmware_path(profile: &BoardProfile) -> Result<PathBuf, String> {
+    if let Some(explicit) = simulator_resolver::explicit_path_env("PANDA_SIMULATOR_FIRMWARE")? {
+        return Ok(explicit);
+    }
     let mapping = integration_board(profile)?;
     let project_root = simulator_resolver::project_root()?;
     simulator_resolver::project_path(&mapping.firmware, project_root.as_deref(), "firmware")
