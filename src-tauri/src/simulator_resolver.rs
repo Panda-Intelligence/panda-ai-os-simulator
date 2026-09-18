@@ -31,6 +31,14 @@ pub fn qemu_path(cli_path: Option<&Path>, standalone_root: &Path) -> Result<Path
     Ok(standalone_root.join(QEMU_RELATIVE_PATH))
 }
 
+/// Resolve test assets without coupling standalone runtime assets to a product.
+#[allow(dead_code)]
+pub fn fixture_root(explicit_project_root: Option<&Path>, standalone_root: &Path) -> PathBuf {
+    explicit_project_root
+        .unwrap_or(standalone_root)
+        .to_path_buf()
+}
+
 pub fn project_path(
     value: &str,
     explicit_project_root: Option<&Path>,
@@ -81,6 +89,23 @@ mod tests {
             project_path(path.to_str().unwrap(), None, "firmware").unwrap(),
             path
         );
+    }
+
+    #[test]
+    fn fixture_root_uses_explicit_product_without_relocating_qemu() {
+        let standalone = Path::new("/tmp/independent-simulator");
+        let product = Path::new("/tmp/authorized-product");
+        assert_eq!(fixture_root(Some(product), standalone), product);
+        assert_eq!(
+            qemu_path(None, standalone).unwrap(),
+            standalone.join(QEMU_RELATIVE_PATH)
+        );
+    }
+
+    #[test]
+    fn fixture_root_without_product_preserves_standalone_layout() {
+        let standalone = Path::new("/tmp/independent-simulator");
+        assert_eq!(fixture_root(None, standalone), standalone);
     }
 
     #[test]

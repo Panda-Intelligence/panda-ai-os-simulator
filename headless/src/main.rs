@@ -1028,9 +1028,7 @@ fn load_board_runtime(board_id: Option<&str>) -> Result<BoardRuntime> {
         }
     }
 
-    if profile.id == "mofei"
-        || profile.id == "s3r8"
-    {
+    if profile.id == "mofei" || profile.id == "s3r8" {
         button_ids_by_name.insert("back".to_string(), 0);
         button_ids_by_name.insert("lock".to_string(), 0);
         button_ids_by_name.insert("confirm".to_string(), 1);
@@ -1109,7 +1107,8 @@ fn normalize_args_paths(args: &Args) -> Result<Args> {
     let qemu = if args.qemu == default_qemu {
         simulator_resolver::qemu_path(None, &standalone_root_path()).map_err(anyhow::Error::msg)?
     } else {
-        simulator_resolver::qemu_path(Some(&args.qemu), &standalone_root_path()).map_err(anyhow::Error::msg)?
+        simulator_resolver::qemu_path(Some(&args.qemu), &standalone_root_path())
+            .map_err(anyhow::Error::msg)?
     };
     normalized.qemu = canonical_existing_path(&qemu, "QEMU binary")?;
     normalized.firmware = canonical_existing_path(&args.firmware, "Firmware")?;
@@ -4932,20 +4931,23 @@ fn simulator_system_fixture_exists(sd_root: &Path, relative_path: &Path) -> bool
         .any(|system_dir_name| sd_root.join(system_dir_name).join(relative_path).exists())
 }
 
-fn repo_relative_fixture_path(relative_path: &str) -> PathBuf {
+fn repo_relative_fixture_path(relative_path: &str) -> Result<PathBuf> {
     let path = Path::new(relative_path);
     if path.is_absolute() {
-        return path.to_path_buf();
+        return Ok(path.to_path_buf());
     }
 
-    repo_root_path().join(path)
+    Ok(repo_root_path()?.join(path))
 }
 
-fn repo_root_path() -> PathBuf {
-    std::env::var_os("PANDA_SIMULATOR_PROJECT_ROOT")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(standalone_root_path)
+fn repo_root_path() -> Result<PathBuf> {
+    // Product fixture roots are explicitly supplied by the embedding runner.
+    // Never infer a parent monorepo or redirect the standalone QEMU/SD root.
+    let project = simulator_resolver::project_root().map_err(anyhow::Error::msg)?;
+    Ok(simulator_resolver::fixture_root(
+        project.as_deref(),
+        &standalone_root_path(),
+    ))
 }
 
 fn seed_boot_copy_files(case: &E2ECase, sd_root: &Path) -> Result<()> {
@@ -4953,7 +4955,7 @@ fn seed_boot_copy_files(case: &E2ECase, sd_root: &Path) -> Result<()> {
         return Ok(());
     }
 
-    let repo_root = fs::canonicalize(repo_root_path()).context("resolving repository root")?;
+    let repo_root = fs::canonicalize(repo_root_path()?).context("resolving repository root")?;
     let canonical_sd_root = fs::canonicalize(sd_root)
         .with_context(|| format!("resolving simulator SD root {}", sd_root.display()))?;
 
@@ -5142,7 +5144,7 @@ fn reader_progress_path(book_path: &str) -> String {
 }
 
 fn provision_murphy_font_packs(sd_root: &Path, directory: &str, font_names: &[&str]) -> Result<()> {
-    let source_dir = repo_root_path().join("apps/panda-os/host/tests/fixtures");
+    let source_dir = repo_root_path()?.join("apps/panda-os/host/tests/fixtures");
     let target_dir = sd_root.join(directory);
     fs::create_dir_all(&target_dir).with_context(|| {
         format!(
@@ -5665,7 +5667,7 @@ fn copy_dir_recursive(source: &Path, target: &Path) -> Result<()> {
 }
 
 fn seed_panda_lua_app_package(sd_root: &Path, fixture: PandaLuaFixtureApp) -> Result<()> {
-    let repo_root = repo_root_path();
+    let repo_root = repo_root_path()?;
     let toolchain_dir = repo_root.join("apps/toolchain");
     let fixture_root = std::env::temp_dir().join(format!(
         "mofei-panda-e2e-fixture-{}-{}-{}",
@@ -5906,7 +5908,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
 
     if needs_epub {
         let (fixture_epub_path, seeded_epub_filename) = seeded_epub_fixture_for_case(&case_id);
-        let fixture_epub_path = repo_relative_fixture_path(fixture_epub_path);
+        let fixture_epub_path = repo_relative_fixture_path(fixture_epub_path)?;
         let epub_path = sd_root.join("Books").join(seeded_epub_filename);
         let parent = epub_path
             .parent()
@@ -5925,7 +5927,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
 
     if needs_library_root_epub_reading_filter {
         let (fixture_epub_path, _) = seeded_epub_fixture_for_case(&case_id);
-        let fixture_epub_path = repo_relative_fixture_path(fixture_epub_path);
+        let fixture_epub_path = repo_relative_fixture_path(fixture_epub_path)?;
         // Library production discovery is rooted at /Books; keep the seeded
         // file and persisted catalog path aligned with that contract.
         let epub_path = sd_root.join("Books").join("root-reading.epub");
@@ -5943,7 +5945,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
     }
 
     if needs_tc_benchmark {
-        let fixture_epub_path = repo_relative_fixture_path(FIXTURE_TC_EPUB_PATH);
+        let fixture_epub_path = repo_relative_fixture_path(FIXTURE_TC_EPUB_PATH)?;
         let epub_path = sd_root.join("Books").join(SEEDED_TC_EPUB_FILENAME);
         let parent = epub_path
             .parent()
@@ -5957,6 +5959,8 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
         let fixture_ttf_path = FIXTURE_TTF_CANDIDATES
             .iter()
             .map(|path| repo_relative_fixture_path(path))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
             .find(|path| path.exists())
             .ok_or_else(|| anyhow!("no simulator fixture TTF candidate exists"))?;
         let font_contents = fs::read(&fixture_ttf_path).with_context(|| {
@@ -9229,6 +9233,7 @@ mod tests {
             fs::read(tmp_dir.join("Study/.course-staging/demo/release/course.json")).unwrap();
         let source = fs::read(
             repo_root_path()
+                .unwrap()
                 .join("apps/panda-os/tools/study/demos/ja-travel-zh-hant-demo/course.json"),
         )
         .unwrap();
