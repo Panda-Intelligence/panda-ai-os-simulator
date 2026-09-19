@@ -29,3 +29,14 @@ test("virtual SD UI supports drag-drop and browser-side file management", () => 
   assert.match(paneSource,/writeSdFile\(board\.id/);
   assert.match(paneSource,/deleteSdPath\(board\.id/);
 });
+
+test("workspace distributes primary controls across top, left navigation and right inspector", () => {
+  assert.match(paneSource,/ide-titlebar__selectors/);
+  assert.match(paneSource,/ide-sidebar--boards/);
+  assert.match(paneSource,/ide-inspector/);
+  assert.match(paneSource,/ide-inspector__group--sd/);
+  const topBoard = paneSource.indexOf('className="pds-select ide-toolbar-select ide-toolbar-select--board"');
+  const topFirmware = paneSource.indexOf('className="pds-select ide-toolbar-select ide-toolbar-select--firmware"');
+  const inspector = paneSource.indexOf('className="ide-inspector"');
+  assert.ok(topBoard > 0 && topFirmware > 0 && inspector > 0);
+});
