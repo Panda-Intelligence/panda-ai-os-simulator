@@ -5181,7 +5181,11 @@ fn provision_mfp_fallback_case_font_packs(sd_root: &Path) -> Result<()> {
 }
 
 fn case_needs_default_font_packs(case_id: &str) -> bool {
-    case_id.contains("epub") || case_id.contains("font") || case_id.contains("reader")
+    case_id.contains("epub")
+        || case_id.contains("font")
+        || case_id.contains("reader")
+        || case_id.contains("file-browser")
+        || case_id.contains("recent-reading")
 }
 
 fn seeded_epub_fixture_for_case(case_id: &str) -> (&'static str, &'static str) {
@@ -7264,6 +7268,15 @@ mod tests {
     fn generic_e2e_cases_do_not_require_product_font_fixtures() {
         assert!(!case_needs_default_font_packs("boot-framebuffer-smoke"));
         assert!(case_needs_default_font_packs("reader-epub-smoke"));
+        assert!(case_needs_default_font_packs(
+            "dashboard-file-browser-txt-bookmarks-smoke"
+        ));
+        assert!(case_needs_default_font_packs(
+            "dashboard-file-browser-mfp-fallback-dynamic-filename-smoke"
+        ));
+        assert!(case_needs_default_font_packs(
+            "dashboard-recent-reading-txt-open-back-smoke"
+        ));
     }
 
     fn peripheral_step(value: serde_json::Value) -> CaseStep {
