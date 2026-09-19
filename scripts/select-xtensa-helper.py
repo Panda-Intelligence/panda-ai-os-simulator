@@ -18,11 +18,29 @@ def select(root: Path) -> bool:
             raise ValueError(f'merged Xtensa helper missing definition: {name}')
     path = directory / 'meson.build'
     text = path.read_text()
-    if text.count("'exc_helper.c'") != 1:
-        raise ValueError('expected exactly one merged exc_helper.c source')
+    if text.count("'exc_helper.c'") < 1:
+        raise ValueError('missing merged exc_helper.c source registration')
     if text.count("'helper.c'") > 1:
         raise ValueError('ambiguous helper.c source registration')
-    updated = re.sub(r"(?m)^\s*'helper\.c',\s*\n", '', text)
+
+    # Overlaying reviewed Xtensa sources can encounter a qemu-wasm tree where
+    # helper.c has already been replaced once before this selector runs. That
+    # can leave the *same* reviewed exc_helper.c registered twice. Normalize
+    # duplicate registrations only after validating the merged translation unit
+    # above; never select between distinct helper implementations implicitly.
+    updated_lines = []
+    seen_exc_helper = False
+    for line in text.splitlines(keepends=True):
+        if re.match(r"^\s*'exc_helper\.c',\s*$", line.rstrip('\n')):
+            if seen_exc_helper:
+                continue
+            seen_exc_helper = True
+        if re.match(r"^\s*'helper\.c',\s*$", line.rstrip('\n')):
+            continue
+        updated_lines.append(line)
+    updated = ''.join(updated_lines)
+    if updated.count("'exc_helper.c'") != 1:
+        raise ValueError('failed to normalize merged exc_helper.c source registration')
     if updated == text:
         return False
     path.write_text(updated)
