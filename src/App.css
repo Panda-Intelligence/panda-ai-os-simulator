@@ -907,3 +907,226 @@ body,
     width: 125px;
   }
 }
+
+/* ---- Official-reference skins: PaperS3 / T5-4.7 E-Paper S3 Pro ---- */
+.panel-shell--papers3 {
+  border: 1px solid #c9caca;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.035), transparent 7%, transparent 93%, rgba(0,0,0,.045)),
+    linear-gradient(180deg, #f6f6f3, #e9e9e6);
+  padding: 10px 8px 27px;
+  box-shadow:
+    0 22px 45px rgba(0,0,0,.26),
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset calc(-1 * var(--panel-thickness, 7px)) 0 9px rgba(0,0,0,.035);
+}
+
+.panel-shell--papers3 .panel-screen-frame {
+  border: 1px solid #b9bab8;
+  border-radius: 7px;
+  background: #e7e5db;
+  box-shadow:
+    inset 0 0 0 2px #d7d8d5,
+    inset 0 0 9px rgba(0,0,0,.11);
+}
+
+.panel-shell--papers3 .panel-device-mark {
+  bottom: 6px;
+  color: #6a6c6c;
+  font-family: Arial, sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.panel-shell--papers3 .panel-physical-key {
+  top: 63%;
+  right: -5px;
+  width: 7px;
+  height: 31px;
+  border-color: #9a9b9a;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(90deg, #b9bab9, #eeeeeb 65%, #c8c9c7);
+  box-shadow: 1px 1px 2px rgba(0,0,0,.25);
+}
+
+.panel-hanging-ear {
+  position: absolute;
+  z-index: 3;
+  bottom: -12px;
+  left: 50%;
+  width: 38px;
+  height: 13px;
+  border: 2px solid #c7c8c6;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background:
+    radial-gradient(ellipse at center, transparent 0 42%, #bfc0be 44% 56%, transparent 58%),
+    linear-gradient(#ecece8, #d4d5d2);
+  box-shadow: 0 3px 4px rgba(0,0,0,.18);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.panel-shell--papers3 .panel-edge-ports {
+  right: auto;
+  bottom: -4px;
+  left: 12px;
+  width: calc(100% - 24px);
+}
+
+.panel-shell--papers3 .panel-edge-port:first-child {
+  margin-right: auto;
+}
+
+.panel-shell--papers3 .panel-edge-port:last-child {
+  margin-left: auto;
+}
+
+.panel-shell--papers3 .panel-edge-port {
+  width: 28px;
+  height: 5px;
+  border-radius: 3px;
+  background: #232424;
+  box-shadow: inset 0 0 0 1px #757575;
+}
+
+/* LILYGO official front: light silver bezel, dark 11mm edge, circular lower
+   touch mark, and a four-control side rail. */
+.panel-shell--t5s3 {
+  border: 1px solid #33363a;
+  border-radius: 20px;
+  background:
+    linear-gradient(90deg, #3f4247 0 5px, #b9bdc0 6px 12px, #d8dbdc 13px calc(100% - 13px), #85898c calc(100% - 12px) calc(100% - 6px), #34373b calc(100% - 5px));
+  padding: 13px 11px 35px;
+  box-shadow:
+    0 24px 52px rgba(0,0,0,.38),
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset calc(-1 * var(--panel-thickness, 11px)) 0 9px rgba(0,0,0,.13);
+}
+
+.panel-shell--t5s3 .panel-screen-frame {
+  border: 1px solid #aaaead;
+  border-radius: 5px;
+  background: #e5e4da;
+  box-shadow:
+    inset 0 0 0 2px #c7cac8,
+    inset 0 0 11px rgba(0,0,0,.13);
+}
+
+.panel-shell--t5s3 .panel-device-mark {
+  top: 8px;
+  right: 13px;
+  bottom: auto;
+  left: auto;
+  width: auto;
+  color: rgba(50,52,54,.78);
+  font-family: Arial, sans-serif;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-align: right;
+}
+
+.panel-front-home-ring {
+  position: absolute;
+  z-index: 3;
+  bottom: 8px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(255,255,255,.8);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(72,74,76,.25);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.panel-shell--t5s3 .panel-physical-key {
+  right: -7px;
+  width: 9px;
+  height: 28px;
+  border: 1px solid #242629;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(90deg, #282b2e, #6d7073 72%, #2e3033);
+  box-shadow: 1px 1px 3px rgba(0,0,0,.52);
+}
+
+.panel-shell--t5s3 .panel-physical-key:nth-child(1) { top: 29%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(2) { top: 38%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(3) { top: 47%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(4) { top: 56%; }
+
+.panel-shell--t5s3 .panel-physical-key--reset {
+  height: 20px;
+  background: linear-gradient(90deg, #202225, #55585b);
+}
+
+.panel-lilygo-side-legend {
+  position: absolute;
+  top: 28%;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 21px;
+  color: rgba(45,47,49,.56);
+  font-family: var(--pds-font-mono);
+  font-size: 5px;
+  line-height: 1;
+  pointer-events: none;
+  writing-mode: vertical-rl;
+}
+
+.panel-edge-ports {
+  position: absolute;
+  z-index: 4;
+  right: 12px;
+  bottom: -4px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.panel-edge-port {
+  position: relative;
+  display: block;
+  width: 34px;
+  height: 6px;
+  border-radius: 2px;
+  background: #181a1c;
+  box-shadow: inset 0 0 0 1px #6a6d70;
+}
+
+.panel-edge-port span {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  color: rgba(255,255,255,.45);
+  font-family: var(--pds-font-mono);
+  font-size: 5px;
+  line-height: 1;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.panel-shell--t5s3 .panel-edge-port:first-child {
+  width: 31px;
+  border-radius: 4px;
+}
+
+.panel-shell--t5s3 .panel-edge-port:last-child {
+  width: 42px;
+}
+
+/* At fixed pixel scale the panel remains exact while the official shell
+   decorations add only chassis area around it. */
+.panel-shell--papers3.panel-shell--fixed-scale,
+.panel-shell--t5s3.panel-shell--fixed-scale {
+  width: calc(var(--panel-canvas-width) + 30px);
+  height: calc(var(--panel-canvas-height) + 54px);
+}

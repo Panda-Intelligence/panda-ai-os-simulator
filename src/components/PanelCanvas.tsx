@@ -58,20 +58,29 @@ type PanelCanvasProps = {
   hostBridge: Pick<SimulatorHostBridge, "injectButton" | "injectTouch" | "subscribeFramebuffer">;
   board: SimulatorBoard;
   displayScale: 0 | 1 | 2;
+  onReset?: () => void;
 };
 
 type PanelShellStyle = CSSProperties & {
   "--panel-canvas-width"?: string;
   "--panel-canvas-height"?: string;
   "--panel-accent"?: string;
+  "--panel-thickness"?: string;
 };
 
-export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: PanelCanvasProps) {
+export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onReset }: PanelCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackingRef = useRef(new Map<number, { fingerId: number; x: number; y: number }>());
   const visual = getSimulatorBoardVisual(board.id);
+  const physicalAspect = visual.physicalSizeMm
+    ? `${Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)} / ${Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)}`
+    : `${board.outputWidth + 26} / ${board.outputHeight + 32}`;
   const shellStyle: PanelShellStyle = {
-    aspectRatio: `${board.outputWidth + 26} / ${board.outputHeight + 32}`,
+    aspectRatio: physicalAspect,
+    "--panel-accent": visual.accent,
+    ...(visual.physicalSizeMm
+      ? { "--panel-thickness": `${visual.physicalSizeMm.thickness}px` }
+      : {}),
     ...(displayScale > 0
       ? {
           "--panel-canvas-width": `${board.outputWidth * displayScale}px`,
@@ -227,14 +236,34 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: Pane
     void hostBridge.injectButton(buttonId, pressed).catch(() => false);
   };
 
+  const physicalControls: Array<{ key: string; label: string; buttonId?: number; reset?: boolean }> =
+    board.id === "lilygo-t5s3-pro"
+      ? [
+          { key: "rst", label: "RST", reset: true },
+          ...["BOOT", "IO48", "PWR"].flatMap((label) => {
+            const match = board.keyMap.find((key) => key.label.toUpperCase() === label);
+            return match ? [{ key: `key-${match.id}`, label: match.label, buttonId: match.id }] : [];
+          }),
+        ]
+      : board.keyMap.map((key) => ({
+          key: `key-${key.id}`,
+          label: key.label,
+          buttonId: key.id,
+        }));
+
   return (
     <div
       className={shellClassName}
       aria-label={ariaLabel}
-      style={{ ...shellStyle, "--panel-accent": visual.accent } as PanelShellStyle}
+      style={shellStyle}
       data-board={board.id}
       data-button-side={visual.buttonSide}
+      data-physical-size={visual.physicalSizeMm
+        ? `${visual.physicalSizeMm.width}×${visual.physicalSizeMm.height}×${visual.physicalSizeMm.thickness}mm`
+        : undefined}
     >
+      {visual.hangingEar ? <span className="panel-hanging-ear" aria-hidden="true" /> : null}
+      {visual.family === "t5s3" ? <span className="panel-front-home-ring" aria-hidden="true" /> : null}
       <span className="panel-device-mark" aria-hidden="true">{visual.modelLabel}</span>
       <div className="panel-screen-frame">
         <canvas
@@ -249,30 +278,59 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale }: Pane
         />
       </div>
       <div className="panel-physical-keys" aria-label="Physical device keys">
-        {board.keyMap.map((key, index) => (
+        {physicalControls.map((control, index) => (
           <button
-            key={key.id}
+            key={control.key}
             type="button"
-            className="panel-physical-key"
+            className={control.reset ? "panel-physical-key panel-physical-key--reset" : "panel-physical-key"}
             style={{ "--panel-key-index": index } as CSSProperties}
-            aria-label={key.label}
-            title={key.label}
+            aria-label={control.label}
+            title={control.label}
+            disabled={control.reset && !onReset}
             onPointerDown={(event) => {
               event.preventDefault();
               event.currentTarget.setPointerCapture(event.pointerId);
-              setHardwareKey(key.id, true);
+              if (control.reset) {
+                onReset?.();
+              } else if (control.buttonId !== undefined) {
+                setHardwareKey(control.buttonId, true);
+              }
             }}
             onPointerUp={(event) => {
               event.preventDefault();
-              setHardwareKey(key.id, false);
+              if (!control.reset && control.buttonId !== undefined) {
+                setHardwareKey(control.buttonId, false);
+              }
             }}
-            onPointerCancel={() => setHardwareKey(key.id, false)}
-            onPointerLeave={() => setHardwareKey(key.id, false)}
+            onPointerCancel={() => {
+              if (!control.reset && control.buttonId !== undefined) {
+                setHardwareKey(control.buttonId, false);
+              }
+            }}
+            onPointerLeave={() => {
+              if (!control.reset && control.buttonId !== undefined) {
+                setHardwareKey(control.buttonId, false);
+              }
+            }}
           >
-            <span className="panel-physical-key__label">{key.label}</span>
+            <span className="panel-physical-key__label">{control.label}</span>
           </button>
         ))}
       </div>
+      {visual.ports?.length ? (
+        <div className="panel-edge-ports" aria-hidden="true">
+          {visual.ports.slice(0, 2).map((port) => (
+            <span key={port} className="panel-edge-port" title={port} data-port={port}>
+              <span>{port}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {visual.family === "t5s3" ? (
+        <div className="panel-lilygo-side-legend" aria-hidden="true">
+          <span>RST</span><span>BOOT</span><span>IO48</span><span>PWR</span>
+        </div>
+      ) : null}
     </div>
   );
 }

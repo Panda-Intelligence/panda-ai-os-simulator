@@ -40,3 +40,17 @@ test("workspace distributes primary controls across top, left navigation and rig
   const inspector = paneSource.indexOf('className="ide-inspector"');
   assert.ok(topBoard > 0 && topFirmware > 0 && inspector > 0);
 });
+
+test("official-reference skins carry public physical dimensions and structures", () => {
+  assert.match(boardSource,/121\.5/);
+  assert.match(boardSource,/67\.7/);
+  assert.match(boardSource,/7\.7/);
+  assert.match(boardSource,/129/);
+  assert.match(boardSource,/69/);
+  assert.match(boardSource,/11/);
+  assert.match(boardSource,/docs\.m5stack\.com\/en\/core\/PaperS3/);
+  assert.match(boardSource,/wiki\.lilygo\.cc\/products\/t5-series\/t5-e-paper-s3-pro/);
+  assert.match(panelSource,/panel-hanging-ear/);
+  assert.match(panelSource,/panel-front-home-ring/);
+  assert.match(panelSource,/RST/);
+});

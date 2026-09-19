@@ -785,6 +785,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
               hostBridge={hostBridge}
               board={board}
               displayScale={panelDisplayScale}
+              onReset={running ? () => void resetSim() : undefined}
             />
           </div>
 

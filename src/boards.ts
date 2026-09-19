@@ -51,9 +51,15 @@ export function getSimulatorBoard(boardId: string): SimulatorBoard {
 export type SimulatorBoardVisual = {
   family: "panda" | "compact" | "papers3" | "t5s3";
   modelLabel: string;
-  finish: "matte-black" | "graphite" | "silver-black";
+  finish: "matte-black" | "graphite" | "paper-white" | "industrial-black";
   buttonSide: "left" | "right";
   accent: string;
+  physicalSizeMm?: { width: number; height: number; thickness: number };
+  screenInches?: number;
+  ports?: string[];
+  mountingHoles?: number;
+  hangingEar?: boolean;
+  officialReference?: string;
 };
 
 const BOARD_VISUALS: Record<string, SimulatorBoardVisual> = {
@@ -61,8 +67,30 @@ const BOARD_VISUALS: Record<string, SimulatorBoardVisual> = {
   s3r8: { family: "panda", modelLabel: "PANDA · S3R8", finish: "matte-black", buttonSide: "right", accent: "#202124" },
   s3wroom: { family: "panda", modelLabel: "ESP32-S3 · DEV", finish: "matte-black", buttonSide: "right", accent: "#303238" },
   s37uc: { family: "compact", modelLabel: "PANDA · S37UC", finish: "graphite", buttonSide: "right", accent: "#30343a" },
-  m5papers3: { family: "papers3", modelLabel: "M5STACK · PAPERS3", finish: "silver-black", buttonSide: "right", accent: "#d7d9dc" },
-  "lilygo-t5s3-pro": { family: "t5s3", modelLabel: "LILYGO · T5S3 PRO", finish: "matte-black", buttonSide: "left", accent: "#ec6b2d" },
+  m5papers3: {
+    family: "papers3",
+    modelLabel: "M5STACK · PAPERS3",
+    finish: "paper-white",
+    buttonSide: "right",
+    accent: "#f2f2f0",
+    physicalSizeMm: { width: 121.5, height: 67.7, thickness: 7.7 },
+    screenInches: 4.7,
+    ports: ["USB-C", "microSD"],
+    hangingEar: true,
+    officialReference: "https://docs.m5stack.com/en/core/PaperS3",
+  },
+  "lilygo-t5s3-pro": {
+    family: "t5s3",
+    modelLabel: "LILYGO · T5-4.7 S3 PRO",
+    finish: "industrial-black",
+    buttonSide: "right",
+    accent: "#ec6b2d",
+    physicalSizeMm: { width: 129, height: 69, thickness: 11 },
+    screenInches: 4.7,
+    ports: ["USB-C", "TF", "QWIIC ×2"],
+    mountingHoles: 2,
+    officialReference: "https://wiki.lilygo.cc/products/t5-series/t5-e-paper-s3-pro/",
+  },
 };
 
 export function getSimulatorBoardVisual(boardId: string): SimulatorBoardVisual {
