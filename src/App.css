@@ -645,3 +645,265 @@ body,
     display: none;
   }
 }
+
+/* ---- Device Studio balanced workspace (top controls | board nav | canvas | inspector) ---- */
+.ide-shell {
+  grid-template-rows: 58px minmax(0, 1fr) var(--pds-statusbar-h);
+}
+
+.ide-titlebar {
+  gap: 14px;
+  min-width: 0;
+  padding-inline: 14px;
+}
+
+.ide-titlebar__title {
+  flex: 0 0 auto;
+  min-width: 140px;
+}
+
+.ide-titlebar__selectors {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ide-toolbar-field {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 180px);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--pds-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.ide-toolbar-field--firmware {
+  flex: 1 1 auto;
+  grid-template-columns: auto minmax(180px, 1fr);
+  max-width: 520px;
+}
+
+.ide-toolbar-select,
+.ide-toolbar-firmware-button {
+  min-width: 0;
+  height: 30px;
+}
+
+.ide-toolbar-select--firmware {
+  width: 100%;
+}
+
+.ide-titlebar__actions {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.ide-sidebar--boards {
+  width: 196px;
+  flex-basis: 196px;
+  gap: 12px;
+  padding: 12px 10px;
+}
+
+.ide-session-summary {
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--pds-border);
+  border-radius: var(--pds-radius-md);
+  background: var(--pds-panel-raised);
+}
+
+.ide-session-summary__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--pds-text-xs);
+}
+
+.ide-session-summary__firmware {
+  overflow: hidden;
+  color: var(--pds-muted);
+  font-family: var(--pds-font-mono);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-sidebar__group--boards {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ide-sidebar--boards .ide-board-list {
+  max-height: none;
+  overflow: auto;
+}
+
+.ide-sidebar--boards .ide-board-card {
+  padding: 6px 7px;
+}
+
+.ide-main {
+  flex: 1 1 0;
+}
+
+.ide-inspector {
+  display: flex;
+  flex: 0 0 clamp(280px, 23vw, 340px);
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--pds-border);
+  background: var(--pds-panel);
+}
+
+.ide-inspector__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--pds-border);
+  background: var(--pds-panel-raised);
+}
+
+.ide-inspector__header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ide-inspector__header strong {
+  overflow: hidden;
+  font-size: var(--pds-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-inspector__header div > span {
+  overflow: hidden;
+  color: var(--pds-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ide-inspector__group {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--pds-border);
+}
+
+.ide-inspector__group--sd {
+  flex: 1 0 330px;
+  min-height: 330px;
+}
+
+.ide-inspector__group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ide-inspector__group-head > span,
+.ide-inspector__hint {
+  color: var(--pds-muted);
+  font-size: 10px;
+}
+
+.ide-inspector__keys {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.ide-inspector__keys .ide-key {
+  min-width: 0;
+  padding-inline: 5px;
+  font-size: 10px;
+}
+
+.ide-inspector .ide-sdcard__list {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: none;
+}
+
+.ide-inspector .ide-sdcard__dropzone {
+  padding: 9px;
+}
+
+.ide-inspector .ide-sdcard__actions {
+  gap: 5px;
+}
+
+.ide-device-stage {
+  padding: 12px;
+}
+
+@media (max-width: 1180px) {
+  .ide-titlebar__subtitle {
+    display: none;
+  }
+
+  .ide-titlebar__title {
+    min-width: auto;
+  }
+
+  .ide-toolbar-field {
+    grid-template-columns: minmax(120px, 160px);
+  }
+
+  .ide-toolbar-field > span {
+    display: none;
+  }
+
+  .ide-toolbar-field--firmware {
+    grid-template-columns: minmax(160px, 1fr);
+  }
+
+  .ide-sidebar--boards {
+    width: 176px;
+    flex-basis: 176px;
+  }
+
+  .ide-inspector {
+    flex-basis: 280px;
+  }
+}
+
+@media (max-width: 900px) {
+  .ide-shell {
+    grid-template-rows: 54px minmax(0, 1fr) var(--pds-statusbar-h);
+  }
+
+  .ide-sidebar--boards {
+    display: none;
+  }
+
+  .ide-inspector {
+    flex-basis: 250px;
+  }
+
+  .ide-titlebar__name {
+    display: none;
+  }
+
+  .ide-toolbar-select--board {
+    width: 125px;
+  }
+}

@@ -660,13 +660,51 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
           <span className="ide-titlebar__name">{t("appTitle")}</span>
           <span className="ide-titlebar__subtitle">{t("appSubtitle")}</span>
         </div>
+        <div className="ide-titlebar__selectors">
+          <label className="ide-toolbar-field">
+            <span>{t("deviceLabel")}</span>
+            <select
+              className="pds-select ide-toolbar-select ide-toolbar-select--board"
+              name="simulatorBoard"
+              value={boardId}
+              disabled={running}
+              onChange={(event) => handleBoardChange(event.currentTarget.value)}
+            >
+              {SIMULATOR_BOARDS.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>{shortSimulatorBoardName(candidate)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="ide-toolbar-field ide-toolbar-field--firmware">
+            <span>{t("firmwareLabel")}</span>
+            {firmwareCatalogAvailable ? (
+              <select
+                className="pds-select ide-toolbar-select ide-toolbar-select--firmware"
+                name="simulatorFirmware"
+                value={selectedFirmwarePath}
+                disabled={running || firmwareOptions.length === 0}
+                onChange={(event) => {
+                  const path = event.currentTarget.value;
+                  setSelectedFirmwarePath(path);
+                  setFirmwareName(firmwareOptions.find((option) => option.path === path)?.label ?? null);
+                }}
+              >
+                {firmwareOptions.length > 0 ? firmwareOptions.map((option) => (
+                  <option key={option.id} value={option.path}>{option.label}</option>
+                )) : <option value="">{t("firmwareUnavailable")}</option>}
+              </select>
+            ) : (
+              <button type="button" className="pds-btn ide-toolbar-firmware-button" disabled={running} onClick={startSim}>
+                {t("buttonChooseFirmware")}
+              </button>
+            )}
+          </label>
+        </div>
         <div className="ide-titlebar__actions" aria-label={t("runControlsAria")}>
           {!running ? (
-            <>
-              <button className="pds-btn pds-btn--primary" onClick={quickStartSim}>
-                {t("buttonQuickLaunch")}
-              </button>
-            </>
+            <button className="pds-btn pds-btn--primary" onClick={quickStartSim}>
+              {t("buttonQuickLaunch")}
+            </button>
           ) : (
             <button className="pds-btn pds-btn--danger" onClick={stopSim}>
               {t("buttonStop")}
@@ -704,37 +742,16 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         </nav>
 
         {sidebarOpen && (
-          <aside className="ide-sidebar" aria-label="Session">
-            <section className="ide-sidebar__group">
-              <h2 className="pds-section-title">{t("sessionTitle")}</h2>
-              <dl className="pds-kv">
-                <dt>{t("statusLabel")}</dt>
-                <dd>
-                  <span className={running ? "pds-pill pds-pill--running" : "pds-pill"}>{statusText}</span>
-                </dd>
-                <dt>{t("firmwareLabel")}</dt>
-                <dd>{firmwareName ?? t("firmwareQuickLaunch")}</dd>
-                <dt>{t("statusSdLabel")}</dt>
-                <dd>{sdRoot || t("statusSdResolving")}</dd>
-              </dl>
+          <aside className="ide-sidebar ide-sidebar--boards" aria-label={t("devicePickerAria")}>
+            <section className="ide-sidebar__group ide-session-summary">
+              <div className="ide-session-summary__row">
+                <span className={running ? "ide-statusbar__dot ide-statusbar__dot--on" : "ide-statusbar__dot"} aria-hidden="true" />
+                <strong>{statusText}</strong>
+              </div>
+              <span className="ide-session-summary__firmware">{firmwareName ?? t("firmwareQuickLaunch")}</span>
             </section>
-
-            <section className="ide-sidebar__group">
+            <section className="ide-sidebar__group ide-sidebar__group--boards">
               <h2 className="pds-section-title">{t("deviceLabel")}</h2>
-              <select
-                className="pds-select"
-                name="simulatorBoard"
-                value={boardId}
-                disabled={running}
-                title={running ? t("deviceLockedHint") : undefined}
-                onChange={(event) => handleBoardChange(event.currentTarget.value)}
-              >
-                {SIMULATOR_BOARDS.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.displayName}
-                  </option>
-                ))}
-              </select>
               <div className="ide-board-list" aria-label={t("devicePickerAria")}>
                 {SIMULATOR_BOARDS.map((candidate) => (
                   <button
@@ -751,61 +768,127 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   </button>
                 ))}
               </div>
-              <p className="ide-sidebar__hint">{summarizeSimulatorBoard(board)}</p>
             </section>
+          </aside>
+        )}
 
-            <section className="ide-sidebar__group">
-              <h2 className="pds-section-title">{t("firmwareLibraryTitle")}</h2>
-              {firmwareCatalogAvailable ? (
-                firmwareOptions.length > 0 ? (
-                  <select
-                    className="pds-select"
-                    name="simulatorFirmware"
-                    value={selectedFirmwarePath}
-                    disabled={running}
-                    onChange={(event) => {
-                      const path = event.currentTarget.value;
-                      setSelectedFirmwarePath(path);
-                      setFirmwareName(firmwareOptions.find((option) => option.path === path)?.label ?? null);
+        <main className={mainClassName}>
+          <div className={deviceStageClassName} aria-label={t("panelAria")}>
+            {status.kind === "translation" && status.key === "statusRuntimeUnavailable" ? (
+              <div className="ide-device-stage__notice" role="status">
+                {t("cloudRuntimeNotice")}
+              </div>
+            ) : null}
+            {error && <pre className="pds-error ide-device-stage__error">{error}</pre>}
+            <PanelCanvas
+              ariaLabel={t("panelAria")}
+              hostBridge={hostBridge}
+              board={board}
+              displayScale={panelDisplayScale}
+            />
+          </div>
+
+          {panelOpen && (
+            <section className="ide-bottom" aria-label={t("serialConsoleAria")}>
+              <div className="ide-bottom__head">
+                <div className="pds-tabs">
+                  <button type="button" className="pds-tab pds-tab--active">
+                    {t("serialTabLabel")}
+                  </button>
+                </div>
+                <div className="ide-bottom__actions" aria-label={t("serialConsoleAria")}>
+                  <button
+                    type="button"
+                    className="pds-btn pds-btn--ghost ide-bottom__action"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(logLines.join("\n"));
                     }}
                   >
-                    {firmwareOptions.map((option) => (
-                      <option key={option.id} value={option.path}>{option.label}</option>
-                    ))}
-                  </select>
-                ) : <p className="ide-sidebar__hint">{t("firmwareUnavailable")}</p>
-              ) : (
-                <button className="pds-btn" disabled={running} onClick={startSim}>
-                  {t("buttonChooseFirmware")}
-                </button>
-              )}
-              <p className="ide-sidebar__hint">
-                {firmwareCatalogAvailable ? t("firmwareBundledHint") : t("firmwareLocalHint")}
-              </p>
+                    {t("buttonCopyLog")}
+                  </button>
+                  <button type="button" className="pds-btn pds-btn--ghost ide-bottom__action" onClick={clearLog}>
+                    {t("buttonClearLog")}
+                  </button>
+                </div>
+              </div>
+              <div ref={serialConsoleRef} className="pds-console ide-bottom__console">
+                {logLines.length === 0 ? (
+                  <span className="pds-console__empty">{t("serialNoOutput")}</span>
+                ) : (
+                  logLines.map((line, i) => <div key={i}>{line || "\u00a0"}</div>)
+                )}
+                <div ref={logEndRef} />
+              </div>
+            </section>
+          )}
+        </main>
+        <aside className="ide-inspector" aria-label="Inspector">
+          <div className="ide-inspector__header">
+            <div>
+              <strong>{shortSimulatorBoardName(board)}</strong>
+              <span>{summarizeSimulatorBoard(board)}</span>
+            </div>
+            <span className={running ? "pds-pill pds-pill--running" : "pds-pill"}>{statusText}</span>
+          </div>
+          <section className="ide-inspector__group">
+            <div className="ide-inspector__group-head">
+              <h2 className="pds-section-title">{t("displayModeLabel")}</h2>
+              <span>{board.outputWidth}×{board.outputHeight}</span>
+            </div>
+            <select
+              className="pds-select"
+              name="panelDisplayMode"
+              value={panelDisplayMode}
+              aria-label={t("displayModeAria")}
+              onChange={(event) => setPanelDisplayMode(event.currentTarget.value as PanelDisplayMode)}
+            >
+              <option value="fit">{t("displayModeFit")}</option>
+              <option value="1x">{t("displayModeOneToOne")}</option>
+              <option value="2x">{t("displayModeTwoX")}</option>
+            </select>
+          </section>
+            <section className="ide-inspector__group">
+              <h2 className="pds-section-title">{t("hardwareKeysTitle")}</h2>
+              <div className="ide-inspector__keys" aria-label={t("hardwareKeysAria")}>
+                {board.keyMap.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="pds-btn ide-key"
+                    onPointerDown={() => pressHardwareButton(id)}
+                    onPointerUp={() => releaseHardwareButton(id)}
+                    onPointerCancel={() => releaseHardwareButton(id)}
+                    onPointerLeave={() => releaseHardwareButton(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </section>
 
-            <section className="ide-sidebar__group">
-              <h2 className="pds-section-title">{t("displayModeLabel")}</h2>
+            <section className="ide-inspector__group">
+              <h2 className="pds-section-title">{t("localeLabel")}</h2>
               <select
                 className="pds-select"
-                name="panelDisplayMode"
-                value={panelDisplayMode}
-                aria-label={t("displayModeAria")}
-                onChange={(event) => setPanelDisplayMode(event.currentTarget.value as PanelDisplayMode)}
+                name="simulatorLocale"
+                value={locale}
+                onChange={(event) => handleLocaleChange(event.currentTarget.value as SimulatorLocale)}
               >
-                <option value="fit">{t("displayModeFit")}</option>
-                <option value="1x">{t("displayModeOneToOne")}</option>
-                <option value="2x">{t("displayModeTwoX")}</option>
+                {SUPPORTED_SIMULATOR_LOCALES.map((supportedLocale) => (
+                  <option key={supportedLocale.code} value={supportedLocale.code}>
+                    {supportedLocale.label}
+                  </option>
+                ))}
               </select>
             </section>
 
             {browserSdAvailable && (
-            <section className="ide-sidebar__group">
+            <section className="ide-inspector__group ide-inspector__group--sd">
               <h2 className="pds-section-title">{t("sdCardTitle")}</h2>
               <div className="ide-sdcard__path">{sdPath}</div>
               {browserSdTransferAvailable && (
                 <div className="ide-sdcard__transfer">
-                  <p className="ide-sidebar__hint">{t("sdTransferDescription")}</p>
+                  <p className="ide-inspector__hint">{t("sdTransferDescription")}</p>
                   <div className="ide-sdcard__actions">
                     <button
                       type="button"
@@ -927,7 +1010,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
               </div>
               <div className="ide-sdcard__list" aria-label={t("sdCardTitle")}>
                 {sdEntries.length === 0 ? (
-                  <span className="ide-sidebar__hint">{sdBusy === "idle" ? t("sdEmpty") : t("sdBusy")}</span>
+                  <span className="ide-inspector__hint">{sdBusy === "idle" ? t("sdEmpty") : t("sdBusy")}</span>
                 ) : (
                   sdEntries.map((entry) => (
                     <div key={entry.path} className="ide-sdcard__entry">
@@ -956,100 +1039,13 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   ))
                 )}
               </div>
-              {sdMessage ? <p className="ide-sidebar__hint" role="status" aria-live="polite">{sdMessage}</p> : null}
-              {running ? <p className="ide-sidebar__hint">{t("sdLockedWhileRunning")}</p> : null}
+              {sdMessage ? <p className="ide-inspector__hint" role="status" aria-live="polite">{sdMessage}</p> : null}
+              {running ? <p className="ide-inspector__hint">{t("sdLockedWhileRunning")}</p> : null}
             </section>
             )}
 
-            <section className="ide-sidebar__group">
-              <h2 className="pds-section-title">{t("hardwareKeysTitle")}</h2>
-              <div className="ide-sidebar__keys" aria-label={t("hardwareKeysAria")}>
-                {board.keyMap.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="pds-btn ide-key"
-                    onPointerDown={() => pressHardwareButton(id)}
-                    onPointerUp={() => releaseHardwareButton(id)}
-                    onPointerCancel={() => releaseHardwareButton(id)}
-                    onPointerLeave={() => releaseHardwareButton(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
+        </aside>
 
-            <section className="ide-sidebar__group">
-              <h2 className="pds-section-title">{t("localeLabel")}</h2>
-              <select
-                className="pds-select"
-                name="simulatorLocale"
-                value={locale}
-                onChange={(event) => handleLocaleChange(event.currentTarget.value as SimulatorLocale)}
-              >
-                {SUPPORTED_SIMULATOR_LOCALES.map((supportedLocale) => (
-                  <option key={supportedLocale.code} value={supportedLocale.code}>
-                    {supportedLocale.label}
-                  </option>
-                ))}
-              </select>
-            </section>
-
-            {!running && <p className="ide-sidebar__hint">{t("statusTipHiddenFiles")}</p>}
-          </aside>
-        )}
-
-        <main className={mainClassName}>
-          <div className={deviceStageClassName} aria-label={t("panelAria")}>
-            {status.kind === "translation" && status.key === "statusRuntimeUnavailable" ? (
-              <div className="ide-device-stage__notice" role="status">
-                {t("cloudRuntimeNotice")}
-              </div>
-            ) : null}
-            {error && <pre className="pds-error ide-device-stage__error">{error}</pre>}
-            <PanelCanvas
-              ariaLabel={t("panelAria")}
-              hostBridge={hostBridge}
-              board={board}
-              displayScale={panelDisplayScale}
-            />
-          </div>
-
-          {panelOpen && (
-            <section className="ide-bottom" aria-label={t("serialConsoleAria")}>
-              <div className="ide-bottom__head">
-                <div className="pds-tabs">
-                  <button type="button" className="pds-tab pds-tab--active">
-                    {t("serialTabLabel")}
-                  </button>
-                </div>
-                <div className="ide-bottom__actions" aria-label={t("serialConsoleAria")}>
-                  <button
-                    type="button"
-                    className="pds-btn pds-btn--ghost ide-bottom__action"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(logLines.join("\n"));
-                    }}
-                  >
-                    {t("buttonCopyLog")}
-                  </button>
-                  <button type="button" className="pds-btn pds-btn--ghost ide-bottom__action" onClick={clearLog}>
-                    {t("buttonClearLog")}
-                  </button>
-                </div>
-              </div>
-              <div ref={serialConsoleRef} className="pds-console ide-bottom__console">
-                {logLines.length === 0 ? (
-                  <span className="pds-console__empty">{t("serialNoOutput")}</span>
-                ) : (
-                  logLines.map((line, i) => <div key={i}>{line || "\u00a0"}</div>)
-                )}
-                <div ref={logEndRef} />
-              </div>
-            </section>
-          )}
-        </main>
       </div>
 
       <footer className="pds-statusbar ide-statusbar">
