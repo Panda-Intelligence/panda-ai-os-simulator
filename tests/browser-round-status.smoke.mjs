@@ -34,6 +34,12 @@ try {
     assert.ok(m.offset<1,`miscentered ${id}/${scale}`);
     if(scale==="fit")assert.ok(m.bottom< m.stageBottom,`clipped ring ${id}: ${JSON.stringify(m)}`);
     assert.equal(m.pill.text,"NA");assert.ok(m.pill.width<48&&m.pill.height<32);
+    if(scale!=="fit"){
+      await page.locator(".ide-device-stage").evaluate(stage=>{stage.scrollTop=stage.scrollHeight;});
+      const bottom=await page.evaluate(id=>({ring:document.querySelector(id==="m5papers3"?".panel-hanging-ear__ring":".panel-front-home-ring").getBoundingClientRect().bottom,stage:document.querySelector(".ide-device-stage").getBoundingClientRect().bottom}),id);
+      assert.ok(bottom.ring<=bottom.stage,`fixed-scale ring cannot scroll into view ${id}/${scale}: ${JSON.stringify(bottom)}`);
+      await page.locator(".ide-device-stage").evaluate(stage=>{stage.scrollTop=0;});
+    }
     report.geometry.push({id,scale,viewport,...m});
    }
   }

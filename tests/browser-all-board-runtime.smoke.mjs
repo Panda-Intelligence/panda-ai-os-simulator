@@ -14,10 +14,16 @@ try {for(const id of boards){
  const page=await context.newPage(),errors=[],external=[],requests=[];page.on("pageerror",e=>errors.push(String(e)));
  await context.route("**/*",r=>{const url=new URL(r.request().url());if(["http:","https:"].includes(url.protocol)&&url.origin!==base.origin){external.push(url.href);return r.abort();}if(/firmware|bootloader|symbols|qemu-system.*wasm/.test(url.pathname))requests.push(url.pathname);return r.continue();});
  await page.addInitScript(()=>{
-  window.__guestProbe={frames:0,geometry:null,logs:[],runtimeErrors:[],geolocationAccess:0};
+  window.__guestProbe={frames:0,geometry:null,logs:[],runtimeErrors:[],geolocationAccess:0,serialTail:"",spiMounted:false,lastActivity:null};
   Object.defineProperty(navigator,"geolocation",{configurable:true,get(){window.__guestProbe.geolocationAccess++;return undefined;}});
   const NativeWorker=window.Worker;
   window.Worker=class extends NativeWorker{constructor(...args){super(...args);this.addEventListener("message",({data:m})=>{
+   if(m.type==="serialLog"||m.type==="simulatorError"){
+    window.__guestProbe.serialTail=(window.__guestProbe.serialTail+String(m.payload)).slice(-1024);
+    if(window.__guestProbe.serialTail.includes("E2E:STORAGE:event=sdspi_mounted "))window.__guestProbe.spiMounted=true;
+    const activity=[...window.__guestProbe.serialTail.matchAll(/UIREFRESH activity=([^ ]+) mode=/g)].at(-1);
+    if(activity)window.__guestProbe.lastActivity=activity[1];
+   }
    if(m.type==="framebuffer"){window.__guestProbe.frames++;window.__guestProbe.geometry={width:m.payload.width,height:m.payload.height};}
    if(m.type==="serialLog"){window.__guestProbe.logs.push(m.payload);if(window.__guestProbe.logs.length>250)window.__guestProbe.logs.shift();}
    if(m.type==="simulatorError"){window.__guestProbe.runtimeErrors.push(m.payload);if(window.__guestProbe.runtimeErrors.length>100)window.__guestProbe.runtimeErrors.shift();}
@@ -47,6 +53,10 @@ try {for(const id of boards){
     let dark=0,light=0;for(let i=0;i<p.length;i+=4){dark+=p[i]<64;light+=p[i]>192;}return dark>100&&light>100;
   },null,{timeout:15000});
   await page.waitForTimeout(350);
+  if(["m5papers3","lilygo-t5s3-pro"].includes(id)){
+   await page.waitForFunction(()=>window.__guestProbe.spiMounted===true,null,{timeout:20000});
+   report.probe.spiMounted=true;
+  }
   const before=await page.evaluate(()=>window.__guestProbe.frames);
   const beforeImage=await page.locator('canvas.panel-canvas').evaluate(c=>c.toDataURL());
   const box=await page.locator('canvas.panel-canvas').boundingBox();
@@ -56,7 +66,18 @@ try {for(const id of boards){
   assert.equal(afterInput.geolocationAccess,0);
   assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
   assert.ok(!afterInput.runtimeErrors.some(e=>/Assertion failed|abort\(|out of bounds|qemu_wasm_start_failed|browser_wasm_worker_fatal/.test(e)),"fatal after input");
-  report.framesAfterInput=afterInput.frames;report.passed=true;
+  report.framesAfterInput=afterInput.frames;
+  if(process.env.SIMULATOR_TEST_READ_SAMPLE==="1"){
+   // This opt-in journey requires the documented single-book local seed.
+   await page.waitForFunction(()=>window.__guestProbe.lastActivity==="Library",null,{timeout:15000});
+   const canvas=page.locator("canvas.panel-canvas");
+   const library=await canvas.evaluate(c=>c.toDataURL());const box=await canvas.boundingBox();
+   await canvas.click({position:{x:box.width*.5,y:box.height*.255}});
+   await page.waitForFunction(()=>window.__guestProbe.lastActivity==="Reader",null,{timeout:30000});
+   await page.waitForFunction(image=>document.querySelector("canvas.panel-canvas").toDataURL()!==image,library,{timeout:15000});
+   report.readingFromSd=true;
+  }
+  assert.deepEqual(errors,[]);report.passed=true;
  }catch(e){report.error=String(e);process.exitCode=1;}
  finally{
   report.probe=await page.evaluate(()=>({...window.__guestProbe,status:document.querySelector('.pds-pill')?.textContent})).catch(()=>report.probe);
