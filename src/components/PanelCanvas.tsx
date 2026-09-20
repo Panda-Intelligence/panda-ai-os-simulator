@@ -66,25 +66,59 @@ type PanelShellStyle = CSSProperties & {
   "--panel-canvas-height"?: string;
   "--panel-accent"?: string;
   "--panel-thickness"?: string;
+  "--panel-screen-width-ratio"?: string;
+  "--panel-screen-height-ratio"?: string;
+  "--panel-shell-width"?: string;
+  "--panel-shell-height"?: string;
 };
 
 export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onReset }: PanelCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackingRef = useRef(new Map<number, { fingerId: number; x: number; y: number }>());
   const visual = getSimulatorBoardVisual(board.id);
-  const physicalAspect = visual.physicalSizeMm
-    ? `${Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)} / ${Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)}`
+  const physicalWidth = visual.physicalSizeMm
+    ? Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+    : null;
+  const physicalHeight = visual.physicalSizeMm
+    ? Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+    : null;
+  const physicalAspect = physicalWidth && physicalHeight
+    ? `${physicalWidth} / ${physicalHeight}`
     : `${board.outputWidth + 26} / ${board.outputHeight + 32}`;
+  const screenDiagonalMm = visual.screenInches ? visual.screenInches * 25.4 : null;
+  const screenAspect = Math.min(board.outputWidth, board.outputHeight) / Math.max(board.outputWidth, board.outputHeight);
+  const screenHeightMm = screenDiagonalMm ? screenDiagonalMm / Math.sqrt(1 + screenAspect * screenAspect) : null;
+  const screenWidthMm = screenHeightMm ? screenHeightMm * screenAspect : null;
+  const screenWidthRatio = physicalWidth && screenWidthMm ? screenWidthMm / physicalWidth : null;
+  const screenHeightRatio = physicalHeight && screenHeightMm ? screenHeightMm / physicalHeight : null;
+  const fixedShellWidth = displayScale > 0 && screenWidthRatio
+    ? (board.outputWidth * displayScale) / screenWidthRatio
+    : null;
+  const fixedShellHeight = displayScale > 0 && screenHeightRatio
+    ? (board.outputHeight * displayScale) / screenHeightRatio
+    : null;
   const shellStyle: PanelShellStyle = {
     aspectRatio: physicalAspect,
     "--panel-accent": visual.accent,
     ...(visual.physicalSizeMm
       ? { "--panel-thickness": `${visual.physicalSizeMm.thickness}px` }
       : {}),
+    ...(screenWidthRatio && screenHeightRatio
+      ? {
+          "--panel-screen-width-ratio": screenWidthRatio.toFixed(5),
+          "--panel-screen-height-ratio": screenHeightRatio.toFixed(5),
+        }
+      : {}),
     ...(displayScale > 0
       ? {
           "--panel-canvas-width": `${board.outputWidth * displayScale}px`,
           "--panel-canvas-height": `${board.outputHeight * displayScale}px`,
+          ...(fixedShellWidth && fixedShellHeight
+            ? {
+                "--panel-shell-width": `${fixedShellWidth.toFixed(2)}px`,
+                "--panel-shell-height": `${fixedShellHeight.toFixed(2)}px`,
+              }
+            : {}),
         }
       : {}),
   };

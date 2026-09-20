@@ -1130,3 +1130,155 @@ body,
   width: calc(var(--panel-canvas-width) + 30px);
   height: calc(var(--panel-canvas-height) + 54px);
 }
+
+/* ---- CAD/spec-derived front geometry (PaperS3 / T5S3 Pro) ----
+   Body ratios come from manufacturer dimensions. Screen opening ratios are
+   supplied by PanelCanvas from the 4.7-inch 960x540 panel diagonal. */
+.panel-shell--papers3,
+.panel-shell--t5s3 {
+  display: block;
+  padding: 0;
+  overflow: visible;
+}
+
+.panel-shell--papers3 .panel-screen-frame,
+.panel-shell--t5s3 .panel-screen-frame {
+  position: absolute;
+  left: 50%;
+  width: calc(var(--panel-screen-width-ratio) * 100%);
+  height: calc(var(--panel-screen-height-ratio) * 100%);
+  transform: translateX(-50%);
+}
+
+.panel-shell--papers3 .panel-screen-frame {
+  top: 6.4%;
+}
+
+.panel-shell--t5s3 .panel-screen-frame {
+  top: 8.6%;
+}
+
+.panel-shell--papers3 .panel-device-mark {
+  bottom: 2.9%;
+  font-size: clamp(6px, 1.05vh, 9px);
+}
+
+.panel-hanging-ear {
+  bottom: -4.5%;
+  width: 31%;
+  height: 5.4%;
+  min-height: 10px;
+  border-width: 1.5px;
+  border-radius: 0 0 11px 11px;
+}
+
+.panel-shell--papers3 .panel-edge-ports {
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+.panel-shell--papers3 .panel-edge-port {
+  position: absolute;
+}
+
+.panel-shell--papers3 .panel-edge-port:first-child {
+  bottom: -2px;
+  left: 27%;
+  width: 16%;
+  height: 5px;
+  margin: 0;
+  border-radius: 3px 3px 1px 1px;
+}
+
+.panel-shell--papers3 .panel-edge-port:last-child {
+  top: 51%;
+  left: -3px;
+  width: 5px;
+  height: 15%;
+  margin: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+.panel-shell--papers3 .panel-edge-port span {
+  display: none;
+}
+
+.panel-shell--papers3 .panel-physical-key {
+  top: 61%;
+  right: -5px;
+  width: 6px;
+  height: 6.8%;
+  min-height: 24px;
+}
+
+.panel-shell--t5s3 .panel-device-mark {
+  top: 2.7%;
+  right: 4.5%;
+}
+
+.panel-front-home-ring {
+  bottom: 2.5%;
+  width: 6.5%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.panel-shell--t5s3 .panel-physical-key {
+  right: -7px;
+  width: 9px;
+  height: 5.8%;
+  min-height: 22px;
+}
+
+.panel-shell--t5s3 .panel-physical-key:nth-child(1) { top: 31%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(2) { top: 39%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(3) { top: 47%; }
+.panel-shell--t5s3 .panel-physical-key:nth-child(4) { top: 55%; }
+
+.panel-shell--t5s3 .panel-lilygo-side-legend {
+  top: 30.5%;
+  right: 5px;
+  gap: 20px;
+}
+
+.panel-shell--t5s3 .panel-edge-ports {
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+.panel-shell--t5s3 .panel-edge-port {
+  position: absolute;
+}
+
+.panel-shell--t5s3 .panel-edge-port:first-child {
+  bottom: -3px;
+  left: 24%;
+  width: 17%;
+  height: 6px;
+}
+
+.panel-shell--t5s3 .panel-edge-port:last-child {
+  right: -4px;
+  bottom: 16%;
+  width: 5px;
+  height: 18%;
+  border-radius: 0 2px 2px 0;
+}
+
+.panel-shell--t5s3 .panel-edge-port span {
+  display: none;
+}
+
+.panel-shell--papers3.panel-shell--fixed-scale,
+.panel-shell--t5s3.panel-shell--fixed-scale {
+  width: var(--panel-shell-width);
+  height: var(--panel-shell-height);
+}
+
+.panel-shell--papers3.panel-shell--fixed-scale .panel-screen-frame,
+.panel-shell--t5s3.panel-shell--fixed-scale .panel-screen-frame {
+  width: var(--panel-canvas-width);
+  height: var(--panel-canvas-height);
+}
