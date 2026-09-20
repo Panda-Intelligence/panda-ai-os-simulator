@@ -1279,14 +1279,14 @@ body,
 .panel-hanging-ear {
   position: absolute;
   z-index: 3;
-  top: 100%;
+  bottom: 2.5%;
   left: 50%;
   display: block;
   width: 14%;
   height: auto;
   aspect-ratio: 1;
   overflow: visible;
-  transform: translate(-50%, -20%);
+  transform: translateX(-50%);
   pointer-events: none;
   filter: drop-shadow(0 2px 2px rgb(0 0 0 / 18%));
 }

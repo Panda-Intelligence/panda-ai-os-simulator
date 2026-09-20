@@ -28,10 +28,11 @@ try {
      const shell=document.querySelector(".panel-shell"),target=document.querySelector(id==="m5papers3"?".panel-hanging-ear__ring":".panel-front-home-ring");
      const body=shell.getBoundingClientRect(),ring=target.getBoundingClientRect(),stage=document.querySelector(".ide-device-stage").getBoundingClientRect();
      const pill=document.querySelector(".pds-pill"),p=pill.getBoundingClientRect();
-     return {width:ring.width,height:ring.height,offset:Math.abs((ring.left+ring.right-body.left-body.right)/2),bottom:ring.bottom,stageBottom:stage.bottom,buttonCount:shell.querySelectorAll("button").length,pill:{width:p.width,height:p.height,text:pill.textContent}};
+     return {width:ring.width,height:ring.height,offset:Math.abs((ring.left+ring.right-body.left-body.right)/2),bottom:ring.bottom,bodyBottom:body.bottom,stageBottom:stage.bottom,buttonCount:shell.querySelectorAll("button").length,pill:{width:p.width,height:p.height,text:pill.textContent}};
     },id);
     assert.ok(Math.abs(m.width-m.height)<.25,`distorted ${id}/${scale}: ${JSON.stringify(m)}`);
     assert.ok(m.offset<1,`miscentered ${id}/${scale}`);
+    if(id==="m5papers3")assert.ok(m.bottom<=m.bodyBottom+.5,`PaperS3 lower circle escapes body: ${JSON.stringify(m)}`);
     if(scale==="fit")assert.ok(m.bottom< m.stageBottom,`clipped ring ${id}: ${JSON.stringify(m)}`);
     assert.equal(m.pill.text,"NA");assert.ok(m.pill.width<48&&m.pill.height<32);
     if(scale!=="fit"){

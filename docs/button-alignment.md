@@ -4,11 +4,12 @@
 
 User requested a direct code fix and PR for shifted PaperS3 / LILYGO controls.
 Baseline: `45b0e54ea71064a6d9491bdbf081eeefec34c3ef`.
-The actual DOM already places buttons directly under `.panel-physical-keys`;
+The actual DOM already places controls directly under `.panel-physical-keys`;
 the earlier claim that screen/branding siblings broke `nth-child` was incorrect.
 The faults were inaccurate physical coordinates, all LILYGO keys placed on one
-edge, duplicate percentage/pixel CSS overrides, and an independently spaced
-legend. The old rendered PaperS3 button center was about 64.34% down the body.
+edge, duplicate percentage/pixel CSS overrides, an independently spaced legend,
+and a PaperS3 lower circular feature positioned below the chassis. The old
+rendered PaperS3 button center was about 64.34% down the body.
 No suggested decorative spans / `pointer-events:none` replacement was applied.
 
 ## Manufacturer references (portrait front view)
@@ -43,7 +44,10 @@ slot overlapped the corrected PWR cap. QWIIC/rear features are not fabricated.
 
 `boardPhysicalControls.ts` is the single named-control placement table.
 Logical ids are resolved from the existing board keyMap, not array indices.
-RST remains the reset callback and is disabled when it is unavailable.
+RST remains the reset callback and is disabled when it is unavailable. The
+PaperS3 lower circular feature is decorative, centered inside the chassis, and
+is not treated as a guessed input button; the side PWR control remains the
+physical input.
 `PhysicalDeviceKey` renders an operable button with a scaled cap and caption
 sharing its center. CSS handles appearance only. A transparent minimum 24px
 hit region enlarges interaction without changing the visible hardware outline.
