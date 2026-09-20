@@ -5,6 +5,28 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Panda Simulator</title>
+    <script>
+      (() => {
+        const key = "panda-simulator-theme";
+        let stored = null;
+        try {
+          stored = window.localStorage.getItem(key);
+        } catch {
+          stored = null;
+        }
+        const preference = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+        let systemPrefersDark = false;
+        try {
+          systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        } catch {
+          systemPrefersDark = false;
+        }
+        const dark = preference === "dark" || (preference === "system" && systemPrefersDark);
+        const theme = dark ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
   </head>
 
   <body>
