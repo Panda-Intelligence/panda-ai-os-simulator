@@ -2,60 +2,55 @@
  * Simulator host theme + layout.
  * Shared primitives/tokens come from ./panda-ide.css (imported first in App.tsx).
  * This file only:
- *   1. maps the --pds-* semantic COLOR tokens to a dark (default) / light palette
- *      that follows the OS via prefers-color-scheme;
+ *   1. maps the --pds-* semantic COLOR tokens to explicit host palettes;
  *   2. defines the simulator-specific IDE shell layout.
  * The e-paper device body/screen are intentionally NOT themed (always physical
  * black body + paper-white screen).
  */
 
-/* ---- Dark palette (default, VS Code Dark+ flavored) ---- */
+/* ---- Host palettes. The device shell and paper canvas below remain independent. ---- */
 :root {
   color-scheme: dark;
-  --pds-bg: #1e1e1e;
-  --pds-panel: #252526;
-  --pds-panel-raised: #2d2d31;
-  --pds-border: #2b2b2b;
-  --pds-border-strong: #3c3c3c;
-  --pds-ink: #d4d4d4;
-  --pds-muted: #9d9d9d;
-  --pds-accent: #0e639c;
-  --pds-accent-ink: #ffffff;
-  --pds-accent-hover: #1177bb;
+  --pds-bg: #1b1d1f;
+  --pds-panel: #232629;
+  --pds-panel-raised: #2d3235;
+  --pds-border: #3b4145;
+  --pds-border-strong: #596267;
+  --pds-ink: #f0f1ed;
+  --pds-muted: #b4bbb9;
+  --pds-accent: #ed9b4c;
+  --pds-accent-ink: #1b1d1f;
+  --pds-accent-hover: #f3b269;
   --pds-hover: rgba(255, 255, 255, 0.08);
-  --pds-danger: #a1260d;
+  --pds-danger: #b94732;
   --pds-danger-ink: #ffffff;
-  --pds-running: #2ea043;
-  --pds-running-ink: #ffffff;
-  --pds-focus-ring: #4daafc;
-  --pds-code-bg: #181818;
-  --pds-code-ink: #9fdf9f;
+  --pds-running: #57b36b;
+  --pds-running-ink: #102016;
+  --pds-focus-ring: #f3b269;
+  --pds-code-bg: #151719;
+  --pds-code-ink: #c5e8b5;
 }
 
-/* ---- Light palette (follows OS) ---- */
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --pds-bg: #ffffff;
-    --pds-panel: #f3f3f3;
-    --pds-panel-raised: #ffffff;
-    --pds-border: #e5e5e5;
-    --pds-border-strong: #cecece;
-    --pds-ink: #1f1f1f;
-    --pds-muted: #616161;
-    --pds-accent: #005fb8;
-    --pds-accent-ink: #ffffff;
-    --pds-accent-hover: #0258a8;
-    --pds-hover: rgba(0, 0, 0, 0.06);
-    --pds-danger: #b5200d;
-    --pds-danger-ink: #ffffff;
-    --pds-running: #1a7f37;
-    --pds-running-ink: #ffffff;
-    --pds-focus-ring: #005fb8;
-    /* Serial console stays a dark terminal surface in both themes. */
-    --pds-code-bg: #1b1b1b;
-    --pds-code-ink: #b5e8a6;
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --pds-bg: #f1eee7;
+  --pds-panel: #e4e0d7;
+  --pds-panel-raised: #fbfaf6;
+  --pds-border: #c8c3b8;
+  --pds-border-strong: #9b9589;
+  --pds-ink: #252a2b;
+  --pds-muted: #5b6261;
+  --pds-accent: #9a4f1c;
+  --pds-accent-ink: #ffffff;
+  --pds-accent-hover: #7f3f14;
+  --pds-hover: rgba(37, 42, 43, 0.08);
+  --pds-danger: #a23b2d;
+  --pds-danger-ink: #ffffff;
+  --pds-running: #277a3d;
+  --pds-running-ink: #ffffff;
+  --pds-focus-ring: #9a4f1c;
+  --pds-code-bg: #202525;
+  --pds-code-ink: #c5e8b5;
 }
 
 html,
@@ -708,6 +703,26 @@ body,
   min-width: 104px;
 }
 
+.ide-titlebar__theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  white-space: nowrap;
+}
+
+.ide-titlebar__theme-select {
+  min-width: 132px;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--pds-focus-ring);
+  outline-offset: 2px;
+}
+
 .ide-sidebar--boards {
   width: 196px;
   flex-basis: 196px;
@@ -917,6 +932,135 @@ body,
 
   .ide-titlebar__language-select {
     min-width: 88px;
+  }
+
+  .ide-titlebar__theme > span {
+    display: none;
+  }
+
+  .ide-titlebar__theme-select {
+    min-width: 116px;
+  }
+}
+
+@media (max-width: 620px) {
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+  }
+
+  .ide-shell {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .ide-titlebar {
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .ide-titlebar__title {
+    flex: 1 1 100%;
+    min-height: 28px;
+  }
+
+  .ide-titlebar__selectors,
+  .ide-titlebar__actions {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+  }
+
+  .ide-titlebar__selectors {
+    order: 2;
+  }
+
+  .ide-titlebar__actions {
+    order: 1;
+    justify-content: flex-end;
+  }
+
+  .ide-toolbar-field {
+    flex: 1 1 120px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ide-toolbar-select--board,
+  .ide-toolbar-field--firmware,
+  .ide-toolbar-field--firmware .ide-toolbar-firmware-button {
+    width: 100%;
+  }
+
+  .ide-body {
+    display: block;
+    overflow: auto;
+  }
+
+  .pds-activitybar {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    border-right: 0;
+    border-bottom: 1px solid var(--pds-border);
+  }
+
+  .pds-activitybar__brand {
+    margin-right: auto;
+  }
+
+  .ide-sidebar--boards {
+    display: flex;
+    width: auto;
+    max-height: 190px;
+    border-right: 0;
+    border-bottom: 1px solid var(--pds-border);
+  }
+
+  .ide-main {
+    display: block;
+    min-height: 560px;
+  }
+
+  .ide-device-stage {
+    height: min(62vh, 640px);
+    min-height: 360px;
+  }
+
+  .ide-bottom {
+    height: 220px;
+    max-height: none;
+  }
+
+  .ide-inspector {
+    max-height: none;
+    border-top: 1px solid var(--pds-border);
+    border-left: 0;
+  }
+
+  .ide-inspector__group--sd {
+    min-height: 330px;
+  }
+
+  .ide-statusbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--pds-statusbar-h);
+  }
+
+  .ide-statusbar__keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }
 

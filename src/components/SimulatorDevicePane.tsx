@@ -18,6 +18,7 @@ import {
   SimulatorTranslationKey,
   SUPPORTED_SIMULATOR_LOCALES,
 } from "../i18n";
+import { parseThemePreference, type ThemePreference } from "../theme";
 
 const MAX_LOG_LINES = 1000;
 const STICKY_LOG_PREFIXES = ["[QEMU-SIM]", "[QEMU-DBG] ELF load result:", "[BOOT-FRAME]"];
@@ -51,9 +52,15 @@ const boardButtonIdByLabel = (
 
 type SimulatorDevicePaneProps = {
   hostBridge?: SimulatorHostBridge | Promise<SimulatorHostBridge>;
+  themePreference?: ThemePreference;
+  onThemePreferenceChange?: (preference: ThemePreference) => void;
 };
 
-export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: SimulatorDevicePaneProps = {}) {
+export function SimulatorDevicePane({
+  hostBridge: hostBridgeOverride,
+  themePreference = "system",
+  onThemePreferenceChange,
+}: SimulatorDevicePaneProps = {}) {
   const [resolvedHostBridge, setResolvedHostBridge] = useState<SimulatorHostBridge>(browserSimulatorHostBridge);
   const [running, setRunning] = useState(false);
   const [locale, setLocale] = useState<SimulatorLocale>(() => resolveInitialSimulatorLocale());
@@ -696,6 +703,20 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   {supportedLocale.label}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="ide-titlebar__theme">
+            <span>{t("themeLabel")}</span>
+            <select
+              className="pds-select ide-titlebar__theme-select"
+              name="simulatorTheme"
+              value={themePreference}
+              aria-label={t("themeLabel")}
+              onChange={(event) => onThemePreferenceChange?.(parseThemePreference(event.currentTarget.value))}
+            >
+              <option value="light">{t("themeLight")}</option>
+              <option value="dark">{t("themeDark")}</option>
+              <option value="system">{t("themeSystem")}</option>
             </select>
           </label>
         </div>
