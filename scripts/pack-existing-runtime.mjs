@@ -39,6 +39,9 @@ export function packageExistingRuntime(options) {
   if (![2,3].includes(source.schemaVersion) || source.status !== "ready" || source.target !== "xtensa-softmmu" ||
       !/^[a-f0-9]{40}$/.test(source.sourceRevision) || !Array.isArray(source.artifacts) || source.artifacts.length > 64 ||
       !source.boards || typeof source.boards !== "object" || Object.keys(source.boards).length > 16) fail("source_manifest_not_ready");
+  if (options.requireRuntimeRevision && source.runtimeBuildRevision !== options.requireRuntimeRevision) {
+    fail(`runtime_revision_mismatch:expected=${options.requireRuntimeRevision}:actual=${source.runtimeBuildRevision ?? "missing"}`);
+  }
   const artifacts = new Map();
   for (const info of source.artifacts) {
     const entry = validArtifact(info);
@@ -129,9 +132,9 @@ export function packageExistingRuntime(options) {
 }
 function cli(argv) {
   const opts={};
-  const keys={"--qemu-dir":"qemuDir","--ui-dir":"uiDir","--output-dir":"outputDir","--board-map":"boardMap","--sd-image":"sdImage","--sd-raw-bytes":"sdRawBytes","--base-path":"basePath","--require-boards":"requireBoards"};
+  const keys={"--qemu-dir":"qemuDir","--ui-dir":"uiDir","--output-dir":"outputDir","--board-map":"boardMap","--sd-image":"sdImage","--sd-raw-bytes":"sdRawBytes","--base-path":"basePath","--require-boards":"requireBoards","--require-runtime-revision":"requireRuntimeRevision"};
   if (argv.length===1 && argv[0]==="--help") {
-    console.log("pack-existing-runtime --qemu-dir DIR --ui-dir DIST --output-dir NEW_OR_OWNED_DIR [--board-map JSON] [--require-boards all|id,id] [--sd-image FILE --sd-raw-bytes N]");
+    console.log("pack-existing-runtime --qemu-dir DIR --ui-dir DIST --output-dir NEW_OR_OWNED_DIR [--board-map JSON] [--require-boards all|id,id] [--require-runtime-revision REV] [--sd-image FILE --sd-raw-bytes N]");
     return;
   }
   for (let i=0;i<argv.length;i+=2) {

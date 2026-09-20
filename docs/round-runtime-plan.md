@@ -18,4 +18,4 @@ Do not pass a placeholder framebuffer as firmware evidence.
 Main now contains PR15 button mapping and PR16 London. This branch merges that
 upstream without reverting either fix. No repository administration or deployment
 configuration is changed. A fresh source-bound runtime build is required for the
-PaperS3 GT911 routing fix; cache revision asyncify-stack-v3-gt911 refuses old builds.
+PaperS3 GT911 routing fix; cache revision asyncify-stack-v4-papers3-sdspi refuses old builds.

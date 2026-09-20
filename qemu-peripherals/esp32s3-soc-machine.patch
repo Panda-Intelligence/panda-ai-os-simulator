@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,994 +9,4179 @@
+@@ -9,945 +9,4138 @@
   */
 
  #include "qemu/osdep.h"
@@ -188,6 +188,7 @@
 
 -#define TYPE_ESP32S3_CPU XTENSA_CPU_TYPE_NAME("esp32s3")
 +#define LILYGO_SD_CS_GPIO 12
++#define M5PAPERS3_SD_CS_GPIO 47
 +#define LILYGO_RADIO_CS_GPIO 46
 +#define LILYGO_TOUCH_INT_GPIO 3
 +#define LILYGO_TOUCH_RESET_GPIO 9
@@ -3216,6 +3217,7 @@
 +    ss->mofei_touch = NULL;
 +    ss->mofei_i2c_bridge = NULL;
 +  } else if (mofei_sim_board_is_m5papers3()) {
++    qdev_prop_set_bit(ss->mofei_spi2, "route-chip-selects", true);
 +    ss->mofei_epd = qdev_new("ssd1677-gdeq0426");
 +    ss->mofei_touch = NULL;
 +    ss->mofei_i2c_bridge = NULL;
@@ -3286,6 +3288,10 @@
 +      if (mofei_sim_board_is_lilygo_t5s3_pro()) {
 +        ss->lilygo_radio = esp32s3_machine_init_lilygo_spi(ss->mofei_spi2, sd_blk);
 +        lilygo_pca9535_set_radio_power_sink(lilygo_sx1262_set_board_power);
++      } else {
++        /* PaperS3 has SPI2 SD on CS47, but no radio target. */
++        esp32s3_machine_attach_lilygo_spi_sd(ss->mofei_spi2, sd_blk, 0);
++        fprintf(stderr, "[PAPERS3-SPI] SD media attached cs=%d\n", M5PAPERS3_SD_CS_GPIO);
 +      }
 +    } else {
 +      /* Selected e-ink display on GPSPI2's SSI bus. */
@@ -3405,7 +3411,8 @@
 +                                  qdev_get_gpio_in_named(ss->lilygo_touch, "reset", 0));
 +      qdev_connect_gpio_out_named(ss->lilygo_touch, "int", 0, qdev_get_gpio_in(gpio_dev, LILYGO_TOUCH_INT_GPIO));
 +    } else if (mofei_sim_board_is_m5papers3()) {
-+      /* PaperS3 input is exported through the shared framebuffer/touch bridge. */
++      qdev_connect_gpio_out_named(gpio_dev, "gpio-out", M5PAPERS3_SD_CS_GPIO,
++                                  qdev_get_gpio_in_named(ss->mofei_spi2, "chip-select", 0));
 +    } else {
 +      const int epd_dc_gpio = mofei_sim_board_is_s37uc() ? S37UC_EPD_DC_GPIO : MOFEI_EPD_DC_GPIO;
 +      const int epd_rst_gpio = mofei_sim_board_is_s37uc() ? S37UC_EPD_RST_GPIO : MOFEI_EPD_RST_GPIO;
@@ -3531,7 +3538,7 @@
 +  esp32s3_soc_add_unimp_device(sys_mem, "esp32s3.rmt", DR_REG_RMT_BASE, 0x1000);
 +  esp32s3_soc_add_unimp_device(sys_mem, "esp32s3.iomux", DR_REG_IO_MUX_BASE, 0x2000);
 +
-+  if (!mofei_sim_board_is_lilygo_t5s3_pro() || mofei_sim_board_is_m5papers3()) {
++  if (!mofei_sim_board_is_lilygo_t5s3_pro() && !mofei_sim_board_is_m5papers3()) {
 +    esp32s3_machine_init_sd(ss, sd_blk);
 +  }
 +
@@ -5093,7 +5100,7 @@
 +type_init(esp32s3_machine_type_init);
 --- a/hw/gpio/esp32_gpio.c
 +++ b/hw/gpio/esp32_gpio.c
-@@ -19,71 +19,176 @@
+@@ -19,56 +-22,161 @@
  #include "hw/qdev-properties.h"
  #include "hw/gpio/esp32_gpio.h"
 
@@ -5309,7 +5316,7 @@
  }
 
  static const TypeInfo esp32_gpio_info = {
-@@ -95,9 +200,6 @@
+@@ -95,8 +144,5 @@
      .class_size = sizeof(Esp32GpioClass),
  };
 
@@ -5322,7 +5329,7 @@
  type_init(esp32_gpio_register_types)
 --- a/hw/gpio/esp32s3_gpio.c
 +++ b/hw/gpio/esp32s3_gpio.c
-@@ -19,18 +19,13 @@
+@@ -19,15 +-38,10 @@
  #include "hw/qdev-properties.h"
  #include "hw/gpio/esp32s3_gpio.h"
 
@@ -5344,7 +5351,7 @@
 
  static const TypeInfo esp32s3_gpio_info = {
      .name = TYPE_ESP32S3_GPIO,
-@@ -41,9 +36,6 @@
+@@ -41,8 +-24,5 @@
      .class_size = sizeof(ESP32S3GPIOClass),
  };
 
@@ -5357,7 +5364,7 @@
  type_init(esp32s3_gpio_register_types)
 --- a/include/hw/gpio/esp32_gpio.h
 +++ b/include/hw/gpio/esp32_gpio.h
-@@ -5,23 +5,36 @@
+@@ -5,17 +-56,30 @@
  #include "hw/registerfields.h"
 
  #define TYPE_ESP32_GPIO "esp32.gpio"

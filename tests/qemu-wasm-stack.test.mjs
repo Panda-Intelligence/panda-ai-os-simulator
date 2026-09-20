@@ -46,7 +46,7 @@ test("TCI scratch patch refuses an unknown upstream source shape", () => {
 
 test("runtime build keeps continuation ownership, stack guard, and cache revision together", () => {
   const source = readFileSync(buildScript, "utf8");
-  assert.match(source, /QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v3-gt911"/);
+  assert.match(source, /QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v4-papers3-sdspi"/);
   assert.match(source, /-sSTACK_OVERFLOW_CHECK=2/);
   assert.match(source, /patch-qemu-wasm-stack\.py/);
   assert.match(source, /patch-wasm-continuations\.mjs/);

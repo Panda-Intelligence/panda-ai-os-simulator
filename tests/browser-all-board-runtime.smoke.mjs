@@ -52,7 +52,11 @@ try {for(const id of boards){
   const box=await page.locator('canvas.panel-canvas').boundingBox();
   await page.locator('canvas.panel-canvas').click({position:{x:box.width*.5,y:box.height*.20}});
   await page.waitForFunction(({n,image})=>window.__guestProbe.frames>n&&document.querySelector('canvas.panel-canvas').toDataURL()!==image,{n:before,image:beforeImage},{timeout:15000});
-  report.framesAfterInput=await page.evaluate(()=>window.__guestProbe.frames);report.passed=true;
+  const afterInput=await page.evaluate(()=>({...window.__guestProbe}));
+  assert.equal(afterInput.geolocationAccess,0);
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
+  assert.ok(!afterInput.runtimeErrors.some(e=>/Assertion failed|abort\(|out of bounds|qemu_wasm_start_failed|browser_wasm_worker_fatal/.test(e)),"fatal after input");
+  report.framesAfterInput=afterInput.frames;report.passed=true;
  }catch(e){report.error=String(e);process.exitCode=1;}
  finally{
   report.probe=await page.evaluate(()=>({...window.__guestProbe,status:document.querySelector('.pds-pill')?.textContent})).catch(()=>report.probe);
