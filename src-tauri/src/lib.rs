@@ -114,10 +114,10 @@ struct SimulatorLocation {
 impl Default for SimulatorLocation {
     fn default() -> Self {
         Self {
-            name: "Taipei".to_string(),
-            timezone: "Asia%2FTaipei".to_string(),
-            latitude: 25.0330,
-            longitude: 121.5654,
+            name: "London".to_string(),
+            timezone: "Europe%2FLondon".to_string(),
+            latitude: 51.5074,
+            longitude: -0.1278,
         }
     }
 }
@@ -275,12 +275,12 @@ fn env_simulator_location() -> Option<SimulatorLocation> {
         name: std::env::var("MOFEI_SIM_LOCATION_NAME")
             .ok()
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| "Host Location".to_string()),
+            .unwrap_or_else(|| "Simulated Location".to_string()),
         timezone: normalize_timezone_for_firmware(
             &std::env::var("MOFEI_SIM_LOCATION_TIMEZONE")
                 .ok()
                 .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "Asia%2FTaipei".to_string()),
+                .unwrap_or_else(|| "Europe%2FLondon".to_string()),
         ),
         latitude: lat,
         longitude: lon,
@@ -292,7 +292,7 @@ fn host_location_from_frontend(host_location: Option<HostLocation>) -> Option<Si
     let host = host_location?;
     let location = SimulatorLocation {
         name: if host.name.trim().is_empty() {
-            "Host Location".to_string()
+            "Simulated Location".to_string()
         } else {
             host.name
         },
@@ -1277,5 +1277,21 @@ mod tests {
         assert!(
             validate_peripheral_control_payload(&[0; PERIPHERAL_CONTROL_MAX_PAYLOAD + 1]).is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod simulated_location_defaults {
+    use super::{is_valid_location, normalize_timezone_for_firmware, SimulatorLocation};
+
+    #[test]
+    fn default_is_simulated_london() {
+        let location = SimulatorLocation::default();
+        assert_eq!(location.name, "London");
+        assert_eq!(location.timezone, "Europe%2FLondon");
+        assert_eq!(location.latitude, 51.5074);
+        assert_eq!(location.longitude, -0.1278);
+        assert!(is_valid_location(&location));
+        assert_eq!(normalize_timezone_for_firmware("Europe/London"), location.timezone);
     }
 }

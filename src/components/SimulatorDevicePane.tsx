@@ -1,3 +1,4 @@
+import { createSimulatedLocation } from "../simulatorLocation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelCanvas } from "./PanelCanvas";
 import {
@@ -7,7 +8,6 @@ import {
   type SimulatorSdEntry,
   type SimulatorFirmwareOption,
   type SimulatorHostBridge,
-  type SimulatorHostLocation,
 } from "../simulatorBridge";
 import { DEFAULT_SIMULATOR_BOARD_ID, getSimulatorBoard, SIMULATOR_BOARDS, shortSimulatorBoardName, summarizeSimulatorBoard } from "../boards";
 import {
@@ -23,8 +23,6 @@ const MAX_LOG_LINES = 1000;
 const STICKY_LOG_PREFIXES = ["[QEMU-SIM]", "[QEMU-DBG] ELF load result:", "[BOOT-FRAME]"];
 const BUTTON_CLICK_HOLD_MS = 250;
 const BUTTON_CLICK_SETTLE_MS = 50;
-const GEOLOCATION_TIMEOUT_MS = 2500;
-const GEOLOCATION_MAXIMUM_AGE_MS = 5 * 60 * 1000;
 
 const formatByteSize = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
@@ -34,13 +32,6 @@ const formatByteSize = (bytes: number) => {
 };
 
 type PanelDisplayMode = "fit" | "1x" | "2x";
-
-const TAIPEI_HOST_LOCATION: SimulatorHostLocation = {
-  name: "Taipei",
-  timezone: "Asia%2FTaipei",
-  latitude: 25.033,
-  longitude: 121.5654,
-};
 
 type StatusState = { kind: "message"; text: string } | { kind: "translation"; key: SimulatorTranslationKey };
 type SdBusyState = "idle" | "refresh" | "write" | "read" | "delete" | "backup" | "restore";
@@ -56,43 +47,6 @@ const boardButtonIdByLabel = (
       accepted.has(key.label.trim().toLowerCase()) ||
       (key.aliases ?? []).some((alias) => accepted.has(alias.trim().toLowerCase())),
   )?.id ?? fallbackId;
-};
-
-const timezoneForFirmware = (timezone: string | undefined) => {
-  const trimmed = timezone?.trim();
-  return trimmed ? trimmed.replace(/\//g, "%2F") : TAIPEI_HOST_LOCATION.timezone;
-};
-
-const resolveHostLocation = (): Promise<SimulatorHostLocation> => {
-  if (!navigator.geolocation) {
-    return Promise.resolve(TAIPEI_HOST_LOCATION);
-  }
-
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-          resolve(TAIPEI_HOST_LOCATION);
-          return;
-        }
-        resolve({
-          name: "Host Location",
-          timezone: timezoneForFirmware(Intl.DateTimeFormat().resolvedOptions().timeZone),
-          latitude,
-          longitude,
-        });
-      },
-      () => {
-        resolve(TAIPEI_HOST_LOCATION);
-      },
-      {
-        enableHighAccuracy: false,
-        timeout: GEOLOCATION_TIMEOUT_MS,
-        maximumAge: GEOLOCATION_MAXIMUM_AGE_MS,
-      },
-    );
-  });
 };
 
 type SimulatorDevicePaneProps = {
@@ -283,7 +237,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const quickStartSim = async () => {
     setError(null);
     try {
-      const hostLocation = await resolveHostLocation();
+      const hostLocation = createSimulatedLocation();
       const firmwarePath = selectedFirmwarePath;
       const res = await hostBridge.startSim(board.id, firmwarePath, hostLocation);
       setStatus({ kind: "message", text: `start_sim: ${res}` });
@@ -310,7 +264,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         return;
       }
 
-      const hostLocation = await resolveHostLocation();
+      const hostLocation = createSimulatedLocation();
       const res = await hostBridge.startSim(board.id, firmwarePath, hostLocation);
       setStatus({ kind: "message", text: `start_sim: ${res}` });
       if (res === "started" || res === "already_running") {
@@ -529,7 +483,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
       setRunning(false);
       setStatus({ kind: "translation", key: "statusResetRebooting" });
       const firmwarePath = firmwarePathRef.current;
-      const hostLocation = await resolveHostLocation();
+      const hostLocation = createSimulatedLocation();
       const res = await hostBridge.fullRebootSim(board.id, firmwarePath, hostLocation);
       setStatus({ kind: "message", text: `reset_sim: ${res}` });
       if (res.startsWith("started") || res.startsWith("already_running")) {
@@ -1056,6 +1010,9 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         </span>
         <span className="pds-statusbar__item">
           {t("statusSdLabel")}: {sdRoot || t("statusSdResolving")}
+        </span>
+        <span className="pds-statusbar__item" data-simulated-location="London" title="Europe/London · 51.5074, -0.1278">
+          {t("simulatedLocationLabel")}: London
         </span>
         <span className="pds-statusbar__item ide-statusbar__keys">
           {t("statusKeysLabel")}: {t("statusKeysHelp")}
