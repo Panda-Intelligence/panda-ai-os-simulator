@@ -85,12 +85,15 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   const pressedPointerButtonsRef = useRef<Set<number>>(new Set());
   const t = (key: SimulatorTranslationKey) => simulatorT(locale, key);
   const statusText = status.kind === "message" ? status.text : t(status.key);
+  const statusLabel = status.kind === "translation" && status.key === "statusRuntimeUnavailable" ? "NA" : statusText;
   const hostBridge = resolvedHostBridge;
   const browserSdAvailable = sdRoot.includes("Browser sandbox");
   const browserSdTransferAvailable = browserSdAvailable
     && typeof hostBridge.exportSdImage === "function"
     && typeof hostBridge.importSdImage === "function";
   const firmwareCatalogAvailable = typeof hostBridge.listFirmwareOptions === "function";
+  const matchingFirmware = firmwareOptions.filter((option) => option.boardId === board.id);
+  const launchAvailable = !firmwareCatalogAvailable || matchingFirmware.some((option) => option.path === selectedFirmwarePath);
   const panelDisplayScale = panelDisplayMode === "1x" ? 1 : panelDisplayMode === "2x" ? 2 : 0;
   const mainClassName = panelDisplayMode === "1x" ? "ide-main ide-main--display-one-to-one" : "ide-main";
   const deviceStageClassName = panelDisplayScale > 0
@@ -173,10 +176,17 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
       setSelectedFirmwarePath("");
       return () => { cancelled = true; };
     }
+    setFirmwareOptions([]);
+    setSelectedFirmwarePath("");
     void hostBridge.listFirmwareOptions(board.id)
       .then((options) => {
         if (cancelled) return;
+        options = options.filter((option) => option.boardId === board.id);
         setFirmwareOptions(options);
+        setStatus((current) => options.length === 0
+          ? { kind: "translation", key: "statusRuntimeUnavailable" }
+          : current.kind === "translation" && current.key === "statusRuntimeUnavailable"
+            ? { kind: "translation", key: "statusIdle" } : current);
         setSelectedFirmwarePath((current) => options.some((option) => option.path === current)
           ? current
           : (options[0]?.path ?? ""));
@@ -185,6 +195,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         if (!cancelled) {
           setFirmwareOptions([]);
           setSelectedFirmwarePath("");
+          setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
         }
       });
     return () => { cancelled = true; };
@@ -235,6 +246,10 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   }, [logLines]);
 
   const quickStartSim = async () => {
+    if (!launchAvailable) {
+      setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
+      return;
+    }
     setError(null);
     try {
       const hostLocation = createSimulatedLocation();
@@ -304,7 +319,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
   };
 
   const handleBoardChange = (nextBoardId: string) => {
-    if (running) return;
+    if (running || nextBoardId === boardId) return;
     const nextBoard = getSimulatorBoard(nextBoardId);
     setBoardId(nextBoard.id);
     firmwarePathRef.current = "";
@@ -656,7 +671,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
         </div>
         <div className="ide-titlebar__actions" aria-label={t("runControlsAria")}>
           {!running ? (
-            <button className="pds-btn pds-btn--primary" onClick={quickStartSim}>
+            <button className="pds-btn pds-btn--primary" disabled={!launchAvailable} onClick={quickStartSim}>
               {t("buttonQuickLaunch")}
             </button>
           ) : (
@@ -700,7 +715,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
             <section className="ide-sidebar__group ide-session-summary">
               <div className="ide-session-summary__row">
                 <span className={running ? "ide-statusbar__dot ide-statusbar__dot--on" : "ide-statusbar__dot"} aria-hidden="true" />
-                <strong>{statusText}</strong>
+                <strong title={statusText}>{statusLabel}</strong>
               </div>
               <span className="ide-session-summary__firmware">{firmwareName ?? t("firmwareQuickLaunch")}</span>
             </section>
@@ -783,7 +798,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
               <strong>{shortSimulatorBoardName(board)}</strong>
               <span>{summarizeSimulatorBoard(board)}</span>
             </div>
-            <span className={running ? "pds-pill pds-pill--running" : "pds-pill"}>{statusText}</span>
+            <span className={running ? "pds-pill pds-pill--running" : "pds-pill"} title={statusText} aria-label={statusText}>{statusLabel}</span>
           </div>
           <section className="ide-inspector__group">
             <div className="ide-inspector__group-head">
@@ -1006,7 +1021,7 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
       <footer className="pds-statusbar ide-statusbar">
         <span className="pds-statusbar__item">
           <span className={running ? "ide-statusbar__dot ide-statusbar__dot--on" : "ide-statusbar__dot"} aria-hidden="true" />
-          {statusText}
+          <span title={statusText}>{statusLabel}</span>
         </span>
         <span className="pds-statusbar__item">
           {t("statusSdLabel")}: {sdRoot || t("statusSdResolving")}

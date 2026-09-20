@@ -288,7 +288,12 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
         ? `${visual.physicalSizeMm.width}×${visual.physicalSizeMm.height}×${visual.physicalSizeMm.thickness}mm`
         : undefined}
     >
-      {visual.hangingEar ? <span className="panel-hanging-ear" aria-hidden="true" /> : null}
+      {visual.hangingEar ? (
+        <svg className="panel-hanging-ear" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+          <path className="panel-hanging-ear__neck" d="M32 0H68V24H32Z" />
+          <circle className="panel-hanging-ear__ring" cx="50" cy="54" r="36" />
+        </svg>
+      ) : null}
       {visual.family === "t5s3" ? <span className="panel-front-home-ring" aria-hidden="true" /> : null}
       <span className="panel-device-mark" aria-hidden="true">{visual.modelLabel}</span>
       <div className="panel-screen-frame">

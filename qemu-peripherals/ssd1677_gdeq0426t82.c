@@ -343,7 +343,7 @@ static void ssd1677_reset_inbound_frame(SSD1677State* s) {
 }
 
 static void ssd1677_inject_touch(const uint8_t* payload, uint32_t len) {
-  if (!mofei_sim_board_is_lilygo_t5s3_pro()) {
+  if (!mofei_sim_board_uses_gt911()) {
     ft6336u_inject_touch(payload, len);
     return;
   }
