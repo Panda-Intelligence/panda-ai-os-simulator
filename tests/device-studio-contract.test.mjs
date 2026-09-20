@@ -53,4 +53,9 @@ test("official-reference skins carry public physical dimensions and structures",
   assert.match(panelSource,/panel-hanging-ear/);
   assert.match(panelSource,/panel-front-home-ring/);
   assert.match(panelSource,/RST/);
+  assert.match(panelSource,/screenDiagonalMm/);
+  assert.match(panelSource,/screenWidthRatio/);
+  assert.match(panelSource,/screenHeightRatio/);
+  assert.match(panelSource,/--panel-screen-width-ratio/);
+  assert.match(panelSource,/--panel-screen-height-ratio/);
 });
