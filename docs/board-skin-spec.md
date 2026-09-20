@@ -43,7 +43,7 @@ active-screen opening is calculated from the 4.7-inch diagonal and panel aspect.
 Rendered structure:
 - light-silver front bezel with dark 11 mm edge treatment,
 - circular lower front touch/power mark,
-- four-control side rail in official logical order,
+- right-side RST/PWR and left-side BOOT/IO48, viewed from the front,
 - USB-C and TF edge slots,
 - LILYGO model mark and thicker industrial body.
 
@@ -53,3 +53,6 @@ These skins reproduce public dimensions and visible structural cues. They are
 not CAD, manufacturing drawings, trademark artwork, or a simulation of physical
 e-paper reflectance. Framebuffer dimensions, touch mapping and QEMU peripheral
 behavior remain controlled by the board registry.
+
+Button centers, edge assignment, reference images, calibration uncertainty and
+interaction regression details are in [button-alignment.md](button-alignment.md).

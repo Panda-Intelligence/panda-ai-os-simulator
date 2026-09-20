@@ -1,4 +1,5 @@
 import { romClockLoaderArgs, installUc8253cDevice, uc8253cRgbaToWire } from "./browserQemuPlatform.js";
+import { prepareSimulatedLocationImage } from "./simulatorLocation.ts";
 import { readSdImage, validateSdImageBytes, writeSdImage } from "../public/simulator-runtime/sd-card-store.js";
 import createFatFs, * as FatFs from "js-fatfs";
 import fatFsWasmUrl from "js-fatfs/dist/fatfs.wasm?url";
@@ -192,9 +193,11 @@ async function startRuntime(command) {
     if (sdImage?.templateConflict) {
       throw new Error("browser_sd_card_template_conflict");
     }
+    await prepareSimulatedLocationImage(sdImage, withFatFileSystem, writeFatFile);
     qemuInstance = await loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage);
     startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null, clockArgs);
     running = true;
+    log("[browser-qemu] simulated location: London (Europe/London); no host geolocation requested");
     log(`[browser-qemu] qemu-wasm runtime loaded for board=${lastBoardId}`);
     log(`[browser-qemu] firmware artifact=${firmwareUrl || "default"}`);
     log(`[browser-qemu] kernel artifact=${kernelUrl || "default"}`);

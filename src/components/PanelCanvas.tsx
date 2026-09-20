@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { SimulatorFramebufferEvent, SimulatorHostBridge } from "../simulatorBridge";
 import { getSimulatorBoardVisual, type SimulatorBoard } from "../boards";
+import { getPhysicalControls } from "../boardPhysicalControls";
+import { PhysicalDeviceKey } from "./PhysicalDeviceKey";
 
 const TOUCH_DOWN = 1;
 const TOUCH_MOVE = 2;
@@ -270,20 +272,10 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
     void hostBridge.injectButton(buttonId, pressed).catch(() => false);
   };
 
-  const physicalControls: Array<{ key: string; label: string; buttonId?: number; reset?: boolean }> =
-    board.id === "lilygo-t5s3-pro"
-      ? [
-          { key: "rst", label: "RST", reset: true },
-          ...["BOOT", "IO48", "PWR"].flatMap((label) => {
-            const match = board.keyMap.find((key) => key.label.toUpperCase() === label);
-            return match ? [{ key: `key-${match.id}`, label: match.label, buttonId: match.id }] : [];
-          }),
-        ]
-      : board.keyMap.map((key) => ({
-          key: `key-${key.id}`,
-          label: key.label,
-          buttonId: key.id,
-        }));
+  const calibratedControls = getPhysicalControls(board);
+  const physicalControls = board.keyMap.map(key => ({
+    key: `key-${key.id}`, label:key.label, buttonId:key.id, reset:false,
+  }));
 
   return (
     <div
@@ -317,7 +309,10 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
         />
       </div>
       <div className="panel-physical-keys" aria-label="Physical device keys">
-        {physicalControls.map((control, index) => (
+        {calibratedControls ? calibratedControls.map(control => (
+          <PhysicalDeviceKey key={`${board.id}:${control.name}`} control={control}
+            injectButton={hostBridge.injectButton} onReset={onReset}/>
+        )) : physicalControls.map((control, index) => (
           <button
             key={control.key}
             type="button"
@@ -363,11 +358,6 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
               <span>{port}</span>
             </span>
           ))}
-        </div>
-      ) : null}
-      {visual.family === "t5s3" ? (
-        <div className="panel-lilygo-side-legend" aria-hidden="true">
-          <span>RST</span><span>BOOT</span><span>IO48</span><span>PWR</span>
         </div>
       ) : null}
     </div>
