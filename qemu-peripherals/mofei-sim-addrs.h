@@ -29,6 +29,11 @@ static inline bool mofei_sim_board_is_lilygo_t5s3_pro(void) {
 }
 static inline bool mofei_sim_board_is_m5papers3(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_M5PAPERS3; }
 
+/* Both boards read GT911 registers through the same bounded I2C model. */
+static inline bool mofei_sim_board_uses_gt911(void) {
+  return mofei_sim_board_is_lilygo_t5s3_pro() || mofei_sim_board_is_m5papers3();
+}
+
 #define MOFEI_LILYGO_FRAMEBUFFER_WIDTH 540u
 #define MOFEI_LILYGO_FRAMEBUFFER_HEIGHT 960u
 #define MOFEI_LILYGO_GRAY16_PIXELS_PER_BYTE 2u
