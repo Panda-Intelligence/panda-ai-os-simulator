@@ -52,3 +52,23 @@ for(const kind of ["bad-digest","bad-provenance","bad-geometry","bad-gzip-size",
     }finally{rmSync(f.root,{recursive:true,force:true});}
   });
 }
+
+for (const required of ["all", "mofei,m5papers3", "unknown", "mofei,mofei"]) {
+  test(`required board gate refuses ${required} before replacing a package`, () => {
+    const f = fixture();
+    try {
+      packageExistingRuntime(f);
+      const before = readFileSync(join(f.outputDir, "manifest.json"));
+      assert.throws(() => packageExistingRuntime({...f, requireBoards: required}), /required_boards|invalid_required/);
+      assert.deepEqual(readFileSync(join(f.outputDir, "manifest.json")), before);
+    } finally { rmSync(f.root, {recursive:true, force:true}); }
+  });
+}
+test("an explicit available board subset passes without fabricating other guests", () => {
+  const f = fixture();
+  try {
+    packageExistingRuntime({...f, requireBoards:"mofei"});
+    const manifest = JSON.parse(readFileSync(join(f.outputDir,"manifest.json")));
+    assert.deepEqual(Object.keys(manifest.runtime.firmwareArtifacts), ["mofei"]);
+  } finally { rmSync(f.root,{recursive:true,force:true}); }
+});

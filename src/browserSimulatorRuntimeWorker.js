@@ -1,3 +1,4 @@
+import { romClockLoaderArgs, installUc8253cDevice, uc8253cRgbaToWire } from "./browserQemuPlatform.js";
 import { readSdImage, validateSdImageBytes, writeSdImage } from "../public/simulator-runtime/sd-card-store.js";
 import createFatFs, * as FatFs from "js-fatfs";
 import fatFsWasmUrl from "js-fatfs/dist/fatfs.wasm?url";
@@ -29,6 +30,7 @@ let runtimeManifest = null;
 let qemuModulePromise = null;
 let qemuInstance = null;
 const qemuPty = createBrowserQemuPty();
+
 let running = false;
 let lastBoardId = "mofei";
 let activeSdCard = null;
@@ -185,12 +187,13 @@ async function startRuntime(command) {
     const otaData = await fetchOtaData(boardArtifacts?.otaData || manifest.qemuOtaData);
     const flashImage = buildFlashImage({ bootloader, partitionTable, otaData, firmware });
     const rom = await fetchRom(manifest.qemuRom);
+    const clockArgs = romClockLoaderArgs(rom.bytes);
     const sdImage = await loadEditableSdCard(manifest, lastBoardId);
     if (sdImage?.templateConflict) {
       throw new Error("browser_sd_card_template_conflict");
     }
     qemuInstance = await loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage);
-    startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null);
+    startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null, clockArgs);
     running = true;
     log(`[browser-qemu] qemu-wasm runtime loaded for board=${lastBoardId}`);
     log(`[browser-qemu] firmware artifact=${firmwareUrl || "default"}`);
@@ -397,7 +400,7 @@ function subscribe(listeners, listener) {
   };
 }
 
-function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
+function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath, clockArgs) {
   if (!instance || typeof instance.callMain !== "function") {
     throw new Error("qemu module loaded without callMain");
   }
@@ -408,7 +411,7 @@ function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
     "-smp",
     "1",
     "-chardev",
-    "null,id=mofei",
+    lastBoardId === "s37uc" ? "file,id=mofei,path=/dev/panda-uc8253c" : "null,id=mofei",
     "-display",
     "none",
     "-serial",
@@ -418,6 +421,12 @@ function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
     "-L",
     "/mofei",
   ];
+  if (lastBoardId === "s37uc") installUc8253cDevice(instance.FS, (channel, flags, bytes) => {
+    if (channel === IPC_FRAMEBUFFER_CHANNEL) emitFramebuffer(flags, bytes, true);
+    else if (channel === IPC_CONTROL_CHANNEL) postMessage({type:"peripheralControl",payload:Array.from(bytes)});
+    else if (channel === 8) log(new TextDecoder().decode(bytes));
+  });
+  args.push(...clockArgs);
   args.push("-kernel", firmwarePath);
   if (flashImagePath) {
     args.push("-drive", `file=${flashImagePath},if=mtd,format=raw`);
@@ -1437,7 +1446,7 @@ function framebufferProfile(boardId) {
   return { width: 800, height: 480, format: "mono1" };
 }
 
-function emitFramebuffer(flags, framebuffer) {
+function emitFramebuffer(flags, framebuffer, portraitUc = false) {
   const { width, height, format } = framebufferProfile(lastBoardId);
   const expectedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
   if (framebuffer.length !== expectedBytes) {
@@ -1446,7 +1455,9 @@ function emitFramebuffer(flags, framebuffer) {
     );
     return;
   }
-  const rgba = format === "gray16" ? gray16ToRgba(framebuffer, width, height) : oneBitToRgba(framebuffer, width, height);
+  const rgba = portraitUc
+    ? uc8253cRgbaToWire(oneBitToRgba(framebuffer, 240, 416))
+    : format === "gray16" ? gray16ToRgba(framebuffer, width, height) : oneBitToRgba(framebuffer, width, height);
   postMessage({
     type: "framebuffer",
     payload: {

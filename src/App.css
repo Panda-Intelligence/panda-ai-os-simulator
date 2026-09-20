@@ -951,23 +951,6 @@ body,
   box-shadow: 1px 1px 2px rgba(0,0,0,.25);
 }
 
-.panel-hanging-ear {
-  position: absolute;
-  z-index: 3;
-  bottom: -12px;
-  left: 50%;
-  width: 38px;
-  height: 13px;
-  border: 2px solid #c7c8c6;
-  border-top: 0;
-  border-radius: 0 0 10px 10px;
-  background:
-    radial-gradient(ellipse at center, transparent 0 42%, #bfc0be 44% 56%, transparent 58%),
-    linear-gradient(#ecece8, #d4d5d2);
-  box-shadow: 0 3px 4px rgba(0,0,0,.18);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
 
 .panel-shell--papers3 .panel-edge-ports {
   right: auto;
@@ -1163,14 +1146,6 @@ body,
   font-size: clamp(6px, 1.05vh, 9px);
 }
 
-.panel-hanging-ear {
-  bottom: -4.5%;
-  width: 31%;
-  height: 5.4%;
-  min-height: 10px;
-  border-width: 1.5px;
-  border-radius: 0 0 11px 11px;
-}
 
 .panel-shell--papers3 .panel-edge-ports {
   inset: 0;
@@ -1281,4 +1256,42 @@ body,
 .panel-shell--t5s3.panel-shell--fixed-scale .panel-screen-frame {
   width: var(--panel-canvas-width);
   height: var(--panel-canvas-height);
+}
+
+/* A single square SVG coordinate system prevents circle/center drift. PaperS3's
+   bottom hook is not an input button; its side PWR remains the physical input. */
+.panel-hanging-ear {
+  position: absolute;
+  z-index: 3;
+  top: 100%;
+  left: 50%;
+  display: block;
+  width: 14%;
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+  transform: translate(-50%, -20%);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 18%));
+}
+.panel-hanging-ear__neck { fill: #d4d5d2; }
+.panel-hanging-ear__ring {
+  fill: none;
+  stroke: #c1c3bf;
+  stroke-width: 10;
+}
+.panel-shell--papers3:not(.panel-shell--fixed-scale) {
+  height: 88%;
+  max-height: 88%;
+}
+/* Let fixed-pixel modes scroll past the hook rather than clip its lower edge. */
+.panel-shell--papers3.panel-shell--fixed-scale { margin-bottom: 90px; }
+.ide-inspector__header > .pds-pill {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  white-space: nowrap;
+  line-height: 1.2;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
