@@ -38,7 +38,7 @@ fi
 FIRMWARE_INPUT_DIR="${QEMU_WASM_FIRMWARE_DIR:-}"
 ARTIFACT_MANIFEST="${OUTPUT_DIR}/qemu-wasm-artifacts.json"
 JOBS="${QEMU_WASM_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
-QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v2"
+QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v3-gt911"
 export QEMU_WASM_RUNTIME_REVISION
 CONTAINER_STARTED=0
 CONTAINER_ID=""

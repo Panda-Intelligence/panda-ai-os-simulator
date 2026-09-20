@@ -39,6 +39,7 @@ try {for(const id of boards){
   }
   report.probe=await page.evaluate(()=>({...window.__guestProbe,status:document.querySelector('.pds-pill')?.textContent}));
   assert.ok(report.probe.frames>0,'no actual worker framebuffer');
+  assert.equal(report.probe.geolocationAccess,0,'must use simulated London, not host location');
   assert.equal(errors.length,0);assert.deepEqual(external,[]);
   assert.ok(!report.probe.runtimeErrors.some(e=>/Assertion failed|abort\(|out of bounds|qemu_wasm_start_failed/.test(e)),'runtime fatal error');
   await page.waitForFunction(()=>{
