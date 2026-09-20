@@ -53,3 +53,10 @@ test("native and WASM machine graphs attach SPI SD exactly once and wire CS47",(
   assert.match(s,/!mofei_sim_board_is_lilygo_t5s3_pro\(\) && !mofei_sim_board_is_m5papers3\(\)/);
  }
 });
+
+test("native mirror patches remain syntactically applicable after hardware edits",()=>{
+ for(const file of ["esp32s3-soc-machine.patch","xtensa-reset-vector.patch"]){
+  const result=spawnSync("git",["apply","--numstat",join(root,"qemu-peripherals",file)],{encoding:"utf8",timeout:10000});
+  assert.equal(result.status,0,result.stdout+result.stderr);assert.ok(result.stdout.length>0);
+ }
+});

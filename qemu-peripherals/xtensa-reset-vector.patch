@@ -8255,7 +8255,7 @@ index b511e86..9d9090a 100644
      if (op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
          for (slot = 0; slot < slots; ++slot) {
              if (slot_prop[slot].ops->op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
-@@ -1063,1175 +1843,1843 @@ static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
+@@ -1063,1176 +1843,1844 @@ static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
              }
          }
      }
@@ -10974,7 +10974,7 @@ index b511e86..9d9090a 100644
  #endif
  }
  
-@@ -2240,432 +3651,337 @@ static void translate_simcall(DisasContext *dc, const OpcodeArg arg[],
+@@ -2240,432 +3652,337 @@ static void translate_simcall(DisasContext *dc, const OpcodeArg arg[],
   * Note: 64 bit ops are used here solely because SAR values
   * have range 0..63
   */
@@ -11596,7 +11596,7 @@ index b511e86..9d9090a 100644
  
  gen_translate_xsr(acchi)
  gen_translate_xsr(ccompare)
-@@ -6125,499 +7441,366 @@ const XtensaOpcodeTranslators xtensa_core_opcodes = {
+@@ -6125,499 +7442,366 @@ const XtensaOpcodeTranslators xtensa_core_opcodes = {
      .opcode = core_ops,
  };
  
@@ -12363,7 +12363,7 @@ index b511e86..9d9090a 100644
  }
  
  static const XtensaOpcodeOps fpu2000_ops[] = {
-@@ -6625,206 +7808,247 @@ static const XtensaOpcodeOps fpu2000_ops[] = {
+@@ -6625,206 +7809,247 @@ static const XtensaOpcodeOps fpu2000_ops[] = {
          .name = "abs.s",
          .translate = translate_abs_s,
          .coprocessor = 0x1,
@@ -12653,7 +12653,7 @@ index b511e86..9d9090a 100644
          .name = "wur.fsr",
          .translate = translate_wur_fpu2k_fsr,
          .par = (const uint32_t[]){FSR},
-@@ -6837,299 +8061,244 @@ const XtensaOpcodeTranslators xtensa_fpu2000_opcodes = {
+@@ -6837,299 +8062,244 @@ const XtensaOpcodeTranslators xtensa_fpu2000_opcodes = {
      .opcode = fpu2000_ops,
  };
  
@@ -13122,7 +13122,7 @@ index b511e86..9d9090a 100644
  }
  
  static const XtensaOpcodeOps fpu_ops[] = {
-@@ -7137,529 +8306,638 @@ static const XtensaOpcodeOps fpu_ops[] = {
+@@ -7137,529 +8307,638 @@ static const XtensaOpcodeOps fpu_ops[] = {
          .name = "abs.d",
          .translate = translate_abs_d,
          .coprocessor = 0x1,
