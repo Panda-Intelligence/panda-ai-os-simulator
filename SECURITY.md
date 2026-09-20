@@ -1,8 +1,9 @@
 # Security
 
 Keep suspected credentials, private books and device logs out of public issues.
-Before publication, configure and verify GitHub private vulnerability reporting;
-no unverified security email address is advertised by this candidate.
+Before enabling public issue intake, configure and verify GitHub private
+vulnerability reporting; no unverified security email address is advertised by
+this repository.
 
 Do not run arbitrary guests against production Cloud credentials. Browser
 imports remain local unless a future explicitly consented feature says otherwise.

@@ -1,8 +1,9 @@
 # Official-reference board skins
 
-The simulator keeps the current repository license. Official product images are
+Panda-owned simulator code is licensed under MIT. Official product images are
 used only as implementation references; the repository ships CSS-rendered skins,
-not copied product photography.
+not copied product photography. Reference assets and third-party materials
+retain their applicable rights and notices.
 
 ## M5Stack PaperS3
 

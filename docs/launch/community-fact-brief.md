@@ -1,6 +1,8 @@
 # Community preparation facts — not a ready-to-post HN submission
 
-Current status: private extraction candidate; no public site/release.
+Current status: open-source simulator repository; the standalone Worker is
+deployed at https://simulator.pandacat.ai/. This fact brief is not a ready-to-
+post release announcement.
 Original base: Murphy develop 972e16c3e0fc7d45097454a5eb5e99d40ca2cd3f.
 Architecture: React UI → host bridge → browser Worker/QEMU-WASM or native
 Tauri/headless/QEMU. Real guest-origin framebuffer events only. Simulator code,

@@ -1,5 +1,7 @@
 {
   "schemaVersion": 1,
+  "sourceLicense": "MIT",
+  "sourceLicenseScope": "Panda-owned simulator code only; imported upstream and runtime materials retain separate terms",
   "publicReleaseApproved": false,
   "approvedBy": null,
   "approvalEvidence": null,
@@ -10,217 +12,217 @@
       "path": ".gitignore",
       "sourceSha256": "e5fc66a46d49d2d0de325a4b062da59508e41b90240aa6d2bf7df41fb384b07b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "README.md",
       "sourceSha256": "053f343dbdcadfefaed7c7974384941346fbf9379ea059ce05f94e4d72310e08",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "boards.json",
       "sourceSha256": "9128b019715c3ba13effb34987d1767a77968719ebf5de8c50c15acad9334580",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "boards.schema.json",
       "sourceSha256": "d3c6a9b4cb90a9b765a6907f0445ef018d0c3f0f728e6814754279b46347970a",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "docs/lilygo-runtime.md",
       "sourceSha256": "69f2568418b502b2b4d36d770096bdfe20b06419eff5669f1d8030db446c21b8",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/.gitkeep",
       "sourceSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/hello_uart/esp32s3.ld",
       "sourceSha256": "2d0eae55dc8e3cf13c5a656789fdc6a94f46e0f71d25f147a6e983b204b45e1a",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/hello_uart/hello_uart.c",
       "sourceSha256": "84f1d691c17d67c888fc526515435f8976e054b107cd3c939551a45739befee3",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/hello_uart/start.S",
       "sourceSha256": "b5c93b8a9c5dd63b7d415800cccda2618cf70e6af17d702808fd0c51b186201d",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/sim_test.cpp",
       "sourceSha256": "5d28db9a0c2f13d4e3e316e25b02752c2da3aee79af49ffb71de88ff235b5315",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/sim_test/esp32s3.ld",
       "sourceSha256": "8b4af48c14c6f390251bff6185e0b4490372927f42d613503c834684429a5e01",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "firmware-fixtures/sim_test/start.S",
       "sourceSha256": "a7a4bc12fba4e0ee744dddb5c3671de948f5ea891b34f6c370707a54d8f18404",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/Cargo.lock",
       "sourceSha256": "5eb0338990b3215a792341cf8203d9bc265ba0b0647d3f6ecfd5c8701af7347a",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/Cargo.toml",
       "sourceSha256": "6c11cfd8d9093ee129b1bf4ec134b5dc61dbcc1e5c3d757c6b9c48bed55c3f8b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/src/bin/create_sd_image.rs",
       "sourceSha256": "ba8b62b354d3614b152232e843e1d40aa474c496e559ddc31462e3370b576f00",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/src/debug_transport.rs",
       "sourceSha256": "768c673f4b6fa9648f46503969dae32f12d4489bdaaf3d7abea8d9487d594553",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/src/lib.rs",
       "sourceSha256": "e0c69cbe23a7125a6aa0da859c9aa97bed5114b62474ad89efab47b7aad4e5d7",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/src/main.rs",
       "sourceSha256": "7d89dc4f68e889d0e3653d426dceab0f83c64ff4c24adb42b728d2add3756f22",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "headless/src/sd_image.rs",
       "sourceSha256": "ad2a45afa84f1c0d6dd6590ea89e00fca8d529b53c38616334feb78cdbe26d29",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "index.html",
       "sourceSha256": "dd78c9e2581cb104843077f6449e8e822f62f103ce56b83a41885e9e974286d3",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "package-lock.json",
       "sourceSha256": "7f88477501f6f23e5b900a46c624547f2063d53da82858a9a6327b3e7dd8d4ba",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "package.json",
       "sourceSha256": "3a9fb4a0f0cc4f0eed6356e9aed15cb34f085a87c6adea11b0d528f4778e21b7",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "public/simulator-runtime/browser-simulator-worker.js",
       "sourceSha256": "4edcc75ef5a4f613dfaa5a7b67881cf337035f53f345b61c5c2aec51f605eec9",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "public/tauri.svg",
       "sourceSha256": "e5d2738bbaa5543c4684001a558dc53165da9b636144827b28db1dcfacf81aa8",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "public/vite.svg",
       "sourceSha256": "4a748afd443918bb16591c834c401dae33e87861ab5dbad0811c3a3b4a9214fb",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/.clang-format",
       "sourceSha256": "430c1e7bad264f5dca165ccc852871e659ba57059a88a54ac20a8f632f21c938",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/INTEGRATION.md",
       "sourceSha256": "6616c4910a3ec0128a67425102193a61875822292bc367a8e757d7889186fc85",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/README.md",
       "sourceSha256": "2a1ee55076c2ca52abd1dd10f63aae1b7451013f5184a24f4b6a3e93a272b49e",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/chsc6440.c",
       "sourceSha256": "67e6081a345468b8c6a3d2e8e7948e7e20db80fcbb43da78c6bf8987a3aa8226",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/display-Kconfig.fragment",
       "sourceSha256": "a34715e9f494cfa8c19554ddb15cf3a0a83a7f9113a2ab5e9224fe59663412c5",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/display-meson.fragment",
       "sourceSha256": "a217e606c7e4f307a202b310b800c6826c2f51e6d53953f647e10a79f0be4c50",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
@@ -234,28 +236,28 @@
       "path": "qemu-peripherals/esp32_gpio.h",
       "sourceSha256": "960e174244ddd8ed639f273fb4d36cc30c1debdadc9cf9bd451ba3e362af1f4c",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/esp32_i2c.c",
       "sourceSha256": "574ee9aa118ed7002c15e54753da75fac0f9fead5028bbf5588423556d57608b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/esp32_i2c.h",
       "sourceSha256": "b4a6405dac46d81a4fd5731ab494e355992fabdda9a0538060d38589d30c3987",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/esp32s3-soc-machine.patch",
       "sourceSha256": "16723a0aa697420a4a055605a080eee1da0c3f5f47d50011a0d6090b6499d968",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
@@ -269,28 +271,28 @@
       "path": "qemu-peripherals/esp32s3_gpspi2.c",
       "sourceSha256": "d2e4219766fd0ab5539b52129e57a306e0488b9f8cf1e70af2ebf957820510e4",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/ft6336u.c",
       "sourceSha256": "6969d276f2b4c2fb4889fe2b966c1340d9a1667e850c903246beb2d63019bdb8",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/gpspi2-Kconfig.fragment",
       "sourceSha256": "317bd08e5ae8faf08e540e7437620b90d287ad4ffcff64b1ff410c3c3da2d90a",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/gpspi2-meson.fragment",
       "sourceSha256": "5459a217761b1ec0bde952bdf74a0ca0da37643ca9f9b206e2a3fca23e043c39",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
@@ -304,595 +306,595 @@
       "path": "qemu-peripherals/lilygo_bq27220.c",
       "sourceSha256": "175dcda184d107b41cf49233b7b2717d6bf4bf4b1128c4fe7a573453a0d70a23",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_bq27220.h",
       "sourceSha256": "9550dd127f6fa0ab7be78780d6e2059e75ebc15ea69a11ce47954e70d763d8f9",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_display_input.c",
       "sourceSha256": "ebee3c4caf07f31e6136ea9803de47841c53b9793eccca696d803df5276888e3",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_display_input.h",
       "sourceSha256": "73706297cfe86125fa0e263db077ef6bd76ed89c7407beeddf8e1048948530ff",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_gnss_chardev.c",
       "sourceSha256": "bba88d356b777042356a79c33ff6b679f288f6e7198fcc8dfdaf650929f06ce9",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_gnss_chardev.h",
       "sourceSha256": "3c70a123826103bc1f1f827dcfaf11045d31e559ba0b681131c44b5ea0164e0c",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_gnss_uart.c",
       "sourceSha256": "cfa3fb5553bc8efed98ba0354921ecfff1874547be52afd6704579463cf1bb66",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_gnss_uart.h",
       "sourceSha256": "ce894f3c0df55edd0fd6162b11e3bc4bac5c159e5597c7a624446e022186fa98",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_i2c_probe.c",
       "sourceSha256": "d1aea93a142974e37c322b4078a701c32a0b7337e02bcd5506ab11bafd812049",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_i2c_probe.h",
       "sourceSha256": "7c699dd0a781946e4e9464e7a402149ffc98e4887186399a4707dafd3c452686",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_peripheral_control.c",
       "sourceSha256": "da0d6d3e5f4c90879405de5b4a648e69afbb02d6dc48372a569422ccbe5f1192",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_peripheral_control.h",
       "sourceSha256": "db2762a6552026589d59a96a76c03863bd0d41eb8b48e7c66a9d564e861c3038",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_power_rtc.c",
       "sourceSha256": "f30147698f00ba312d482ed23e3c6d62d855f089a3f41516a77428a0e5bae283",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_power_rtc.h",
       "sourceSha256": "ef95d924a5951802ec740ba0c6ae7d0b5e7a1e27e3f4b293c536d07ae905fef9",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_sx1262.c",
       "sourceSha256": "0520ec6fdd70e5d9cb6769c0b7365fc17261bc0547f547b38368a4cd51ca1630",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/lilygo_sx1262.h",
       "sourceSha256": "ab14f1ea4f5372fb7d18c550e42d910d3c0656161de9a44f4ae38ac3d27b402a",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/mofei-sim-addrs.h",
       "sourceSha256": "a9b6f4888b294c40106edc8616ac479b2a6fc41b45fa9ae6cdde9318741d2da7",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/sd.c",
       "sourceSha256": "2bcaa4c791ff2559eb3022f6088a249dd974e9318cfbcef6b22fd7dc5fce65ea",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/sensor-Kconfig.fragment",
       "sourceSha256": "2346140158a2f38b5152d44110f91c22bc3bbba0c48b4906e962180ba6b269fb",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/sensor-meson.fragment",
       "sourceSha256": "35a85cd3aa57eb01b73bbb06c7f3f7d96bb8f40fa8fa2b3f9ef049f662d0cb14",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/ssd1677_gdeq0426t82.c",
       "sourceSha256": "b73ce5d8d872230271f5752bef18665c971589da3de15e667d9622da888eb553",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/target_xtensa_exc_helper.c",
       "sourceSha256": "b286dde3f6ea825345f6c25489ab30d46bb128d912197eb9fdec1dce63cffe21",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/target_xtensa_exc_helper_stub.c",
       "sourceSha256": "8c9158dc68b69dcac67ea7adde11ed575f9cdcca117bc03bd150239013a53e2e",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/target_xtensa_helper.h",
       "sourceSha256": "bc32cfa9825125e4a366968b51b4650694ae8293ec3631f3d65ddc8bd16c6a23",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/target_xtensa_translate.c",
       "sourceSha256": "a7139153527fb234c6d4d5de55e6e46e56d3e9730ee369fcfb526c376e49edd3",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/uc8253c.c",
       "sourceSha256": "65bfda6ac715d56d45bee5dcc989cd2133609e1cd78c9c42dd1882bb9b299836",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/xtensa-Kconfig.fragment",
       "sourceSha256": "4199b1d5c36c54703da15c0a2546a2b5a38582e21409f2668d3b2f9115423e69",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-peripherals/xtensa-reset-vector.patch",
       "sourceSha256": "74a6ef53a65e0e4c7bf1d3457405a6a270d7aac4a4532cb89b0113c0e0b39fe8",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "qemu-runtime.env",
       "sourceSha256": "8d66aa4ce9b77980a4cb91c7572b40482f2564bb1022d666d5fcad8a19f38a34",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "run",
       "sourceSha256": "dd52ccd73122526a81f55886c1028dd2423e303e3947bdc9a8f40d7ba4586d8b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/build-qemu-wasm.sh",
       "sourceSha256": "b5740cc0888aee5bca3e37ca3d99ac600d9c2e9e9a55d6e53d3637d3e9b86d05",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/build-qemu.sh",
       "sourceSha256": "a3c738317b90b37b857f1465b30b3f218b770f59718da771c64cb50172ee294c",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/build-sim-test",
       "sourceSha256": "39b80b2d73ab4c385656715bc378b3499b3d2495b5aa17b70fa1430b589f2f7f",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/check-browser-sd-card.mjs",
       "sourceSha256": "3f7ea3afe7b35c8d958958be53713f84bf69f92fa3f144874eff3d4900785812",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/check-framebuffer-contract.mjs",
       "sourceSha256": "8b2fa3586181576d0e5f4d04c7b724bde973c6c559e9522fb038d91c7b538a74",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/integrate-peripherals.sh",
       "sourceSha256": "a1a748dfc821cb4239360080e41d7bb44313582eca7a35dcf08fb32c81e776f8",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/qemu-wasm-mofei-bridge.js",
       "sourceSha256": "3be95a8602ab553abb0437d46b1292ca57fd3080c35971eccebfee0d0afe1515",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/sync-theme.mjs",
       "sourceSha256": "f4d205464082a7de2d3bc17056b9213b3ee1227fe170c78552ecd1ca85cd5eb8",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "scripts/write-qemu-wasm-artifact-manifest.mjs",
       "sourceSha256": "bc312982f405475dea3ed84b1e1f6df2a0bb1616f5271f6d4af551bcf41893f2",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/.gitignore",
       "sourceSha256": "88707cda7ba4226eda3ffa91d8284f1a0d12b827f06fb9bc48425cc0d4af04af",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/Cargo.lock",
       "sourceSha256": "af3854b043f78cc13cbe4d7acb25d55332871f46ce0844274800907683da292d",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/Cargo.toml",
       "sourceSha256": "c3431a2f8946de1a2a50db35848993897ddb001f0e21ed3d8459e9487563f0ca",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/build.rs",
       "sourceSha256": "487059eaf8a947b80f20a9aacac038a5047b2ad69d2401b827376c67d6fe847f",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/capabilities/default.json",
       "sourceSha256": "2d3380b5f539ea2927767f2f4511c6f4c0c51d8583dbb9bdf305c7888bf750f0",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/128x128.png",
       "sourceSha256": "19b4fec485db7df51a691fcce72a3dd6f983e754fc4262da7154e4a4c688f69e",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/128x128@2x.png",
       "sourceSha256": "6c7660390d65217fe8de0892862254f47aee77e0af7096c75b8bfe168c5403f7",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/32x32.png",
       "sourceSha256": "1c6782dc65c8111c12cbc1882a0fea5e71ab8e51b18da2ce9580f5c88860ed02",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square107x107Logo.png",
       "sourceSha256": "54f7a0f58c96a4b023c1edc4b53fc443e27dace50e345f6936fa29bc20f785ca",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square142x142Logo.png",
       "sourceSha256": "fec1e2080ca73cd4c4a123b23b1cd364059a8a8efeba3076e21dfefed390693b",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square150x150Logo.png",
       "sourceSha256": "65fb570cb0e61ffce02ad67784cb200a0bf058400300980a46fa0d0c8f43a77a",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square284x284Logo.png",
       "sourceSha256": "ea0b7c5d4b1d1ab9c91d2f7c9b069c8dfbf4557b0649a5777d47332cde610262",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square30x30Logo.png",
       "sourceSha256": "cc72279c41b4ed343e8db7e7541ceef7b6b23edaa83d4e7338421dfcb8d63c33",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square310x310Logo.png",
       "sourceSha256": "9733a89c539115de3c49bd06720bfc99639d9a918f5df48a810e267cf3554119",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square44x44Logo.png",
       "sourceSha256": "10be9840e58fb018eb9029601d42008e16c0c9cfa66b8f9467fee94f600160d4",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square71x71Logo.png",
       "sourceSha256": "2937fc83324cd9a1fddcfefd5927c791af31996a6840bfb3e2f1d578ad4129de",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/Square89x89Logo.png",
       "sourceSha256": "12aed0e7ee06cb631427dc9da72c0c7ecf03857fbc4884d0c31f78314feb6c7f",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/StoreLogo.png",
       "sourceSha256": "91a54024dd47230991546088f2e75d3e3199b3ccc9fe40f3f6b7d3bf1cbf7776",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/icon.icns",
       "sourceSha256": "3dc10493b7de48a61de58f768f8a5708d3a44a068c148cedf0502b9b9b71ba5d",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/icon.ico",
       "sourceSha256": "392206b573a809997f3ff16fe68f456a52e931c372107eade9572b329bbe3321",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/icons/icon.png",
       "sourceSha256": "273cd669e07c455ad1c7c095890a37984652157cee73128a867300067dfb80e7",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/src/debug_transport.rs",
       "sourceSha256": "518c08a5b7ce1336e513daa4a31f929fc3ed0028fe03086984072a88bd69153f",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/src/ipc.rs",
       "sourceSha256": "66fe87f0562465d0b2fa754d636630cd72d87d4c19ae3810863a305d8b6337f3",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/src/lib.rs",
       "sourceSha256": "663236e4aaa83d67553c07c8ef3836da9f149d02f9dbfcd894c182135df883f9",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/src/main.rs",
       "sourceSha256": "740b7c1e9de2b7ab6c6314ab8a7ad0fd56c4266465a34ccb965c234032ca51b1",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src-tauri/tauri.conf.json",
       "sourceSha256": "bde994d8df19fb54c7cd92828d2cc0679f14bf43fa1bf05ef3867a057f515b24",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/App.css",
       "sourceSha256": "21ad6da1379906277a989f98f9bbb8ae6b39e765f83f635cb16225ab335d7b62",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/App.tsx",
       "sourceSha256": "713131c23c99ecb753c52c88f70bf978150a39867e9feb4839faaf67bdf06801",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/assets/react.svg",
       "sourceSha256": "35ef61ed53b323ae94a16a8ec659b3d0af3880698791133f23b084085ab1c2e5",
       "classification": "media-rights-review",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/boards.ts",
       "sourceSha256": "906d0b38cf9f61d64bb0d3fc5c041d50e29a17337fee2b318a80f012e5035ef5",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/browserSimulatorHostBridge.ts",
       "sourceSha256": "ebecbfdf37fa8f2f92ec3e6d846df135e9c7e67213d43bf910c0ef0995a1e54e",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/browserSimulatorRuntime.ts",
       "sourceSha256": "1e2c68f3cfd33393389762c4df4211d8319653a6b7d4d8592548cf425fb4aa05",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/browserSimulatorRuntimeWorker.js",
       "sourceSha256": "c4970f5d076804ad00557b5cc88af06b93c4e72515fe2c7fad47b59fb8dc9c51",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/components/PanelCanvas.tsx",
       "sourceSha256": "d4cea17dc74ba515650a85ccc4ce6b0b691672eec0d71f198560996df463d33e",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/components/SimulatorDevicePane.tsx",
       "sourceSha256": "50722d4073cf4784048e0f8dec3256ceacdd70904c718034422c17afc2bb8bfe",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/i18n.ts",
       "sourceSha256": "911c5b9e7400aa4ecb727df834dd72ad3cfcb63ec50911acf439e6b2b4cfa9cf",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/main.tsx",
       "sourceSha256": "bfcf131d8fb04a4dadcdd633c0bdbefea3f3a7af5bb35d34dc55588991887654",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/simulatorBridge.ts",
       "sourceSha256": "1c5aff949e164fb32e781dd9814160db500f6414587a8fd4734dbe6de4e8904d",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/simulatorBridgeTypes.ts",
       "sourceSha256": "86916e68d9e21c9c16155aa9a79d9f504bb535dd71a0dc3be66c20533a4a09a4",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/tauriSimulatorHostBridge.ts",
       "sourceSha256": "4f4d762c073fc15a14e7849dd515772ff4e1dc02d22b64b9d7fd5a057989857b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "src/vite-env.d.ts",
       "sourceSha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "tsconfig.json",
       "sourceSha256": "980d6cbe977ddfb52d3ab1bdd3fba30f8c1db9371b3b14aa4557d32bb00ce54b",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "tsconfig.node.json",
       "sourceSha256": "9e2abb169ea87b7190613a1d4da57ca608463a453bd4231fa3aeee5e308370dd",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "vite.config.ts",
       "sourceSha256": "a8662b9482515a7f66fa8c5c98c4381ab0fa5caf44149e69ed59c7817907ac8e",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "LICENSE",
       "sourceSha256": "920af4390c829b11bb38259a9fc58fce0260333419374b5b47fe5c0a8c69c5ff",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     },
     {
       "path": "packages/ui-tokens/panda-ide.css",
       "sourceSha256": "bb16f823a05f9b6fdeeea134f1c4043958a93fc50ee589f030d48254cfcf6076",
       "classification": "Panda-or-upstream-review-required",
-      "license": "inherited-Panda-Public-Source-unless-separately-noticed",
+      "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"
     }
   ]

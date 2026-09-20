@@ -1,10 +1,10 @@
-# Contributing to the extraction candidate
+# Contributing to the Panda AI OS Simulator
 
-This repository is private pending publication gates; existing license applies.
-Discuss scope first, make focused PRs and include tests for changed behavior.
-Preserve upstream notices and provenance; never submit private assets or keys.
-Once public contributor terms are approved, sign off new contributions under
-DCO 1.1. That future process is not a retroactive ownership transfer.
+Panda-owned code in this repository is licensed under MIT. Discuss scope first,
+make focused PRs and include tests for changed behavior. Preserve upstream
+notices and provenance; never submit private assets, guest data, ROMs, or keys.
+Sign off new contributions under DCO 1.1. This does not retroactively transfer
+ownership of historical or third-party material.
 
 Use npm ci --ignore-scripts with the committed lockfile; do not replace native
 runtime behavior with fake frames. Web and native support are tested separately.

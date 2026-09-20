@@ -1,150 +1,21 @@
-Panda Public Source Software License Agreement
+MIT License
 
 Copyright (c) 2026 Panda Intelligence Software LTD.
-All rights reserved.
 
-PLEASE READ THIS SOFTWARE LICENSE AGREEMENT CAREFULLY BEFORE USING THE PANDA
-MATERIALS. BY ACCESSING, CLONING, BUILDING, RUNNING, OR OTHERWISE USING THE
-PANDA MATERIALS, YOU AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU
-DO NOT AGREE, DO NOT USE THE PANDA MATERIALS.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. Definitions
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-"Panda" means Panda Intelligence Software LTD.
-
-"Panda Materials" means the source code, documentation, build scripts, project
-files, generated project files, packaged artifacts, firmware images, developer
-tools, service integration material, and other repository materials owned or
-controlled by Panda.
-
-"You" means the individual or legal entity accessing or using the Panda
-Materials.
-
-2. Ownership
-
-Panda and its licensors retain all right, title, and interest in and to the
-Panda Materials. The Panda Materials are licensed, not sold. Except for the
-limited rights expressly granted in this Agreement, Panda reserves all rights.
-No rights are granted by implication, exhaustion, estoppel, or otherwise.
-
-3. Source Availability
-
-Panda may make the Panda Materials publicly visible or share them with selected
-contributors for review, transparency, evaluation, development, or controlled
-collaboration. Public availability of source code does not make the Panda
-Materials open source software and does not grant any rights beyond the limited
-license in Section 4.
-
-4. Limited License
-
-Subject to your compliance with this Agreement, Panda grants you a limited,
-personal, revocable, non-exclusive, non-transferable, non-sublicensable license
-to:
-
-* access, read, and clone the Panda Materials for personal review;
-* build and run the Panda Materials locally for evaluation, testing, and
-  development related to Panda products; and
-* create local modifications solely for evaluation or for submission back to
-  Panda through an approved contribution channel.
-
-You must keep all copyright, license, attribution, and provenance notices
-intact.
-
-5. Restrictions
-
-Except as expressly permitted by this Agreement or by Panda's prior written
-permission, you may not:
-
-* copy, publish, redistribute, transmit, sell, rent, lease, lend, sublicense,
-  host, outsource, or otherwise make the Panda Materials or modified versions
-  available to any third party;
-* use the Panda Materials to operate, train, test, develop, or support a
-  competing product, service, firmware, app store, developer toolchain, cloud
-  service, or commercial offering;
-* distribute firmware, binaries, packaged applications, developer extensions,
-  generated artifacts, signing output, or other products built from the Panda
-  Materials;
-* remove, obscure, or alter copyright, license, attribution, provenance,
-  technical-protection, or usage notices;
-* use Panda names, logos, trademarks, service marks, product names, domain
-  names, icons, trade dress, or other brand assets;
-* reverse engineer, decompile, decrypt, disassemble, derive source from, or
-  attempt to discover the underlying structure of binary artifacts, firmware
-  images, services, signing material, keys, certificates, device images,
-  generated artifacts, private integration endpoints, or access-controlled
-  materials;
-* bypass, disable, or interfere with authentication, activation, entitlement,
-  signing, update, access-control, telemetry, rate-limit, or device-binding
-  mechanisms;
-* remove or separate the Panda Materials from required notices, manifests,
-  third-party attributions, or dependency license records; or
-* use the Panda Materials in any unlawful manner or in violation of export,
-  sanctions, privacy, consumer-protection, platform, or third-party terms.
-
-6. Services, Certificates, and Artifacts
-
-This Agreement does not grant access to Panda services, cloud infrastructure,
-private APIs, firmware distribution systems, signing keys, certificates,
-provisioning profiles, activation systems, device entitlements, beta programs,
-or release channels. Any such access requires a separate written agreement or
-Panda-approved program terms.
-
-7. Confidential and Security-Sensitive Material
-
-The Panda Materials may reference private implementation details, security
-controls, unreleased product information, device logs, test data, credentials,
-keys, signing material, service endpoints, or operational procedures. Public
-source visibility does not authorize disclosure, redistribution, publication,
-or operational use of any confidential, unreleased, or security-sensitive
-material.
-
-8. Contributions
-
-This Agreement does not itself accept or license contributions. Contributions
-are governed by Panda's separate contributor terms, maintainer instructions, or
-signed written agreement. Panda is not required to accept, merge, publish, or
-credit any contribution.
-
-9. Third-Party Materials
-
-This Agreement does not replace or relicense third-party software, upstream
-libraries, vendored dependencies, fonts, media assets, sample data, generated
-artifacts, or files that carry their own license, copyright notice, attribution,
-or redistribution terms. Those materials remain governed by their own licenses
-and notices. If a file, directory, dependency manifest, or notice states
-separate terms, those separate terms control for that material.
-
-10. No Patent or Trademark Grant
-
-This Agreement grants no patent, trademark, service mark, trade name, domain
-name, logo, design, or brand rights.
-
-11. Termination
-
-Your rights under this Agreement terminate automatically if you fail to comply
-with any term. Upon termination, you must stop using the Panda Materials and
-delete all copies under your control, except where retention is required by law.
-Sections that by their nature should survive termination will survive,
-including Sections 2, 5, 7, 9, 10, 11, 12, 13, and 14.
-
-12. No Warranty
-
-The Panda Materials are provided "as is" and "as available", with all faults and
-without warranties of any kind, whether express, implied, statutory, or
-otherwise, including warranties of merchantability, fitness for a particular
-purpose, title, non-infringement, accuracy, availability, security, or error-free
-operation.
-
-13. Limitation of Liability
-
-To the maximum extent permitted by law, Panda and its owners, officers,
-employees, contractors, licensors, and contributors are not liable for any
-indirect, incidental, special, consequential, exemplary, or punitive damages, or
-for lost profits, lost revenue, lost data, device damage, service interruption,
-security incident, or procurement of substitute goods or services, arising from
-or related to the Panda Materials or this Agreement.
-
-14. Separate Agreements
-
-If you have a signed written agreement with Panda that expressly covers the
-Panda Materials, that agreement controls where it conflicts with this Agreement.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,13 +1,15 @@
 # Panda AI OS Simulator
 
-**Private extraction candidate — not yet a public open-source release.**
+**Open-source simulator repository — Panda-owned code is licensed under MIT.**
 
 This repository separates the simulator platform from Murphy: React browser UI,
 Tauri host, Rust headless harness, and QEMU peripheral/native/WASM tooling.
-The current inherited license still applies. Proposed open-source licensing,
-ROM and official guest redistribution require the approval tracked in issue #1.
-No complete Panda AI OS source tree, user books, fonts, ROM or guest binary is
-included. A missing runtime is shown as unavailable, never a fabricated boot.
+The MIT license covers Panda-owned simulator code. QEMU/Espressif sources,
+dependencies, ROMs, guest firmware, fonts, media, and other third-party
+materials remain governed by their own notices and distribution rights; no
+unresolved rights are cleared by this repository license. No complete Panda AI
+OS source tree, user books, fonts, ROM or guest binary is included. A missing
+runtime is shown as unavailable, never a fabricated boot.
 
 ## Standalone frontend
 
@@ -30,7 +32,7 @@ Native overrides: `PANDA_SIMULATOR_QEMU`, `PANDA_SIMULATOR_PROJECT_ROOT`, and
 `PANDA_SIMULATOR_INTEGRATION`. Product-specific board/firmware paths live in the
 consumer repository, not the public board registry. See docs below.
 
-## Package a private site from explicit artifacts
+## Package a standalone site from explicit artifacts
 
 ```sh
 npm run pack:web -- --manifest ./artifact-input.json \
@@ -42,13 +44,16 @@ Create the output parent first. Only a new directory or a directory previously
 owned by this packer can be replaced. A per-output lock rejects concurrent packs.
 A crash can leave a lock/staging directory: inspect it before manual recovery;
 this is not a power-loss-durable release installer. Hashes verify bytes, not
-publisher identity or copyright. The output remains private/local-only.
+publisher identity or copyright. The output is an explicit artifact package;
+guest and runtime distribution still require their applicable rights review.
 
 `contracts/web-artifact-manifest-v1.schema.json` describes the input. All roles
 are explicit; no cached ROM, firmware, private SD or Panda Cloud path is scanned.
 The packer holds bounded verified bytes, rejects symlink ancestors, traversals,
 wrong digests and excessive aggregate sizes, and optionally copies built UI.
-Public deployment is intentionally not configured in `deploy/wrangler.jsonc`.
+The standalone Worker publication target is declared in
+`deploy/wrangler.jsonc`; this repository change configures it but does not
+deploy the Worker or upload release artifacts.
 
 ## Minimal buildable example
 
@@ -62,7 +67,8 @@ See `docs/extraction-boundaries.md`, `docs/licensing-review.md`,
 `THIRD_PARTY_NOTICES.md`, `CONTRIBUTING.md`, and `SECURITY.md`.
 `provenance/export-manifest.json` records the exact original export; subsequent
 commits identify intentional edits. `audit:export` is a pattern scan, not legal
-or complete secret clearance. `check:publication` remains blocked pending G0.
+or complete secret clearance. `check:publication` remains an explicit artifact
+and rights gate; it does not certify third-party, guest, or ROM distribution.
 The simulator cannot qualify real e-ink ghosting, electrical, radio or USB behavior.
 Launch materials under `docs/launch` are embargoed preparation, not posted claims.
 
@@ -71,6 +77,8 @@ Launch materials under `docs/launch` are embargoed preparation, not posted claim
 See `docs/continuation-verification-20260918.md` and `docs/OWNER_HANDOFF.md`.
 The native minimal guest and no-SD browser guest have actually executed.
 Atomic chunked browser persistence passed a real 128 MiB IndexedDB test.
-A separate supplied-runtime RCU assertion still blocks SD-backed reading (issue #5);
-this candidate is not ready for public release. Repository settings and Cloudflare
-publication remain with the owner. The code and guest licenses are unchanged.
+A separate supplied-runtime RCU assertion still blocks SD-backed reading (issue #5).
+The source repository is open under MIT for Panda-owned code, while guest/ROM
+rights and runtime qualification remain separate gates. The standalone Worker
+is deployed at https://simulator.pandacat.ai/; deployment does not relicense
+third-party runtime materials or certify the remaining qualification gates.

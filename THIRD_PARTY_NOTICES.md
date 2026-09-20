@@ -1,9 +1,10 @@
 # Third-party notices — review in progress
 
-This private candidate retains all imported per-file notices. QEMU/Espressif
-files are not relicensed by the root Panda license or the proposed MIT license.
+Panda-owned simulator code is licensed under MIT, while all imported per-file
+notices remain in force. QEMU/Espressif files are not relicensed by the root
+Panda license and remain governed by their explicit upstream terms.
 Native QEMU and qemu-wasm upstream repositories/pins are in qemu-runtime.env and
-scripts/build-qemu-wasm.sh. Public binary distribution is blocked until exact
+scripts/build-qemu-wasm.sh. Binary distribution remains blocked until exact
 corresponding source, patches, toolchain/build instructions and notices are paired.
 
 JS/Rust dependencies remain governed by their own packaged licenses and pinned

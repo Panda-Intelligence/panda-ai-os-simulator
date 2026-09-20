@@ -51,6 +51,7 @@ src/panda-ide.css
 
 .codex/
 .trellis/
+worker-configuration.d.ts
 node_modules/
 artifacts/
 .runtime/

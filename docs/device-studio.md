@@ -1,6 +1,8 @@
 # Device Studio interaction
 
-The simulator keeps the existing repository license unchanged.
+Panda-owned simulator code is licensed under MIT. QEMU/Espressif sources,
+guest firmware, ROMs and other third-party materials retain their own notices
+and distribution terms.
 
 ## Board selection
 

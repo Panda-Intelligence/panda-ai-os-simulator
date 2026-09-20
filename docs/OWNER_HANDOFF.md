@@ -1,9 +1,10 @@
 # Owner handoff: configuration is separate from engineering acceptance
 
-The owner will adjust GitHub repository settings and Cloudflare publication
-later. This change does not make those changes or require them to run local tests.
-No production routes/accounts, DNS, visibility, access policy or license grants
-were changed. Public guest/ROM/media authorization remains its own review item.
+The owner controls GitHub repository settings and Cloudflare publication. The
+standalone Worker is deployed as `panda-simulator` at
+`https://simulator.pandacat.ai/`; future releases use `npm run worker:deploy`.
+MIT applies to Panda-owned simulator code; public guest/ROM/media authorization
+remains its own review item and is not granted by this source license.
 
 ## Local independent checks
 
