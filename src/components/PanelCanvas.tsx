@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import type { SimulatorFramebufferEvent, SimulatorHostBridge } from "../simulatorBridge";
 import { getSimulatorBoardVisual, type SimulatorBoard } from "../boards";
+import { getPhysicalControls } from "../boardPhysicalControls";
+import { PhysicalDeviceKey } from "./PhysicalDeviceKey";
 
 const TOUCH_DOWN = 1;
 const TOUCH_MOVE = 2;
@@ -66,25 +68,59 @@ type PanelShellStyle = CSSProperties & {
   "--panel-canvas-height"?: string;
   "--panel-accent"?: string;
   "--panel-thickness"?: string;
+  "--panel-screen-width-ratio"?: string;
+  "--panel-screen-height-ratio"?: string;
+  "--panel-shell-width"?: string;
+  "--panel-shell-height"?: string;
 };
 
 export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onReset }: PanelCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackingRef = useRef(new Map<number, { fingerId: number; x: number; y: number }>());
   const visual = getSimulatorBoardVisual(board.id);
-  const physicalAspect = visual.physicalSizeMm
-    ? `${Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)} / ${Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)}`
+  const physicalWidth = visual.physicalSizeMm
+    ? Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+    : null;
+  const physicalHeight = visual.physicalSizeMm
+    ? Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+    : null;
+  const physicalAspect = physicalWidth && physicalHeight
+    ? `${physicalWidth} / ${physicalHeight}`
     : `${board.outputWidth + 26} / ${board.outputHeight + 32}`;
+  const screenDiagonalMm = visual.screenInches ? visual.screenInches * 25.4 : null;
+  const screenAspect = Math.min(board.outputWidth, board.outputHeight) / Math.max(board.outputWidth, board.outputHeight);
+  const screenHeightMm = screenDiagonalMm ? screenDiagonalMm / Math.sqrt(1 + screenAspect * screenAspect) : null;
+  const screenWidthMm = screenHeightMm ? screenHeightMm * screenAspect : null;
+  const screenWidthRatio = physicalWidth && screenWidthMm ? screenWidthMm / physicalWidth : null;
+  const screenHeightRatio = physicalHeight && screenHeightMm ? screenHeightMm / physicalHeight : null;
+  const fixedShellWidth = displayScale > 0 && screenWidthRatio
+    ? (board.outputWidth * displayScale) / screenWidthRatio
+    : null;
+  const fixedShellHeight = displayScale > 0 && screenHeightRatio
+    ? (board.outputHeight * displayScale) / screenHeightRatio
+    : null;
   const shellStyle: PanelShellStyle = {
     aspectRatio: physicalAspect,
     "--panel-accent": visual.accent,
     ...(visual.physicalSizeMm
       ? { "--panel-thickness": `${visual.physicalSizeMm.thickness}px` }
       : {}),
+    ...(screenWidthRatio && screenHeightRatio
+      ? {
+          "--panel-screen-width-ratio": screenWidthRatio.toFixed(5),
+          "--panel-screen-height-ratio": screenHeightRatio.toFixed(5),
+        }
+      : {}),
     ...(displayScale > 0
       ? {
           "--panel-canvas-width": `${board.outputWidth * displayScale}px`,
           "--panel-canvas-height": `${board.outputHeight * displayScale}px`,
+          ...(fixedShellWidth && fixedShellHeight
+            ? {
+                "--panel-shell-width": `${fixedShellWidth.toFixed(2)}px`,
+                "--panel-shell-height": `${fixedShellHeight.toFixed(2)}px`,
+              }
+            : {}),
         }
       : {}),
   };
@@ -236,20 +272,10 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
     void hostBridge.injectButton(buttonId, pressed).catch(() => false);
   };
 
-  const physicalControls: Array<{ key: string; label: string; buttonId?: number; reset?: boolean }> =
-    board.id === "lilygo-t5s3-pro"
-      ? [
-          { key: "rst", label: "RST", reset: true },
-          ...["BOOT", "IO48", "PWR"].flatMap((label) => {
-            const match = board.keyMap.find((key) => key.label.toUpperCase() === label);
-            return match ? [{ key: `key-${match.id}`, label: match.label, buttonId: match.id }] : [];
-          }),
-        ]
-      : board.keyMap.map((key) => ({
-          key: `key-${key.id}`,
-          label: key.label,
-          buttonId: key.id,
-        }));
+  const calibratedControls = getPhysicalControls(board);
+  const physicalControls = board.keyMap.map(key => ({
+    key: `key-${key.id}`, label:key.label, buttonId:key.id, reset:false,
+  }));
 
   return (
     <div
@@ -262,7 +288,12 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
         ? `${visual.physicalSizeMm.width}×${visual.physicalSizeMm.height}×${visual.physicalSizeMm.thickness}mm`
         : undefined}
     >
-      {visual.hangingEar ? <span className="panel-hanging-ear" aria-hidden="true" /> : null}
+      {visual.hangingEar ? (
+        <svg className="panel-hanging-ear" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+          <path className="panel-hanging-ear__neck" d="M32 0H68V24H32Z" />
+          <circle className="panel-hanging-ear__ring" cx="50" cy="54" r="36" />
+        </svg>
+      ) : null}
       {visual.family === "t5s3" ? <span className="panel-front-home-ring" aria-hidden="true" /> : null}
       <span className="panel-device-mark" aria-hidden="true">{visual.modelLabel}</span>
       <div className="panel-screen-frame">
@@ -278,7 +309,10 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
         />
       </div>
       <div className="panel-physical-keys" aria-label="Physical device keys">
-        {physicalControls.map((control, index) => (
+        {calibratedControls ? calibratedControls.map(control => (
+          <PhysicalDeviceKey key={`${board.id}:${control.name}`} control={control}
+            injectButton={hostBridge.injectButton} onReset={onReset}/>
+        )) : physicalControls.map((control, index) => (
           <button
             key={control.key}
             type="button"
@@ -324,11 +358,6 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
               <span>{port}</span>
             </span>
           ))}
-        </div>
-      ) : null}
-      {visual.family === "t5s3" ? (
-        <div className="panel-lilygo-side-legend" aria-hidden="true">
-          <span>RST</span><span>BOOT</span><span>IO48</span><span>PWR</span>
         </div>
       ) : null}
     </div>

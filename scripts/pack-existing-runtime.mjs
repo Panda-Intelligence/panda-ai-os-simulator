@@ -114,6 +114,12 @@ export function packageExistingRuntime(options) {
       guests.push(guest);
     }
     if (!guests.length) fail("no_ready_guest");
+    if (options.requireBoards) {
+      const expected = options.requireBoards === "all" ? registry.boards.map(b => b.id) : options.requireBoards.split(",");
+      if (!expected.length || new Set(expected).size !== expected.length || expected.some(id => !registry.boards.some(b => b.id === id))) fail("invalid_required_boards");
+      const missing = expected.filter(id => !guests.some(guest => guest.id === id));
+      if (missing.length) fail(`required_boards_missing:${missing.join(",")}`);
+    }
     const input={schemaVersion:1,...(options.basePath ? {basePath:options.basePath}:{}),source:{revision:source.sourceRevision,label:"verified-existing-runtime"},
       publication:{visibility:"private"},runtime:{workerScript,sdStoreScript,qemu},guests};
     const manifestPath=join(work,"input-manifest.json");
@@ -123,9 +129,9 @@ export function packageExistingRuntime(options) {
 }
 function cli(argv) {
   const opts={};
-  const keys={"--qemu-dir":"qemuDir","--ui-dir":"uiDir","--output-dir":"outputDir","--board-map":"boardMap","--sd-image":"sdImage","--sd-raw-bytes":"sdRawBytes","--base-path":"basePath"};
+  const keys={"--qemu-dir":"qemuDir","--ui-dir":"uiDir","--output-dir":"outputDir","--board-map":"boardMap","--sd-image":"sdImage","--sd-raw-bytes":"sdRawBytes","--base-path":"basePath","--require-boards":"requireBoards"};
   if (argv.length===1 && argv[0]==="--help") {
-    console.log("pack-existing-runtime --qemu-dir DIR --ui-dir DIST --output-dir NEW_OR_OWNED_DIR [--board-map JSON] [--sd-image FILE --sd-raw-bytes N]");
+    console.log("pack-existing-runtime --qemu-dir DIR --ui-dir DIST --output-dir NEW_OR_OWNED_DIR [--board-map JSON] [--require-boards all|id,id] [--sd-image FILE --sd-raw-bytes N]");
     return;
   }
   for (let i=0;i<argv.length;i+=2) {

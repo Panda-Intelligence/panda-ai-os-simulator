@@ -1269,7 +1269,7 @@ static void disas_xtensa_insn(CPUXtensaState* env, DisasContext* dc) {
   /* LilyGo 的同步 I2C 驅動依賴 ESP-IDF ISR 將 RX FIFO 搬回呼叫端緩衝區。
    * 模擬器沒有執行該 ISR，因此在函式入口直接交給 QEMU I2C 裝置模型，
    * 並由 helper 將讀取資料寫回 guest 緩衝區。 */
-  if (mofei_sim_board_is_lilygo_t5s3_pro()) {
+  if (mofei_sim_board_uses_gt911()) {
     uint32_t transfer_kind = 0;
     if (mofei_pc_match(dc->pc, mofei_sim_addrs.i2c_master_transmit_addr)) {
       transfer_kind = MOFEI_I2C_TRANSFER_TRANSMIT;

@@ -41,7 +41,7 @@ test("workspace distributes primary controls across top, left navigation and rig
   assert.ok(topBoard > 0 && topFirmware > 0 && inspector > 0);
 });
 
-test("official-reference skins carry public physical dimensions and structures", () => {
+test("official-reference skins carry public physical dimensions and structures", async () => {
   assert.match(boardSource,/121\.5/);
   assert.match(boardSource,/67\.7/);
   assert.match(boardSource,/7\.7/);
@@ -52,5 +52,12 @@ test("official-reference skins carry public physical dimensions and structures",
   assert.match(boardSource,/wiki\.lilygo\.cc\/products\/t5-series\/t5-e-paper-s3-pro/);
   assert.match(panelSource,/panel-hanging-ear/);
   assert.match(panelSource,/panel-front-home-ring/);
-  assert.match(panelSource,/RST/);
+  assert.match(panelSource,/getPhysicalControls/);
+  const controlSource = await readFile(new URL("../src/boardPhysicalControls.ts", import.meta.url), "utf8");
+  assert.match(controlSource,/name:"RST"/);
+  assert.match(panelSource,/screenDiagonalMm/);
+  assert.match(panelSource,/screenWidthRatio/);
+  assert.match(panelSource,/screenHeightRatio/);
+  assert.match(panelSource,/--panel-screen-width-ratio/);
+  assert.match(panelSource,/--panel-screen-height-ratio/);
 });
