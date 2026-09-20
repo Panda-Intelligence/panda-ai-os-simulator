@@ -56,8 +56,8 @@ Other board skins/key layouts retain their existing renderer.
 
 ## Verification commands and limitations
 
-- `npm test` runs the existing suite plus executable geometry/mapping tests.
-- `npm run build` checks TypeScript and production bundling.
+- `bun run test` runs the existing suite plus executable geometry/mapping tests.
+- `bun run build` checks TypeScript and production bundling.
 - `tests/browser-physical-buttons.smoke.mjs` creates its own loopback Vite
   component fixture. It needs explicit PLAYWRIGHT_MODULE, CHROME_EXECUTABLE and
   SIMULATOR_TEST_OUT environment values. No fixed developer filesystem path.

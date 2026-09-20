@@ -269,12 +269,6 @@ export const normalizeSimulatorLocale = (language: string | null | undefined): S
 export const resolveInitialSimulatorLocale = (): SimulatorLocale => {
   const saved = window.localStorage.getItem(SIMULATOR_LOCALE_STORAGE_KEY);
   if (isSimulatorLocale(saved)) return saved;
-
-  for (const language of navigator.languages.length > 0 ? navigator.languages : [navigator.language]) {
-    const locale = normalizeSimulatorLocale(language);
-    if (locale) return locale;
-  }
-
   return DEFAULT_SIMULATOR_LOCALE;
 };
 

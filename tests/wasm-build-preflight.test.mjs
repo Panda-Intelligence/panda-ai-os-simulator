@@ -13,7 +13,7 @@ test("missing host post-link dependencies fail before source checkout or Docker"
   const result=spawnSync("bash",[join(root,"scripts/build-qemu-wasm.sh"),"--runtime-only"],{
    cwd:root,env:{PATH:process.env.PATH,HOME:root,QEMU_WASM_CACHE_DIR:join(root,"must-not-clone")},encoding:"utf8",timeout:10000,
   });
-  assert.notEqual(result.status,0);assert.match(result.stdout+result.stderr,/npm ci --ignore-scripts/);
+  assert.notEqual(result.status,0);assert.match(result.stdout+result.stderr,/bun install --frozen-lockfile/);
   assert.equal(existsSync(join(root,"must-not-clone")),false);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

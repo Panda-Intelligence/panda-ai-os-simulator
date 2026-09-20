@@ -682,6 +682,22 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
           <button className="pds-btn" disabled={!running} title={t("hardwareKeyResetTitle")} onClick={() => void resetSim()}>
             {t("hardwareKeyReset")}
           </button>
+          <label className="ide-titlebar__language">
+            <span>{t("localeLabel")}</span>
+            <select
+              className="pds-select ide-titlebar__language-select"
+              name="simulatorLocale"
+              value={locale}
+              aria-label={t("localeLabel")}
+              onChange={(event) => handleLocaleChange(event.currentTarget.value as SimulatorLocale)}
+            >
+              {SUPPORTED_SIMULATOR_LOCALES.map((supportedLocale) => (
+                <option key={supportedLocale.code} value={supportedLocale.code}>
+                  {supportedLocale.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 
@@ -834,22 +850,6 @@ export function SimulatorDevicePane({ hostBridge: hostBridgeOverride }: Simulato
                   </button>
                 ))}
               </div>
-            </section>
-
-            <section className="ide-inspector__group">
-              <h2 className="pds-section-title">{t("localeLabel")}</h2>
-              <select
-                className="pds-select"
-                name="simulatorLocale"
-                value={locale}
-                onChange={(event) => handleLocaleChange(event.currentTarget.value as SimulatorLocale)}
-              >
-                {SUPPORTED_SIMULATOR_LOCALES.map((supportedLocale) => (
-                  <option key={supportedLocale.code} value={supportedLocale.code}>
-                    {supportedLocale.label}
-                  </option>
-                ))}
-              </select>
             </section>
 
             {browserSdAvailable && (

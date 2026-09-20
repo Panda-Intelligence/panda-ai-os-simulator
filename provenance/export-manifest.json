@@ -146,11 +146,11 @@
       "bytes": 366
     },
     {
-      "sourcePath": "apps/simulator/package-lock.json",
-      "path": "package-lock.json",
-      "gitBlob": "898dc163b51d04670ced1837b96e9be9b6535d65",
-      "sha256": "7f88477501f6f23e5b900a46c624547f2063d53da82858a9a6327b3e7dd8d4ba",
-      "bytes": 39917
+      "sourcePath": "apps/simulator/bun.lock",
+      "path": "bun.lock",
+      "gitBlob": "66b932cd9a84b477f50b25cffd6198757f332567",
+      "sha256": "02776d881a5412bf4695d61589286a65626d8cb276213e65c74538230be8c0a4",
+      "bytes": 39106
     },
     {
       "sourcePath": "apps/simulator/package.json",

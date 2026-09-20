@@ -149,8 +149,8 @@
       "decision": "pending"
     },
     {
-      "path": "package-lock.json",
-      "sourceSha256": "7f88477501f6f23e5b900a46c624547f2063d53da82858a9a6327b3e7dd8d4ba",
+      "path": "bun.lock",
+      "sourceSha256": "02776d881a5412bf4695d61589286a65626d8cb276213e65c74538230be8c0a4",
       "classification": "Panda-or-upstream-review-required",
       "license": "MIT-for-Panda-owned-files; separate-rights-review-for-others",
       "decision": "pending"

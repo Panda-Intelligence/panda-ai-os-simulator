@@ -13,13 +13,13 @@ repair that binary. `--require-runtime-revision` rejects stale/absent revision
 metadata, while normal artifact SHA-256 and guest provenance checks still run.
 Revision metadata is not a publisher signature or a substitute for execution.
 
-Install the committed npm lockfile before runtime compilation. The build now
+Install the committed Bun lockfile before runtime compilation. The build now
 checks the host-side TypeScript dependency before any source checkout or Docker
 work, rather than failing during post-link continuation patching.
 
 ```sh
-npm ci --ignore-scripts
-npm run build
+bun install --frozen-lockfile
+bun run build
 node scripts/pack-existing-runtime.mjs \
   --qemu-dir /explicit/coherent-runtime-and-guests \
   --ui-dir ./dist --output-dir /explicit/owned-preview/dist \

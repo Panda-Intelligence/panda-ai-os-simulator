@@ -7,6 +7,7 @@ const boardSource = await readFile(new URL("../src/boards.ts", import.meta.url),
 const paneSource = await readFile(new URL("../src/components/SimulatorDevicePane.tsx", import.meta.url), "utf8");
 const panelSource = await readFile(new URL("../src/components/PanelCanvas.tsx", import.meta.url), "utf8");
 const runtimeSource = await readFile(new URL("../src/browserSimulatorRuntime.ts", import.meta.url), "utf8");
+const i18nSource = await readFile(new URL("../src/i18n.ts", import.meta.url), "utf8");
 
 test("every declared board has an explicit physical visual profile", () => {
   for (const board of boards.boards) {
@@ -21,6 +22,16 @@ test("device studio exposes board-filtered firmware selection", () => {
   assert.match(paneSource,/firmwareOptions\.find/);
   assert.match(runtimeSource,/listFirmwareOptions\(boardId/);
   assert.match(runtimeSource,/firmwareArtifacts\?\.\[boardId\]/);
+});
+
+test("English is the first locale and the language switch lives in the title bar", () => {
+  assert.match(i18nSource, /DEFAULT_SIMULATOR_LOCALE: SimulatorLocale = "en"/);
+  assert.match(i18nSource, /if \(isSimulatorLocale\(saved\)\) return saved;\s+return DEFAULT_SIMULATOR_LOCALE/);
+  const titlebarActions = paneSource.indexOf('className="ide-titlebar__actions"');
+  const languageSwitch = paneSource.indexOf('className="pds-select ide-titlebar__language-select"');
+  const inspector = paneSource.indexOf('className="ide-inspector"');
+  assert.ok(titlebarActions >= 0 && languageSwitch > titlebarActions && languageSwitch < inspector);
+  assert.doesNotMatch(paneSource.slice(inspector), /name="simulatorLocale"/);
 });
 
 test("virtual SD UI supports drag-drop and browser-side file management", () => {

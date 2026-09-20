@@ -695,6 +695,19 @@ body,
   margin-left: 0;
 }
 
+.ide-titlebar__language {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pds-muted);
+  font-size: var(--pds-text-xs);
+  white-space: nowrap;
+}
+
+.ide-titlebar__language-select {
+  min-width: 104px;
+}
+
 .ide-sidebar--boards {
   width: 196px;
   flex-basis: 196px;
@@ -896,6 +909,14 @@ body,
 
   .ide-toolbar-select--board {
     width: 125px;
+  }
+
+  .ide-titlebar__language > span {
+    display: none;
+  }
+
+  .ide-titlebar__language-select {
+    min-width: 88px;
   }
 }
 

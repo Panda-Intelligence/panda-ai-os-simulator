@@ -6,6 +6,6 @@ notices and provenance; never submit private assets, guest data, ROMs, or keys.
 Sign off new contributions under DCO 1.1. This does not retroactively transfer
 ownership of historical or third-party material.
 
-Use npm ci --ignore-scripts with the committed lockfile; do not replace native
+Use `bun install --frozen-lockfile` with the committed `bun.lock`; do not replace native
 runtime behavior with fake frames. Web and native support are tested separately.
 Do not claim host images prove physical e-ink waveforms, RF, power or USB behavior.

@@ -196,7 +196,7 @@ run_tauri() {
   [[ -f "${PANDA_SIMULATOR_FIRMWARE}" ]] || die "Firmware not found at ${PANDA_SIMULATOR_FIRMWARE}"
   export PANDA_SIMULATOR_FIRMWARE
   step "Launching Tauri dev..."
-  (cd "${SCRIPT_DIR}" && npm run tauri dev)
+  (cd "${SCRIPT_DIR}" && bun run tauri dev)
 }
 
 # ── First-time setup ──

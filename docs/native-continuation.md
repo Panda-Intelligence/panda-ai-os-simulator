@@ -9,7 +9,7 @@ explicit caller inputs. `check`, `headless`, and `tauri` accept `--firmware`,
 `--qemu`, and `--sd-root`; `PANDA_SIMULATOR_QEMU` and the legacy firmware
 environment name remain explicit aliases. The launcher no longer imports the
 consumer board-profile module, infers a parent project, builds product
-firmware, provisions product fonts, installs npm dependencies, or hides cargo
+firmware, provisions product fonts, installs JavaScript dependencies, or hides cargo
 failures.
 
 Headless E2E default font packs are provisioned only for cases that request a

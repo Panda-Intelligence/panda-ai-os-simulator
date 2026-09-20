@@ -14,10 +14,10 @@ runtime is shown as unavailable, never a fabricated boot.
 ## Standalone frontend
 
 ```sh
-npm ci --ignore-scripts --no-audit --no-fund
-npm test
-npm run build
-npm run serve:standalone -- --root ./dist
+bun install --frozen-lockfile
+bun run test
+bun run build
+bun run serve:standalone -- --root ./dist
 ```
 
 The preview binds only to loopback and serves cross-origin isolation headers.
@@ -35,7 +35,7 @@ consumer repository, not the public board registry. See docs below.
 ## Package a standalone site from explicit artifacts
 
 ```sh
-npm run pack:web -- --manifest ./artifact-input.json \
+bun run pack:web -- --manifest ./artifact-input.json \
   --runtime-dir ./approved-runtime --guest-dir ./approved-guest \
   --output-dir ./artifacts/dist --ui-dir ./dist
 ```

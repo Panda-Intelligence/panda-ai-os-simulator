@@ -1425,8 +1425,9 @@ build_image() {
 
   cat <<EOF | docker build -t "${QEMU_WASM_IMAGE}" -
 FROM ${QEMU_WASM_BASE_IMAGE}
+COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /build
-RUN npm i xterm-pty@v0.10.1
+RUN bun add xterm-pty@v0.10.1
 ENV EMCC_CFLAGS="--js-library=/build/node_modules/xterm-pty/emscripten-pty.js"
 CMD ["sleep", "infinity"]
 EOF
@@ -1636,11 +1637,11 @@ if [[ "${FIRMWARE_ONLY}" -eq 1 ]]; then
 fi
 
 # The post-link ownership patch is a host-side TypeScript consumer. Fail before
-# cloning/building instead of discovering a missing npm install after 1,269 steps.
+# cloning/building instead of discovering a missing Bun install after 1,269 steps.
 if [[ "${PROBE_ONLY}" -eq 0 && "${NO_BUILD}" -eq 0 ]]; then
   require_tool node
   (cd "${SIM_ROOT}" && node --input-type=module -e 'await import("typescript")') >/dev/null 2>&1 ||
-    die "Simulator build dependencies missing; run npm ci --ignore-scripts in ${SIM_ROOT} before building WASM"
+    die "Simulator build dependencies missing; run bun install --frozen-lockfile in ${SIM_ROOT} before building WASM"
 fi
 
 trap stop_container EXIT INT TERM
