@@ -15,5 +15,7 @@ Use explicit local runtime/guest sources, validate hashes/board mappings, assemb
 a standalone site, and boot every advertised board in isolated browser contexts.
 Do not pass a placeholder framebuffer as firmware evidence.
 
-Local review additionally retains unmerged PR15 button mapping and PR16 London
-through a separate preview composition; neither review PR is auto-merged.
+Main now contains PR15 button mapping and PR16 London. This branch merges that
+upstream without reverting either fix. No repository administration or deployment
+configuration is changed. A fresh source-bound runtime build is required for the
+PaperS3 GT911 routing fix; cache revision asyncify-stack-v4-papers3-sdspi refuses old builds.

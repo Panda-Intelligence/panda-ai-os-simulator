@@ -38,7 +38,7 @@ fi
 FIRMWARE_INPUT_DIR="${QEMU_WASM_FIRMWARE_DIR:-}"
 ARTIFACT_MANIFEST="${OUTPUT_DIR}/qemu-wasm-artifacts.json"
 JOBS="${QEMU_WASM_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
-QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v2"
+QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v4-papers3-sdspi"
 export QEMU_WASM_RUNTIME_REVISION
 CONTAINER_STARTED=0
 CONTAINER_ID=""
@@ -1633,6 +1633,14 @@ runtime_supports_required_boards() {
 if [[ "${FIRMWARE_ONLY}" -eq 1 ]]; then
   refresh_firmware_artifacts
   exit 0
+fi
+
+# The post-link ownership patch is a host-side TypeScript consumer. Fail before
+# cloning/building instead of discovering a missing npm install after 1,269 steps.
+if [[ "${PROBE_ONLY}" -eq 0 && "${NO_BUILD}" -eq 0 ]]; then
+  require_tool node
+  (cd "${SIM_ROOT}" && node --input-type=module -e 'await import("typescript")') >/dev/null 2>&1 ||
+    die "Simulator build dependencies missing; run npm ci --ignore-scripts in ${SIM_ROOT} before building WASM"
 fi
 
 trap stop_container EXIT INT TERM

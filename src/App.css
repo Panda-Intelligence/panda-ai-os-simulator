@@ -1280,7 +1280,7 @@ body,
   max-height: 88%;
 }
 /* Let fixed-pixel modes scroll past the hook rather than clip its lower edge. */
-.panel-shell--papers3.panel-shell--fixed-scale { margin-bottom: 90px; }
+.panel-shell--papers3.panel-shell--fixed-scale { margin-bottom: calc(var(--panel-shell-width) * .14 + 8px); }
 .ide-inspector__header > .pds-pill {
   flex: 0 0 auto;
   align-self: flex-start;

@@ -1272,7 +1272,7 @@ index ca629f0..fdca6da 100644
  }
  
  /*!
-@@ -158,116 +1098,4118 @@ static uint32_t relocated_vector(CPUXtensaState *env, uint32_t vector)
+@@ -158,116 +1098,4119 @@ static uint32_t relocated_vector(CPUXtensaState *env, uint32_t vector)
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */
@@ -4447,8 +4447,9 @@ index ca629f0..fdca6da 100644
 +  const unsigned return_reg = callinc * 4 + 2;
 +  const uint32_t gpio_num = env->regs[return_reg];
 +  const uint32_t level = env->regs[return_reg + 1];
-+  if (mofei_sim_board_is_lilygo_t5s3_pro() &&
-+      (gpio_num == 12u || gpio_num == 39u || gpio_num == 40u || gpio_num == 46u)) {
++  if ((mofei_sim_board_is_lilygo_t5s3_pro() &&
++       (gpio_num == 12u || gpio_num == 39u || gpio_num == 40u || gpio_num == 46u)) ||
++      (mofei_sim_board_is_m5papers3() && gpio_num == 47u)) {
 +    const bool upper_bank = gpio_num >= 32u;
 +    const uint32_t bit = BIT(gpio_num & 31u);
 +    const uint32_t set_addr = upper_bank ? MOFEI_ESP32S3_GPIO_OUT1_W1TS : MOFEI_ESP32S3_GPIO_OUT_W1TS;

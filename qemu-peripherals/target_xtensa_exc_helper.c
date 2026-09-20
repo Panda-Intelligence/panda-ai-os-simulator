@@ -4175,8 +4175,9 @@ uint32_t HELPER(mofei_gpio_set_level)(CPUXtensaState* env) {
   const unsigned return_reg = callinc * 4 + 2;
   const uint32_t gpio_num = env->regs[return_reg];
   const uint32_t level = env->regs[return_reg + 1];
-  if (mofei_sim_board_is_lilygo_t5s3_pro() &&
-      (gpio_num == 12u || gpio_num == 39u || gpio_num == 40u || gpio_num == 46u)) {
+  if ((mofei_sim_board_is_lilygo_t5s3_pro() &&
+       (gpio_num == 12u || gpio_num == 39u || gpio_num == 40u || gpio_num == 46u)) ||
+      (mofei_sim_board_is_m5papers3() && gpio_num == 47u)) {
     const bool upper_bank = gpio_num >= 32u;
     const uint32_t bit = BIT(gpio_num & 31u);
     const uint32_t set_addr = upper_bank ? MOFEI_ESP32S3_GPIO_OUT1_W1TS : MOFEI_ESP32S3_GPIO_OUT_W1TS;

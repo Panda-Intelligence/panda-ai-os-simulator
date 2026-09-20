@@ -72,3 +72,18 @@ test("an explicit available board subset passes without fabricating other guests
     assert.deepEqual(Object.keys(manifest.runtime.firmwareArtifacts), ["mofei"]);
   } finally { rmSync(f.root,{recursive:true,force:true}); }
 });
+
+test("required runtime revision refuses stale or unlabelled builds before replacement", () => {
+  const f=fixture();
+  try {
+    packageExistingRuntime(f);
+    const before=readFileSync(join(f.outputDir,"manifest.json"));
+    for(const revision of [undefined,"asyncify-stack-v2"]){
+      f.manifest.runtimeBuildRevision=revision;f.save();
+      assert.throws(()=>packageExistingRuntime({...f,requireRuntimeRevision:"asyncify-stack-v4-papers3-sdspi"}),/runtime_revision_mismatch/);
+      assert.deepEqual(readFileSync(join(f.outputDir,"manifest.json")),before);
+    }
+    f.manifest.runtimeBuildRevision="asyncify-stack-v4-papers3-sdspi";f.save();
+    packageExistingRuntime({...f,requireRuntimeRevision:"asyncify-stack-v4-papers3-sdspi"});
+  } finally {rmSync(f.root,{recursive:true,force:true});}
+});
