@@ -50,8 +50,10 @@ removed without a keyboard-operable reveal path.
 
 ## 4. Accessibility and states
 
-- Light, Dark, and Follow System are all visible in a native select and localized through the existing simulator i18n
-  path.
+- Light, Dark, and Follow System are all visible in a segmented native radio group and localized through the existing
+  simulator i18n path. The three-way control keeps the preference visible without hiding it behind a menu.
+- The GitHub link is a real external navigation to the standalone simulator repository and remains text-labeled for
+  keyboard and screen-reader users.
 - The resolved host theme sets `data-theme` and `color-scheme`; the simulated framebuffer remains paper-white.
 - Normal text uses WCAG AA-safe ink/muted pairings in both palettes. Focus-visible outlines use the accent against the
   active surface and are never removed without a replacement.
