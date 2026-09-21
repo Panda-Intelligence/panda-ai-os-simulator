@@ -705,20 +705,37 @@ export function SimulatorDevicePane({
               ))}
             </select>
           </label>
-          <label className="ide-titlebar__theme">
-            <span>{t("themeLabel")}</span>
-            <select
-              className="pds-select ide-titlebar__theme-select"
-              name="simulatorTheme"
-              value={themePreference}
-              aria-label={t("themeLabel")}
-              onChange={(event) => onThemePreferenceChange?.(parseThemePreference(event.currentTarget.value))}
-            >
-              <option value="light">{t("themeLight")}</option>
-              <option value="dark">{t("themeDark")}</option>
-              <option value="system">{t("themeSystem")}</option>
-            </select>
-          </label>
+          <fieldset className="ide-titlebar__theme">
+            <legend>{t("themeLabel")}</legend>
+            <div className="ide-theme-segmented" role="radiogroup" aria-label={t("themeLabel")}>
+              {([
+                ["light", t("themeLight")],
+                ["dark", t("themeDark")],
+                ["system", t("themeSystem")],
+              ] as const).map(([value, label]) => (
+                <label className="ide-theme-segmented__option" key={value}>
+                  <input
+                    type="radio"
+                    name="simulatorTheme"
+                    value={value}
+                    checked={themePreference === value}
+                    aria-label={label}
+                    onChange={(event) => onThemePreferenceChange?.(parseThemePreference(event.currentTarget.value))}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <a
+            className="pds-btn ide-github-link"
+            href="https://github.com/Panda-Intelligence/panda-ai-os-simulator"
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t("githubLink")}
+          >
+            GitHub
+          </a>
         </div>
       </header>
 

@@ -706,14 +706,89 @@ body,
 .ide-titlebar__theme {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
   color: var(--pds-muted);
   font-size: var(--pds-text-xs);
   white-space: nowrap;
 }
 
-.ide-titlebar__theme-select {
-  min-width: 132px;
+.ide-titlebar__theme legend {
+  float: left;
+  margin-right: 6px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.ide-theme-segmented {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--pds-border-strong);
+  border-radius: var(--pds-radius-sm);
+  background: var(--pds-panel-raised);
+  white-space: nowrap;
+}
+
+.ide-theme-segmented__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  cursor: pointer;
+}
+
+.ide-theme-segmented__option + .ide-theme-segmented__option {
+  border-left: 1px solid var(--pds-border);
+}
+
+.ide-theme-segmented__option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ide-theme-segmented__option span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--pds-muted);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.ide-theme-segmented__option:hover span {
+  background: var(--pds-hover);
+  color: var(--pds-ink);
+}
+
+.ide-theme-segmented__option input:checked + span {
+  background: var(--pds-accent);
+  color: var(--pds-accent-ink);
+  font-weight: 600;
+}
+
+.ide-theme-segmented__option input:focus-visible + span {
+  outline: 2px solid var(--pds-focus-ring);
+  outline-offset: -2px;
+}
+
+.ide-github-link {
+  min-height: 30px;
+  color: var(--pds-ink);
+  text-decoration: none;
+}
+
+.ide-github-link:hover {
+  color: var(--pds-ink);
 }
 
 button:focus-visible,
@@ -934,12 +1009,8 @@ input:focus-visible {
     min-width: 88px;
   }
 
-  .ide-titlebar__theme > span {
+  .ide-titlebar__theme legend {
     display: none;
-  }
-
-  .ide-titlebar__theme-select {
-    min-width: 116px;
   }
 }
 
@@ -981,6 +1052,31 @@ input:focus-visible {
   .ide-titlebar__actions {
     order: 1;
     justify-content: flex-end;
+  }
+
+  .ide-titlebar__theme {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .ide-theme-segmented {
+    flex: 1 1 auto;
+  }
+
+  .ide-theme-segmented__option {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .ide-theme-segmented__option span,
+  .ide-github-link {
+    min-height: 40px;
+  }
+
+  .ide-theme-segmented__option span {
+    justify-content: center;
+    width: 100%;
+    padding-inline: 6px;
   }
 
   .ide-toolbar-field {
