@@ -41,6 +41,7 @@
 #include "gdbstub/helpers.h"
 #include "hw/i2c/esp32_i2c.h"
 #include "hw/irq.h"
+#include "hw/sd/dwc_sdmmc.h"
 #include "hw/ssi/lilygo_sx1262.h"
 #include "hw/xtensa/mofei-sim-addrs.h"
 #include "qemu/atomic.h"
@@ -65,6 +66,7 @@ bool esp32s3_gpspi2_radio_selected(void);
 int esp32s3_gpspi2_direct_radio_transfer(const uint8_t* tx, uint8_t* rx, size_t len);
 
 #define MOFEI_SDMMC_BASE 0x60028000u
+#define MOFEI_SD_CARD_DETECT_GPIO 21u /* Mofei BoardConfig：SD CD 低电平表示插卡。 */
 #define MOFEI_SDMMC_CMD_ADDR (MOFEI_SDMMC_BASE + 0x2cu)
 #define MOFEI_SDMMC_RINTSTS_ADDR (MOFEI_SDMMC_BASE + 0x44u)
 #define MOFEI_SDMMC_IDSTS_ADDR (MOFEI_SDMMC_BASE + 0x8cu)
@@ -4198,7 +4200,15 @@ uint32_t HELPER(mofei_gpio_get_level)(CPUXtensaState* env) {
   const unsigned base_reg = callinc * 4;
   const uint32_t pin = mofei_logical_reg_or_zero(env, base_reg + 2);
   uint32_t level = 1;
-  if (mofei_sim_board_is_lilygo_t5s3_pro()) {
+  if (mofei_sim_active_board == MOFEI_SIM_BOARD_MOFEI && pin == MOFEI_SD_CARD_DETECT_GPIO) {
+    /* TCG vCPU 需要 BQL 才能取得 block coroutine 的主 AioContext；保留调用方已有锁。 */
+    BQL_LOCK_GUARD();
+    /* 读取同一个原生 SD bus 的实际介质状态；缺少控制器或介质时仍报告无卡。 */
+    Object* controller = object_resolve_path("/machine/soc/sdmmc", NULL);
+    if (controller && object_dynamic_cast(controller, TYPE_DWC_SDMMC)) {
+      level = sdbus_get_inserted(&DWC_SDMMC(controller)->sdbus) ? 0u : 1u;
+    }
+  } else if (mofei_sim_board_is_lilygo_t5s3_pro()) {
     if (pin == LILYGO_SX1262_BUSY_GPIO) {
       level = lilygo_sx1262_board_busy() ? 1u : 0u;
     } else if (pin == LILYGO_SX1262_DIO1_GPIO) {
