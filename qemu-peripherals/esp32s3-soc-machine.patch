@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,994 +9,4187 @@
+@@ -9,994 +9,4190 @@
   */
 
  #include "qemu/osdep.h"
@@ -2614,6 +2614,7 @@
 +            {"_Znaj", &a->operator_new_array_addr},
 +            /* ROM/RTOS */
 +            {"vTaskStartScheduler", &a->vTaskStartScheduler_addr},
++            {"xPortStartScheduler", &a->xPortStartScheduler_addr},
 +            {"__assert_func", &a->__assert_func_addr},
 +            {"xTaskCreatePinnedToCore", &a->xTaskCreatePinnedToCore_addr},
 +            /* Partition/OTA */
@@ -2792,6 +2793,8 @@
 +            {"_ZTVN5panda3app13Game2048SceneE", &a->murphyVtableGame2048Scene_addr},
 +            {"_ZTVN5panda3app12_GLOBAL__N_112WeatherSceneE", &a->murphyVtableWeatherScene_addr},
 +            {"_ZTVN5panda3app12_GLOBAL__N_113CalendarSceneE", &a->murphyVtableCalendarScene_addr},
++            {"_ZTVN5panda3app12_GLOBAL__N_110TodaySceneE", &a->murphyVtableTodayScene_addr},
++            {"_ZTVN5panda3app14GridOrderSceneE", &a->murphyVtableGridOrderScene_addr},
 +            {"_ZTVN5panda3app5study13StudyHubSceneE", &a->murphyVtableStudyHubScene_addr},
 +            {"_ZTVN5panda3app5study12_GLOBAL__N_115CardsTodaySceneE", &a->murphyVtableCardsTodayScene_addr},
 +            {"_ZTVN5panda3app5study12_GLOBAL__N_114QueueListSceneE", &a->murphyVtableStudyQueueScene_addr},

@@ -2971,6 +2971,17 @@ static void translate_ldst(DisasContext* dc, const OpcodeArg arg[], const uint32
   tcg_gen_addi_i32(addr, arg[1].in, arg[2].imm);
   mop = gen_load_store_alignment(dc, par[0], addr);
 
+  /* SIZE release 的 start_cpu0 会在同一自旋里读取两个 CPU1 同步字节。
+   * 这些字节位于被固件早期 memset 清过的 BSS，host helper 写入无法让已
+   * 翻译的 load 立即看到新值；按当前 start_cpu0 的两个相对 PC 直接给出
+   * ready 值，保持后续真实启动路径（esp_startup_start_app）不变。 */
+  if (!par[2] && mofei_sim_addrs.start_cpu0_addr &&
+      (mofei_pc_match(dc->pc, mofei_sim_addrs.start_cpu0_addr + 0x4b) ||
+       mofei_pc_match(dc->pc, mofei_sim_addrs.start_cpu0_addr + 0x63))) {
+    tcg_gen_movi_i32(arg[0].out, 1);
+    return;
+  }
+
   if (par[2]) {
     if (par[1]) {
       tcg_gen_mb(TCG_BAR_STRL | TCG_MO_ALL);
@@ -3425,8 +3436,11 @@ static bool mofei_try_translate_retw_intercept(DisasContext* dc, bool before_und
     }
   }
 
-  /* vTaskStartScheduler → always redirect to app_main */
-  if (!is_patched && mofei_pc_match(pc, mofei_sim_addrs.vTaskStartScheduler_addr + 3)) {
+  /* 两级 scheduler 入口都要重定向到 simulator main。PERF 通常经过
+   * vTaskStartScheduler，而 SIZE release 可能直接返回到 xPortStartScheduler；
+   * 后者若只走普通 RETW，会回到 start_cpu0 的空转路径且永远没有首帧。 */
+  if (!is_patched && (mofei_pc_match(pc, mofei_sim_addrs.vTaskStartScheduler_addr + 3) ||
+                      mofei_pc_match(pc, mofei_sim_addrs.xPortStartScheduler_addr + 3))) {
     gen_helper_mofei_jump_to_app_main(tcg_env);
     const uint32_t entry_addr = mofei_sim_addrs.murphySimulatorMain_addr ? mofei_sim_addrs.murphySimulatorMain_addr
                                                                          : mofei_sim_addrs.app_main_addr;

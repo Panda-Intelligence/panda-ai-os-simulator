@@ -93,6 +93,10 @@ static inline bool mofei_sim_board_uses_gt911(void) {
 #define MOFEI_GFX_SIMULATOR_PUBLISH_RETURN_OFFSET 6u
 #define MOFEI_SIMULATOR_PUBLISH_RET_OFFSET 6u
 
+/* WeReadScene::route_ 偏移由保留 ELF 的 DWARF 布局证明，枚举占一个字节。 */
+#define MOFEI_WEREAD_SCENE_ROUTE_OFFSET 0x48u
+#define MOFEI_WEREAD_ROUTE_COUNT 9u
+
 typedef struct MofeiSimAddrs {
   /* Core firmware functions */
   uint32_t setup_addr;                                        /* setup() entry point */
@@ -209,6 +213,8 @@ typedef struct MofeiSimAddrs {
   uint32_t operator_new_array_addr;       /* operator new[](unsigned int) */
   /* ROM/RTOS functions that get RETW-patched */
   uint32_t vTaskStartScheduler_addr;
+  /* SIZE release 可能直接落到端口级 scheduler 入口；与上层入口共用重定向契约。 */
+  uint32_t xPortStartScheduler_addr;
   uint32_t __assert_func_addr;
   /* Functions intercepted at call-target level (callN target) */
   uint32_t esp_partition_find_addr;
@@ -433,6 +439,7 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableGame2048Scene_addr;       /* vtable for murphy::app::Game2048Scene */
   uint32_t murphyVtableWeatherScene_addr;        /* vtable for Murphy WeatherScene */
   uint32_t murphyVtableCalendarScene_addr;       /* vtable for Murphy CalendarScene */
+  uint32_t murphyVtableTodayScene_addr;          /* panda::app 匿名命名空间 TodayScene 的 vtable */
   uint32_t murphyVtableStudyHubScene_addr;       /* vtable for murphy::app::study::StudyHubScene */
   uint32_t murphyVtableCardsTodayScene_addr;     /* vtable for Murphy CardsTodayScene */
   uint32_t murphyVtableStudyQueueScene_addr;
@@ -445,6 +452,7 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableConfirmationScene_addr;  /* vtable for panda::ui::ConfirmationScene */
   uint32_t murphyVtableReaderScene_addr;        /* vtable for murphy::app::ReaderScene */
   uint32_t murphyVtableSleepScene_addr;         /* vtable for murphy::app::SleepScene */
+  uint32_t murphyVtableWallpaperPickerScene_addr; /* WallpaperPickerScene 的 vtable */
   uint32_t murphyVtablePandaHubScene_addr;      /* vtable for murphy::app::PandaHubScene */
   uint32_t murphyVtablePandaLuaAppScene_addr;   /* vtable for murphy::app::PandaLuaAppScene */
   uint32_t murphyVtableButtonRemapScene_addr;   /* vtable for murphy::app::ButtonRemapScene */
@@ -459,6 +467,21 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableDictionaryScene_addr;    /* vtable for murphy::app::ReaderDictionaryResultScene */
   uint32_t murphyVtableSudokuScene_addr;        /* vtable for murphy::app::SudokuScene */
   uint32_t murphyVtableVirtualPetScene_addr;    /* vtable for murphy::app::VirtualPetScene */
+  uint32_t murphyVtableWordPuzzleScene_addr;    /* WordPuzzleScene 的 vtable */
+  uint32_t murphyVtablePandaCloudAccountScene_addr; /* PandaCloudAccountScene 的 vtable */
+  uint32_t murphyVtableGnssScene_addr;          /* GnssScene 的 vtable */
+  uint32_t murphyVtableGridOrderScene_addr;     /* GridOrderScene 的 vtable */
+  uint32_t murphyVtableRegionOnboardingScene_addr; /* RegionOnboardingScene 的 vtable */
+  uint32_t murphyVtableClockFocusScene_addr;    /* ClockFocusScene 的 vtable */
+  uint32_t murphyVtableTimerToolsScene_addr;    /* TimerToolsScene 的 vtable */
+  uint32_t murphyVtablePomodoroDurationEditorScene_addr; /* PomodoroDurationEditorScene 的 vtable */
+  uint32_t murphyVtableAlarmListScene_addr;     /* AlarmListScene 的 vtable */
+  uint32_t murphyVtableAlarmEditorScene_addr;   /* AlarmEditorScene 的 vtable */
+  uint32_t murphyVtableAlarmWeekdayEditorScene_addr; /* AlarmWeekdayEditorScene 的 vtable */
+  uint32_t murphyVtableHanaAssistantScene_addr; /* HanaAssistantScene 的 vtable */
+  uint32_t murphyVtableWeReadScene_addr;        /* WeReadScene 的 vtable */
+  uint32_t murphyVtableOtaStatusScene_addr;     /* OtaStatusScene 的 vtable */
+  uint32_t murphyVtableMessageScene_addr;       /* MessageScene 的 vtable */
   uint32_t fillRect_addr;                       /* GfxRenderer::fillRect(int,int,int,int,bool) const */
   uint32_t displayBuffer_addr;                  /* GfxRenderer::displayBuffer(HalDisplay::RefreshMode) const */
   uint32_t renderActivitySync_addr;             /* renderActivitySynchronously(Activity*) */

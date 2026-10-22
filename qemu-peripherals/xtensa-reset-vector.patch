@@ -119,7 +119,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 index ca629f0..fdca6da 100644
 --- a/target/xtensa/exc_helper.c
 +++ b/target/xtensa/exc_helper.c
-@@ -26,130 +26,1070 @@
+@@ -26,130 +26,1072 @@
   */
  
  #include "qemu/osdep.h"
@@ -416,8 +416,10 @@ index ca629f0..fdca6da 100644
 +      {mofei_sim_addrs.murphyVtableRecentBooksScene_addr, "RecentBooks"},
 +      {mofei_sim_addrs.murphyVtableArcadeHubScene_addr, "ArcadeHub"},
 +      {mofei_sim_addrs.murphyVtableGame2048Scene_addr, "Game2048"},
-+      {mofei_sim_addrs.murphyVtableWeatherScene_addr, "WeatherClock"},
++      {mofei_sim_addrs.murphyVtableWeatherScene_addr, "Weather"},
 +      {mofei_sim_addrs.murphyVtableCalendarScene_addr, "Calendar"},
++      {mofei_sim_addrs.murphyVtableTodayScene_addr, "Today"},
++      {mofei_sim_addrs.murphyVtableGridOrderScene_addr, "HomeGrid"},
 +      {mofei_sim_addrs.murphyVtableStudyHubScene_addr, "Study"},
 +      {mofei_sim_addrs.murphyVtableCardsTodayScene_addr, "StudyCardsToday"},
 +      {mofei_sim_addrs.murphyVtableStudyQueueScene_addr, "StudyQueue"},
@@ -8255,7 +8257,7 @@ index b511e86..9d9090a 100644
      if (op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
          for (slot = 0; slot < slots; ++slot) {
              if (slot_prop[slot].ops->op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
-@@ -1063,1176 +1843,1844 @@ static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
+@@ -1063,1176 +1843,1857 @@ static void disas_xtensa_insn(CPUXtensaState *env, DisasContext *dc)
              }
          }
      }
@@ -9792,6 +9794,16 @@ index b511e86..9d9090a 100644
 -    mop = gen_load_store_alignment(dc, par[0], addr);
 +  tcg_gen_addi_i32(addr, arg[1].in, arg[2].imm);
 +  mop = gen_load_store_alignment(dc, par[0], addr);
++  /* SIZE release 的 start_cpu0 会在同一自旋里读取两个 CPU1 同步字节。
++   * 这些字节位于被固件早期 memset 清过的 BSS，host helper 写入无法让已
++   * 翻译的 load 立即看到新值；按当前 start_cpu0 的两个相对 PC 直接给出
++   * ready 值，保持后续真实启动路径（esp_startup_start_app）不变。 */
++  if (!par[2] && mofei_sim_addrs.start_cpu0_addr &&
++      (mofei_pc_match(dc->pc, mofei_sim_addrs.start_cpu0_addr + 0x4b) ||
++       mofei_pc_match(dc->pc, mofei_sim_addrs.start_cpu0_addr + 0x63))) {
++    tcg_gen_movi_i32(arg[0].out, 1);
++    return;
++  }
  
 -    if (par[2]) {
 -        if (par[1]) {
@@ -10505,8 +10517,11 @@ index b511e86..9d9090a 100644
 +    }
 +  }
 +
-+  /* vTaskStartScheduler → always redirect to app_main */
-+  if (!is_patched && mofei_pc_match(pc, mofei_sim_addrs.vTaskStartScheduler_addr + 3)) {
++  /* 两级 scheduler 入口都要重定向到 simulator main。PERF 通常经过
++   * vTaskStartScheduler，而 SIZE release 可能直接返回到 xPortStartScheduler；
++   * 后者若只走普通 RETW，会回到 start_cpu0 的空转路径且永远没有首帧。 */
++  if (!is_patched && (mofei_pc_match(pc, mofei_sim_addrs.vTaskStartScheduler_addr + 3) ||
++                      mofei_pc_match(pc, mofei_sim_addrs.xPortStartScheduler_addr + 3))) {
 +    gen_helper_mofei_jump_to_app_main(tcg_env);
 +    const uint32_t entry_addr = mofei_sim_addrs.murphySimulatorMain_addr ? mofei_sim_addrs.murphySimulatorMain_addr
 +                                                                         : mofei_sim_addrs.app_main_addr;

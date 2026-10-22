@@ -4655,7 +4655,19 @@ fn activity_matches(expected_normalized: &str, activity: &str) -> bool {
     if expected_normalized == "other" {
         !activity_normalized.starts_with("exit:") && activity_normalized != "dashboard"
     } else {
-        activity_normalized == expected_normalized
+        let expected_canonical = match expected_normalized {
+            "sleepwallpaper" => "sleep",
+            "weatherclock" => "weather",
+            "applets" => "pandahub",
+            value => value,
+        };
+        let activity_canonical = match activity_normalized.as_str() {
+            "sleepwallpaper" => "sleep",
+            "weatherclock" => "weather",
+            "applets" => "pandahub",
+            value => value,
+        };
+        activity_canonical == expected_canonical
     }
 }
 
@@ -5047,6 +5059,7 @@ fn case_id_needs_multipage_txt(case_id: &str) -> bool {
         "frontlight-quick-settings",
         "txt-reader-touch-page-turn",
         "txt-swipe-page",
+        "recent-reading-txt-reader-search",
     ];
     TXT_PAGING_MARKERS
         .iter()
@@ -7568,6 +7581,7 @@ mod tests {
         fs::remove_dir_all(tmp_dir).unwrap();
     }
 
+    #[cfg(feature = "product-fixtures")]
     #[test]
     fn recent_reading_fixture_overwrites_inherited_ttf_reader_settings() {
         let tmp_dir = temp_test_dir("recent-fixture-settings");
@@ -9694,6 +9708,27 @@ mod tests {
     }
 
     #[test]
+    fn activity_assertion_accepts_lvgl_sleep_route_alias() {
+        assert!(activity_matches("sleepwallpaper", "Sleep"));
+        assert!(activity_matches("sleep", "SleepWallpaper"));
+        assert!(!activity_matches("sleepwallpaper", "Dashboard"));
+    }
+
+    #[test]
+    fn activity_assertion_accepts_weather_route_alias() {
+        assert!(activity_matches("weather", "WeatherClock"));
+        assert!(activity_matches("weatherclock", "Weather"));
+        assert!(!activity_matches("weather", "Dashboard"));
+    }
+
+    #[test]
+    fn activity_assertion_accepts_panda_hub_route_alias() {
+        assert!(activity_matches("pandahub", "Applets"));
+        assert!(activity_matches("applets", "PandaHub"));
+        assert!(!activity_matches("pandahub", "Dashboard"));
+    }
+
+    #[test]
     fn sanitizes_case_artifact_names() {
         assert_eq!(
             safe_artifact_name("Dashboard / Weather Smoke"),
@@ -10071,6 +10106,9 @@ mod simulated_location_defaults {
         assert_eq!(location.latitude, 51.5074);
         assert_eq!(location.longitude, -0.1278);
         assert!(is_valid_location(&location));
-        assert_eq!(normalize_timezone_for_firmware("Europe/London"), location.timezone);
+        assert_eq!(
+            normalize_timezone_for_firmware("Europe/London"),
+            location.timezone
+        );
     }
 }

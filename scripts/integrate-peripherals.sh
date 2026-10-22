@@ -612,3 +612,4 @@ echo ""
 echo "[integrate] done. Peripheral sources and build fragments applied."
 echo "[integrate] next: apps/simulator/scripts/build-qemu.sh"
 [[ ${APPLY_SOC} -eq 0 ]] && echo "[integrate] (re-run with --soc to also apply the ESP32-S3 machine patch)"
+exit 0
