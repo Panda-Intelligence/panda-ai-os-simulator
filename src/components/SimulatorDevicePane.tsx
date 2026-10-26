@@ -108,6 +108,18 @@ export function SimulatorDevicePane({
     : "ide-device-stage";
 
   useEffect(() => {
+    const update = (event: Event) => {
+      const detail = (event as CustomEvent<{ board?: string; running?: boolean; error?: string; message?: string }>).detail;
+      if (detail.board) setBoardId(detail.board);
+      if (typeof detail.running === "boolean") setRunning(detail.running);
+      setError(detail.error ?? null);
+      if (detail.message) setStatus({ kind: "message", text: detail.message });
+    };
+    window.addEventListener("pos-dev-state", update);
+    return () => window.removeEventListener("pos-dev-state", update);
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     Promise.resolve(hostBridgeOverride ?? resolveDefaultSimulatorHostBridge())
       .then((bridge) => {
