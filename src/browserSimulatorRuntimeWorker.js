@@ -91,6 +91,12 @@ async function handleCommand(command) {
       releaseButtons();
       result(command.requestId, true, running ? "released" : "not_running");
       return;
+    case "serialLine":
+      {
+        const error = sendSerialLine(command.line);
+        result(command.requestId, !error, error ? undefined : "serial_line_sent", error);
+      }
+      return;
     case "injectButton":
       injectButton(command.buttonId, command.pressed);
       result(command.requestId, true, running ? "button_injected" : "not_running");
@@ -306,6 +312,16 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
   })();
 
   return qemuModulePromise;
+}
+
+// 只向真实来宾控制台发送一条有界命令；ACK 必须来自固件，宿主不合成执行结果。
+function sendSerialLine(line) {
+  if (!running) return "browser_serial_runtime_not_running";
+  if (typeof line !== "string" || !line || /[\r\n\0]/.test(line)) return "browser_serial_line_invalid";
+  const bytes = new TextEncoder().encode(line + "\n");
+  if (bytes.byteLength > 513) return "browser_serial_line_invalid";
+  qemuPty.pushInput(Array.from(bytes));
+  return undefined;
 }
 
 function createBrowserQemuPty() {

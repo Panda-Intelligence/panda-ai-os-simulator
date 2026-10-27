@@ -54,6 +54,7 @@ export type BrowserSimulatorRuntimeCommand =
   | { type: "stop"; requestId: number }
   | { type: "fullReboot"; requestId: number; boardId: string; firmwarePath: string; hostLocation: SimulatorHostLocation }
   | { type: "releaseButtons"; requestId: number }
+  | { type: "serialLine"; requestId: number; line: string }
   | { type: "injectButton"; requestId: number; buttonId: number; pressed: boolean }
   | { type: "injectTouch"; requestId: number; input: SimulatorTouchInput }
   | { type: "peripheralControl"; requestId: number; payload: number[] }
@@ -93,6 +94,7 @@ type BrowserSimulatorRuntimeAdapter = {
   stopSim(): Promise<string>;
   fullRebootSim(boardId: string, firmwarePath: string, hostLocation: SimulatorHostLocation): Promise<string>;
   releaseButtons(): Promise<boolean>;
+  sendSerialLine(line: string): Promise<void>;
   injectButton(buttonId: number, pressed: boolean): Promise<boolean>;
   injectTouch(input: SimulatorTouchInput): Promise<boolean>;
   injectPeripheralControl(payload: number[]): Promise<boolean>;
@@ -147,6 +149,10 @@ class UnavailableBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRunti
   async releaseButtons(): Promise<boolean> {
     this.emit({ type: "serialLog", payload: "[browser] releaseButtons ignored because WASM runtime is unavailable." });
     return false;
+  }
+
+  async sendSerialLine(_line: string): Promise<void> {
+    throw new Error(BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE);
   }
 
   async injectButton(buttonId: number, pressed: boolean): Promise<boolean> {
@@ -267,6 +273,14 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
   async releaseButtons(): Promise<boolean> {
     const result = await this.sendCommand({ type: "releaseButtons", requestId: this.allocateRequestId() });
     return this.booleanResult("releaseButtons", result);
+  }
+
+  async sendSerialLine(line: string): Promise<void> {
+    if (!line || /[\r\n\0]/.test(line) || new TextEncoder().encode(line).byteLength > 512) {
+      throw new Error("browser_serial_line_invalid");
+    }
+    const result = await this.sendCommand({ type: "serialLine", requestId: this.allocateRequestId(), line });
+    if (!result.ok) throw this.commandError("serialLine", result);
   }
 
   async injectButton(buttonId: number, pressed: boolean): Promise<boolean> {
@@ -608,6 +622,10 @@ export class BrowserSimulatorRuntimeHost {
 
   async releaseButtons(): Promise<boolean> {
     return (await this.runtimeAdapter()).releaseButtons();
+  }
+
+  async sendSerialLine(line: string): Promise<void> {
+    return (await this.runtimeAdapter()).sendSerialLine(line);
   }
 
   async injectButton(buttonId: number, pressed: boolean): Promise<boolean> {

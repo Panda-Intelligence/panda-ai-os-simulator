@@ -216,9 +216,8 @@ generate_firmware_kernel() {
 
   step "generating browser qemu kernel image from ${firmware_elf}"
   mkdir -p "$(dirname "${target}")"
-  # 生成物不应携带源码/构建目录的 macOS provenance 扩展属性；避免 fcopyfile 在临界空间时复制元数据失败。
-  cp -fX "${firmware_elf}" "${target}"
-  "${strip_tool}" --strip-all "${target}"
+  # 直接输出 stripped ELF，避免复制完整调试文件及其 macOS provenance 元数据。
+  "${strip_tool}" --strip-all -o "${target}" "${firmware_elf}"
 }
 
 generate_firmware_symbols() {
