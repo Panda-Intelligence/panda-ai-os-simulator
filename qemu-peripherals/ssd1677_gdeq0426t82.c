@@ -93,7 +93,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(SSD1677State, SSD1677_GDEQ0426)
 #define CMD_WRITE_RAM_RED 0x26
 #define CMD_VCOM_CTL 0x2C
 #define CMD_WRITE_LUT 0x32
+#define CMD_PING_PONG 0x37
 #define CMD_BORDER_WAVEFORM 0x3C
+#define CMD_POST_FULL_UPDATE_OPT 0x3F
 #define CMD_RAM_X_START_END 0x44
 #define CMD_RAM_Y_START_END 0x45
 #define CMD_AUTO_WRITE_RED 0x46
@@ -134,7 +136,7 @@ struct SSD1677State {
   /* Parser state */
   uint8_t mode; /* ParserMode, stored as uint8_t for VMSTATE_UINT8 */
   uint8_t current_cmd;
-  uint8_t arg_buf[8];
+  uint8_t arg_buf[16];
   uint8_t arg_index;
   uint8_t arg_expected;
   uint16_t lut_consume_remaining;
@@ -668,7 +670,11 @@ static int command_arg_count(uint8_t cmd) {
       return 1;
     case CMD_VCOM_CTL:
       return 1;
+    case CMD_PING_PONG:
+      return 10;
     case CMD_BORDER_WAVEFORM:
+      return 1;
+    case CMD_POST_FULL_UPDATE_OPT:
       return 1;
     case CMD_RAM_X_START_END:
       /* MofeiDisplay::setRamArea sends 16-bit pixel values for X start/end
@@ -744,7 +750,9 @@ static void apply_collected_args(SSD1677State* s) {
     case CMD_SOFTSTART:
     case CMD_TEMPERATURE_SENSOR:
     case CMD_WRITE_TEMP:
+    case CMD_PING_PONG:
     case CMD_BORDER_WAVEFORM:
+    case CMD_POST_FULL_UPDATE_OPT:
     case CMD_DISPLAY_UPDATE_CTL_1:
     case CMD_VCOM_CTL:
     case CMD_GATE_VOLTAGE:
@@ -1076,7 +1084,7 @@ static const VMStateDescription vmstate_ssd1677 = {
                                VMSTATE_BOOL(busy_high, SSD1677State),
                                VMSTATE_UINT8(mode, SSD1677State),
                                VMSTATE_UINT8(current_cmd, SSD1677State),
-                               VMSTATE_UINT8_ARRAY(arg_buf, SSD1677State, 8),
+                               VMSTATE_UINT8_ARRAY(arg_buf, SSD1677State, 16),
                                VMSTATE_UINT8(arg_index, SSD1677State),
                                VMSTATE_UINT8(arg_expected, SSD1677State),
                                VMSTATE_UINT16(lut_consume_remaining, SSD1677State),
