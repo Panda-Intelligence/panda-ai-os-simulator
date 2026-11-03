@@ -174,6 +174,30 @@ test("Runtime health updates require exact open request and package identity, in
   assert.equal(emit,undefined);
 });
 
+test("Runtime health resynchronizes fragmented messages after an interrupted POS_APP prefix", async () => {
+  let emit;
+  const updates = [];
+  const monitor = await createPosRuntimeHealthMonitor({ async subscribeSerialLog(callback) {
+    emit = callback; return () => { emit = undefined; };
+  } }, result => updates.push(result));
+  const expected = { requestId: "pos_mw0vbvu3_3", appId: "app.studio.watertracker.146671f5e109",
+    version: "1.0.0", packageDigest: "sha256:" + "a".repeat(64) };
+  const running = { schemaVersion: 1, ...expected, operation: "runtime", state: "running", ok: true, terminal: false };
+  // 真实客户机日志曾出现此残缺前缀；完整消息仍必须按自身 requestId 和包身份校验。
+  const line = `POS_APP:pos_mPOS_APP:${expected.requestId}:${JSON.stringify(running)}\n`;
+  emit(line.slice(0, 13)); emit(line.slice(13, 71)); emit(line.slice(71));
+  assert.equal(updates.length, 0);
+  monitor.watch(expected);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].state, "running");
+  emit(`POS_APP:${expected.requestId}:${JSON.stringify({ ...running, requestId: "other_request" })}\n`);
+  assert.equal(updates.length, 1);
+  emit(`POS_APP:${expected.requestId}:${JSON.stringify({ ...running, state: "failed", ok: false, error: "contains POS_APP:noise" })}\n`);
+  assert.equal(updates.length, 2);
+  assert.equal(updates[1].error, "contains POS_APP:noise");
+  monitor.dispose();
+});
+
 test("session cancellation releases an outstanding firmware response listener", async () => {
   const host = consoleHost(async () => {});
   const controller = new AbortController();

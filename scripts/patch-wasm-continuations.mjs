@@ -145,11 +145,33 @@ export function patchWasmPtyPoll(source) {
   return source.slice(0, timeout.getStart(file)) + replacement + source.slice(timeout.end);
 }
 
+export function patchWasmRootMailbox(source) {
+  const file = ts.createSourceFile("qemu-runtime.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+  if (file.parseDiagnostics.length) fail("root_mailbox_javascript_syntax");
+  const found = [];
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === "__emscripten_thread_mailbox_await") found.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  if (found.length !== 1 || !found[0].initializer || !ts.isArrowFunction(found[0].initializer)) fail("root_mailbox_function");
+  const fn = found[0].initializer;
+  if (fn.parameters.length !== 1 || fn.parameters[0].name.getText(file) !== "pthread_ptr" ||
+      !ts.isBlock(fn.body) || fn.body.statements.length !== 1 || !ts.isIfStatement(fn.body.statements[0])) fail("root_mailbox_body");
+  const condition = fn.body.statements[0].expression;
+  const original = 'typeof Atomics.waitAsync === "function"';
+  const replacement = 'ENVIRONMENT_IS_PTHREAD && typeof Atomics.waitAsync === "function"';
+  if (compact(condition.getText(file)) === compact(replacement)) return source;
+  if (compact(condition.getText(file)) !== compact(original)) fail("root_mailbox_condition");
+  // 根运行时保留 SDK 的 postMessage 通知路径；PThread 继续使用原生异步等待。
+  return source.slice(0, condition.getStart(file)) + replacement + source.slice(condition.end);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const target = process.argv[2];
   if (!target || process.argv.length !== 3) throw new Error("Usage: node patch-wasm-continuations.mjs <runtime-js>");
   const source = readFileSync(target, "utf8");
-  const patched = patchWasmPtyPoll(patchWasmContinuations(source));
+  const patched = patchWasmRootMailbox(patchWasmPtyPoll(patchWasmContinuations(source)));
   writeFileSync(target, patched);
   console.log("[patch-wasm-continuations] " + target);
 }

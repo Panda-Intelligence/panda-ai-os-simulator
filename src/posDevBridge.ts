@@ -152,18 +152,20 @@ export async function createPosRuntimeHealthMonitor(
     const lines = buffered.split(/\r?\n/);
     buffered = lines.pop() ?? "";
     for (const line of lines) {
-      const start = line.indexOf("POS_APP:");
-      if (start < 0) continue;
-      const jsonStart = line.indexOf(":", start + 8);
-      if (jsonStart < 0) continue;
-      try {
-        const result = JSON.parse(line.slice(jsonStart + 1)) as PosConsoleResult;
-        if (result.schemaVersion !== 1 || result.operation !== "runtime" || !result.requestId
-          || !["running", "failed", "stopped"].includes(result.state) || typeof result.ok !== "boolean") continue;
-        recent.set(result.requestId, result);
-        if (recent.size > 16) recent.delete(recent.keys().next().value!);
-        deliver(result);
-      } catch { /* 非结构化日志不改变 Runtime 健康状态。 */ }
+      // 串口输出可能夹有上一条消息的残缺前缀；继续寻找完整且身份一致的信封。
+      for (let start = line.indexOf("POS_APP:"); start >= 0; start = line.indexOf("POS_APP:", start + 8)) {
+        const jsonStart = line.indexOf(":", start + 8);
+        if (jsonStart < 0) break;
+        const requestId = line.slice(start + 8, jsonStart);
+        try {
+          const result = JSON.parse(line.slice(jsonStart + 1)) as PosConsoleResult;
+          if (result.schemaVersion !== 1 || result.operation !== "runtime" || !requestId || result.requestId !== requestId
+            || !["running", "failed", "stopped"].includes(result.state) || typeof result.ok !== "boolean") continue;
+          recent.set(result.requestId, result);
+          if (recent.size > 16) recent.delete(recent.keys().next().value!);
+          deliver(result);
+        } catch { /* 残缺消息和非结构化日志不能改变 Runtime 健康状态。 */ }
+      }
     }
   });
   return {
