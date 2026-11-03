@@ -16,7 +16,7 @@ function decodeBase64ToUint8(b64: string): Uint8Array {
   return arr;
 }
 
-function rotate90CW(src: Uint8Array, srcW: number, srcH: number): Uint8Array {
+export function rotate90CW(src: Uint8Array, srcW: number, srcH: number): Uint8Array {
   const dst = new Uint8Array(src.length);
   const dstW = srcH;
   // src(x, y) -> dst(srcH - 1 - y, x)
@@ -36,11 +36,21 @@ function rotate90CW(src: Uint8Array, srcW: number, srcH: number): Uint8Array {
   return dst;
 }
 
-function transformFramebuffer(bytes: Uint8Array, width: number, height: number, board: SimulatorBoard): Uint8Array | null {
+export function shouldRotate90Clockwise(
+  frame: { width: number; height: number },
+  board: Pick<SimulatorBoard, "outputWidth" | "outputHeight">,
+): boolean {
+  if (board.outputWidth === frame.width && board.outputHeight === frame.height) {
+    return false;
+  }
+  return board.outputWidth === frame.height && board.outputHeight === frame.width;
+}
+
+export function transformFramebuffer(bytes: Uint8Array, width: number, height: number, board: SimulatorBoard): Uint8Array | null {
   if (board.outputWidth === width && board.outputHeight === height) {
     return bytes;
   }
-  if (board.outputWidth === height && board.outputHeight === width) {
+  if (shouldRotate90Clockwise({ width, height }, board)) {
     return rotate90CW(bytes, width, height);
   }
   return null;
@@ -78,21 +88,26 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trackingRef = useRef(new Map<number, { fingerId: number; x: number; y: number }>());
   const visual = getSimulatorBoardVisual(board.id);
+  const isLandscape = board.outputWidth > board.outputHeight;
   const physicalWidth = visual.physicalSizeMm
-    ? Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
-    : null;
+    ? (isLandscape
+        ? Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+        : Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height))
+    : board.outputWidth;
   const physicalHeight = visual.physicalSizeMm
-    ? Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
-    : null;
-  const physicalAspect = physicalWidth && physicalHeight
+    ? (isLandscape
+        ? Math.min(visual.physicalSizeMm.width, visual.physicalSizeMm.height)
+        : Math.max(visual.physicalSizeMm.width, visual.physicalSizeMm.height))
+    : board.outputHeight;
+  const physicalAspect = visual.physicalSizeMm
     ? `${physicalWidth} / ${physicalHeight}`
     : `${board.outputWidth + 26} / ${board.outputHeight + 32}`;
   const screenDiagonalMm = visual.screenInches ? visual.screenInches * 25.4 : null;
-  const screenAspect = Math.min(board.outputWidth, board.outputHeight) / Math.max(board.outputWidth, board.outputHeight);
+  const screenAspect = board.outputWidth / board.outputHeight;
   const screenHeightMm = screenDiagonalMm ? screenDiagonalMm / Math.sqrt(1 + screenAspect * screenAspect) : null;
   const screenWidthMm = screenHeightMm ? screenHeightMm * screenAspect : null;
-  const screenWidthRatio = physicalWidth && screenWidthMm ? screenWidthMm / physicalWidth : null;
-  const screenHeightRatio = physicalHeight && screenHeightMm ? screenHeightMm / physicalHeight : null;
+  const screenWidthRatio = visual.physicalSizeMm && screenWidthMm ? screenWidthMm / physicalWidth : null;
+  const screenHeightRatio = visual.physicalSizeMm && screenHeightMm ? screenHeightMm / physicalHeight : null;
   const fixedShellWidth = displayScale > 0 && screenWidthRatio
     ? (board.outputWidth * displayScale) / screenWidthRatio
     : null;
@@ -102,6 +117,9 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
   const shellStyle: PanelShellStyle = {
     aspectRatio: physicalAspect,
     "--panel-accent": visual.accent,
+    ...(isLandscape && displayScale === 0
+      ? { width: "min(100%, 760px)", height: "auto" }
+      : {}),
     ...(visual.physicalSizeMm
       ? { "--panel-thickness": `${visual.physicalSizeMm.thickness}px` }
       : {}),

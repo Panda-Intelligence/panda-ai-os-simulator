@@ -25,11 +25,26 @@ if (hasPreviousManifest) {
     previousManifest = null;
   }
 }
+const DEFAULT_REQUIRED_BUILD_BOARDS = [
+  "default",
+  "s3wroom",
+  "s37uc",
+  "m5papers3",
+  "lilygo-t5s3-pro",
+  "read-pico",
+  "molink",
+  "x4pro",
+  "metalio-eink4",
+  "eego-a4",
+];
 let requiredBuildBoards = requireIndex >= 0 ? flags.slice(requireIndex + 1).filter((flag) => !flag.startsWith("--")) : [];
+if (requiredBuildBoards.length === 1 && requiredBuildBoards[0] === "all") {
+  requiredBuildBoards = [...DEFAULT_REQUIRED_BUILD_BOARDS];
+}
 if (requiredBuildBoards.length === 0 && previousManifest) {
   requiredBuildBoards = Array.isArray(previousManifest.requiredBuildBoards) ? previousManifest.requiredBuildBoards : [];
 }
-if (requiredBuildBoards.length === 0) requiredBuildBoards = ["default"];
+if (requiredBuildBoards.length === 0) requiredBuildBoards = [...DEFAULT_REQUIRED_BUILD_BOARDS];
 requiredBuildBoards = [...new Set(requiredBuildBoards)];
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -91,29 +106,30 @@ const sourceInputCompatibility = new Map();
 
 function sourceInputsMatchCurrentRevision(sourceRevision) {
   if (sourceRevision === currentSourceRevision) return true;
-  if (!/^[0-9a-f]{40}$/.test(sourceRevision)) return false;
-  if (!explicitProductRoot || !Array.isArray(product?.sourceInputs) || !product.sourceInputs.length) return false;
+  if (!/^[0-9a-f]{40}$/.test(sourceRevision) || /^0{40}$/.test(sourceRevision)) return false;
   if (sourceInputCompatibility.has(sourceRevision)) return sourceInputCompatibility.get(sourceRevision);
 
   let matches = false;
-  try {
-    // 发布提交可能只更新云端元数据；固件来源提交仍然有效时允许复用产物。
-    execFileSync(
-      "git",
-      [
-        "-C",
-        repoRoot,
-        "diff",
-        "--quiet",
-        `${sourceRevision}..${currentSourceRevision}`,
-        "--",
-        ...product.sourceInputs,
-      ],
-      { stdio: "ignore" },
-    );
-    matches = true;
-  } catch {
-    matches = false;
+  if (explicitProductRoot && Array.isArray(product?.sourceInputs) && product.sourceInputs.length) {
+    try {
+      // 发布提交可能只更新云端元数据；固件来源提交仍然有效时允许复用产物。
+      execFileSync(
+        "git",
+        [
+          "-C",
+          repoRoot,
+          "diff",
+          "--quiet",
+          `${sourceRevision}..${currentSourceRevision}`,
+          "--",
+          ...product.sourceInputs,
+        ],
+        { stdio: "ignore" },
+      );
+      matches = true;
+    } catch {
+      matches = false;
+    }
   }
   sourceInputCompatibility.set(sourceRevision, matches);
   return matches;
@@ -247,13 +263,14 @@ for (const buildBoard of requiredBuildBoards) {
     }
     if (typeof provenance.sourceRevision !== "string" || !provenance.sourceRevision) {
       boardErrors.push(`${buildBoard}: source revision is missing`);
-    } else {
+    } else if (!sourceInputsMatchCurrentRevision(provenance.sourceRevision)) {
       sourceRevisions.add(provenance.sourceRevision);
-      if (!sourceInputsMatchCurrentRevision(provenance.sourceRevision)) {
-        boardErrors.push(
-          `${buildBoard}: source revision ${provenance.sourceRevision} does not match current HEAD ${currentSourceRevision}`,
-        );
-      }
+      boardErrors.push(
+        `${buildBoard}: source revision ${provenance.sourceRevision} does not match current HEAD ${currentSourceRevision}`,
+      );
+    } else {
+      provenance = { ...provenance, sourceRevision: currentSourceRevision };
+      sourceRevisions.add(provenance.sourceRevision);
     }
     provenance = { ...provenance, status: "ready" };
   }

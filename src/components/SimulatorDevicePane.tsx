@@ -63,8 +63,11 @@ export function SimulatorDevicePane({
 }: SimulatorDevicePaneProps = {}) {
   const [resolvedHostBridge, setResolvedHostBridge] = useState<SimulatorHostBridge>(browserSimulatorHostBridge);
   const [running, setRunning] = useState(false);
+  const [startPending, setStartPending] = useState(false);
   const [locale, setLocale] = useState<SimulatorLocale>(() => resolveInitialSimulatorLocale());
   const [boardId, setBoardId] = useState<string>(DEFAULT_SIMULATOR_BOARD_ID);
+  const selectedBoardId = boardId;
+  const setSelectedBoardId = setBoardId;
   const board = getSimulatorBoard(boardId);
   const [status, setStatus] = useState<StatusState>({ kind: "translation", key: "statusIdle" });
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +91,7 @@ export function SimulatorDevicePane({
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const sdImageInputRef = useRef<HTMLInputElement | null>(null);
   const firmwarePathRef = useRef("");
+  const boardSwitchTokenRef = useRef(0);
   const buttonClickTailRef = useRef<Promise<void>>(Promise.resolve());
   const pressedPointerButtonsRef = useRef<Set<number>>(new Set());
   const t = (key: SimulatorTranslationKey) => simulatorT(locale, key);
@@ -252,10 +256,10 @@ export function SimulatorDevicePane({
   }, [board.id, hostBridge, locale]);
 
   useEffect(() => {
-    if (browserSdAvailable) {
+    if (browserSdAvailable && !running && !startPending) {
       void refreshSdDirectory("/");
     }
-  }, [browserSdAvailable, refreshSdDirectory]);
+  }, [browserSdAvailable, refreshSdDirectory, running, startPending]);
 
   useEffect(() => {
     const serialConsole = serialConsoleRef.current;
@@ -265,11 +269,14 @@ export function SimulatorDevicePane({
   }, [logLines]);
 
   const quickStartSim = async () => {
-    if (!launchAvailable) {
-      setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
+    if (!launchAvailable || startPending) {
+      if (!launchAvailable) {
+        setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
+      }
       return;
     }
     setError(null);
+    setStartPending(true);
     try {
       const hostLocation = createSimulatedLocation();
       const firmwarePath = selectedFirmwarePath;
@@ -287,11 +294,15 @@ export function SimulatorDevicePane({
       const msg = typeof e === "string" ? e : (e as Error).message ?? String(e);
       setError(msg);
       setStatus({ kind: "translation", key: "statusStartError" });
+    } finally {
+      setStartPending(false);
     }
   };
 
   const startSim = async () => {
+    if (startPending) return;
     setError(null);
+    setStartPending(true);
     try {
       const firmwarePath = await hostBridge.chooseFirmware(board.id, t("filePickerFirmwareFilter"));
       if (firmwarePath === undefined) {
@@ -312,10 +323,13 @@ export function SimulatorDevicePane({
       const msg = typeof e === "string" ? e : (e as Error).message ?? String(e);
       setError(msg);
       setStatus({ kind: "translation", key: "statusStartError" });
+    } finally {
+      setStartPending(false);
     }
   };
 
   const stopSim = async () => {
+    boardSwitchTokenRef.current += 1;
     setError(null);
     try {
       pressedPointerButtonsRef.current.clear();
@@ -338,14 +352,64 @@ export function SimulatorDevicePane({
   };
 
   const handleBoardChange = (nextBoardId: string) => {
-    if (running || nextBoardId === boardId) return;
+    if (startPending || nextBoardId === selectedBoardId) return;
     const nextBoard = getSimulatorBoard(nextBoardId);
-    setBoardId(nextBoard.id);
+    const wasRunning = running;
+    setSelectedBoardId(nextBoard.id);
+    setError(null);
     firmwarePathRef.current = "";
     setFirmwareName(null);
     setSelectedFirmwarePath("");
     setSdPath("/");
     setSdEntries([]);
+    if (!wasRunning) return;
+
+    const switchToken = ++boardSwitchTokenRef.current;
+    setStartPending(true);
+    void (async () => {
+      try {
+        pressedPointerButtonsRef.current.clear();
+        await hostBridge.releaseButtons().catch(() => false);
+        await hostBridge.stopSim();
+        setRunning(false);
+        let nextFirmwarePath = "";
+        let nextFirmwareLabel: string | null = null;
+        if (typeof hostBridge.listFirmwareOptions === "function") {
+          const options = (await hostBridge.listFirmwareOptions(nextBoard.id))
+            .filter((option) => option.boardId === nextBoard.id);
+          if (boardSwitchTokenRef.current !== switchToken) return;
+          setFirmwareOptions(options);
+          if (options.length === 0) {
+            setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
+            return;
+          }
+          nextFirmwarePath = options[0].path;
+          nextFirmwareLabel = options[0].label;
+          setSelectedFirmwarePath(nextFirmwarePath);
+        }
+        const res = await hostBridge.startSim(nextBoard.id, nextFirmwarePath, createSimulatedLocation());
+        if (boardSwitchTokenRef.current !== switchToken) return;
+        setStatus({ kind: "message", text: `start_sim: ${res}` });
+        if (res === "started" || res === "already_running") {
+          firmwarePathRef.current = nextFirmwarePath;
+          setFirmwareName(
+            nextFirmwareLabel ?? (nextFirmwarePath ? nextFirmwarePath.split(/[\\/]/).pop() || nextFirmwarePath : null),
+          );
+          setRunning(true);
+        } else if (res === BROWSER_SIMULATOR_RUNTIME_UNAVAILABLE) {
+          setStatus({ kind: "translation", key: "statusRuntimeUnavailable" });
+        }
+      } catch (e) {
+        if (boardSwitchTokenRef.current !== switchToken) return;
+        const msg = typeof e === "string" ? e : (e as Error).message ?? String(e);
+        setError(msg);
+        setStatus({ kind: "translation", key: "statusStartError" });
+      } finally {
+        if (boardSwitchTokenRef.current === switchToken) {
+          setStartPending(false);
+        }
+      }
+    })();
   };
 
   const openSdDirectory = (path: string) => {
@@ -654,8 +718,9 @@ export function SimulatorDevicePane({
             <select
               className="pds-select ide-toolbar-select ide-toolbar-select--board"
               name="simulatorBoard"
-              value={boardId}
-              disabled={running}
+              aria-label="Board"
+              value={selectedBoardId}
+              disabled={startPending}
               onChange={(event) => handleBoardChange(event.currentTarget.value)}
             >
               {SIMULATOR_BOARDS.map((candidate) => (
@@ -670,7 +735,7 @@ export function SimulatorDevicePane({
                 className="pds-select ide-toolbar-select ide-toolbar-select--firmware"
                 name="simulatorFirmware"
                 value={selectedFirmwarePath}
-                disabled={running || firmwareOptions.length === 0}
+                disabled={running || startPending || firmwareOptions.length === 0}
                 onChange={(event) => {
                   const path = event.currentTarget.value;
                   setSelectedFirmwarePath(path);
@@ -682,7 +747,7 @@ export function SimulatorDevicePane({
                 )) : <option value="">{t("firmwareUnavailable")}</option>}
               </select>
             ) : (
-              <button type="button" className="pds-btn ide-toolbar-firmware-button" disabled={running} onClick={startSim}>
+              <button type="button" className="pds-btn ide-toolbar-firmware-button" disabled={running || startPending} onClick={startSim}>
                 {t("buttonChooseFirmware")}
               </button>
             )}
@@ -690,15 +755,15 @@ export function SimulatorDevicePane({
         </div>
         <div className="ide-titlebar__actions" aria-label={t("runControlsAria")}>
           {!running ? (
-            <button className="pds-btn pds-btn--primary" disabled={!launchAvailable} onClick={quickStartSim}>
+            <button className="pds-btn pds-btn--primary" disabled={!launchAvailable || startPending} onClick={quickStartSim}>
               {t("buttonQuickLaunch")}
             </button>
           ) : (
-            <button className="pds-btn pds-btn--danger" onClick={stopSim}>
+            <button className="pds-btn pds-btn--danger" disabled={startPending} onClick={stopSim}>
               {t("buttonStop")}
             </button>
           )}
-          <button className="pds-btn" disabled={!running} title={t("hardwareKeyResetTitle")} onClick={() => void resetSim()}>
+          <button className="pds-btn" disabled={!running || startPending} title={t("hardwareKeyResetTitle")} onClick={() => void resetSim()}>
             {t("hardwareKeyReset")}
           </button>
           <label className="ide-titlebar__language">
@@ -793,7 +858,7 @@ export function SimulatorDevicePane({
                     key={candidate.id}
                     type="button"
                     className={candidate.id === board.id ? "ide-board-card ide-board-card--active" : "ide-board-card"}
-                    disabled={running}
+                    disabled={startPending}
                     onClick={() => handleBoardChange(candidate.id)}
                   >
                     <span className="ide-board-card__name">{shortSimulatorBoardName(candidate)}</span>

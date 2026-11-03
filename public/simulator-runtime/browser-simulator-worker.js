@@ -1,4 +1,9 @@
-import { readSdImage, validateSdImageBytes, writeSdImage } from "./sd-card-store.js";
+import { romClockLoaderArgs, functionalClockArgs, installUc8253cDevice, uc8253cRgbaToWire } from "./browserQemuPlatform.js";
+import { prepareSimulatedLocationImage } from "./simulatorLocation.ts";
+import { readSdImage, validateSdImageBytes, writeSdImage } from "../public/simulator-runtime/sd-card-store.js";
+import createFatFs, * as FatFs from "js-fatfs";
+import fatFsWasmUrl from "js-fatfs/dist/fatfs.wasm?url";
+
 const RUNTIME_STATUS_READY = "ready";
 const RUNTIME_STATUS_RUNNING = "running";
 const QEMU_ARTIFACT_MISSING = "qemu_wasm_artifact_missing";
@@ -12,19 +17,25 @@ const PARTITION_END_MAGIC = 0xebeb;
 const IPC_FRAMEBUFFER_CHANNEL = 0x01;
 const IPC_DEBUG_CHANNEL = 0x02;
 const IPC_CONTROL_CHANNEL = 0x06;
+const PERIPHERAL_CONTROL_MIN_PAYLOAD = 10;
+const PERIPHERAL_CONTROL_MAX_PAYLOAD = 64;
 const SD_CARD_DB_NAME = "panda-browser-simulator-sd-card";
 const SD_CARD_DB_VERSION = 1;
 const SD_CARD_STORE_NAME = "images";
 const SD_CARD_PERSIST_INTERVAL_MS = 15000;
+const SD_CARD_FILE_CHUNK_BYTES = 64 * 1024;
+const SD_CARD_SECTOR_SIZE_DEFAULT = 512;
 const qemuIpcOwner = { instance: null };
 
 let runtimeManifest = null;
 let qemuModulePromise = null;
 let qemuInstance = null;
 const qemuPty = createBrowserQemuPty();
+
 let running = false;
 let lastBoardId = "mofei";
 let activeSdCard = null;
+let editableSdCard = null;
 let sdCardPersistTimer = null;
 
 postMessage({
@@ -80,6 +91,12 @@ async function handleCommand(command) {
       releaseButtons();
       result(command.requestId, true, running ? "released" : "not_running");
       return;
+    case "serialLine":
+      {
+        const error = sendSerialLine(command.line);
+        result(command.requestId, !error, error ? undefined : "serial_line_sent", error);
+      }
+      return;
     case "injectButton":
       injectButton(command.buttonId, command.pressed);
       result(command.requestId, true, running ? "button_injected" : "not_running");
@@ -89,8 +106,29 @@ async function handleCommand(command) {
       result(command.requestId, true, running ? "touch_injected" : "not_running");
       return;
     case "peripheralControl":
-      injectPeripheralControl(command.payload);
-      result(command.requestId, true, running ? "control_injected" : "not_running");
+      {
+        const error = injectPeripheralControl(command.payload);
+        if (error) {
+          result(command.requestId, false, undefined, error);
+        } else {
+          result(command.requestId, true, "control_injected");
+        }
+      }
+      return;
+    case "listSdDirectory":
+      await listSdDirectory(command);
+      return;
+    case "readSdFile":
+      await readSdFile(command);
+      return;
+    case "writeSdFile":
+      await writeSdFile(command);
+      return;
+    case "createSdDirectory":
+      await createSdDirectory(command);
+      return;
+    case "deleteSdPath":
+      await deleteSdPath(command);
       return;
     case "exportSdImage":
       await exportSdImage(command);
@@ -131,6 +169,20 @@ async function startRuntime(command) {
 
   try {
     const boardArtifacts = manifest.firmwareArtifacts ? manifest.firmwareArtifacts[lastBoardId] : null;
+    const defaultBoard = lastBoardId === "mofei" || lastBoardId === "s3r8";
+    if (!boardArtifacts && !defaultBoard) {
+      result(
+        command.requestId,
+        false,
+        undefined,
+        `Browser simulator firmware for '${lastBoardId}' is missing; rebuild with apps/panda-os/tools/release-beta.sh`,
+      );
+      return;
+    }
+    if (boardArtifacts && command.firmwarePath && command.firmwarePath !== boardArtifacts.bin) {
+      result(command.requestId, false, undefined, `firmware path does not match the '${lastBoardId}' board artifact`);
+      return;
+    }
     const firmwareUrl = command.firmwarePath || (boardArtifacts && boardArtifacts.bin) || manifest.firmwareArtifact;
     const kernelUrl = (boardArtifacts && boardArtifacts.kernel) || manifest.qemuKernel;
     const symbolsUrl = (boardArtifacts && boardArtifacts.symbols) || manifest.qemuSymbols;
@@ -142,13 +194,16 @@ async function startRuntime(command) {
     const otaData = await fetchOtaData(boardArtifacts?.otaData || manifest.qemuOtaData);
     const flashImage = buildFlashImage({ bootloader, partitionTable, otaData, firmware });
     const rom = await fetchRom(manifest.qemuRom);
-    const sdImage = await fetchSdImage(manifest.qemuSdImage);
+    const clockArgs = romClockLoaderArgs(rom.bytes);
+    const sdImage = await loadEditableSdCard(manifest, lastBoardId);
     if (sdImage?.templateConflict) {
       throw new Error("browser_sd_card_template_conflict");
     }
+    await prepareSimulatedLocationImage(sdImage, withFatFileSystem, writeFatFile);
     qemuInstance = await loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage);
-    startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null);
+    startQemuMain(qemuInstance, kernel.path, flashImage.path, sdImage?.path ?? null, clockArgs);
     running = true;
+    log("[browser-qemu] simulated location: London (Europe/London); no host geolocation requested");
     log(`[browser-qemu] qemu-wasm runtime loaded for board=${lastBoardId}`);
     log(`[browser-qemu] firmware artifact=${firmwareUrl || "default"}`);
     log(`[browser-qemu] kernel artifact=${kernelUrl || "default"}`);
@@ -173,9 +228,19 @@ async function stopRuntime(requestId, emitResult) {
   await persistActiveSdCard("stop");
   stopSdCardPersistence();
   running = false;
+  qemuIpcOwner.instance = null;
+  qemuInstance = null;
+  qemuModulePromise = null;
   if (emitResult) {
     result(requestId, true, "stopped");
   }
+}
+
+function qemuSimBoardFor(boardId) {
+  if (boardId === "read-pico" || boardId === "eego-a4") {
+    return "lilygo-t5s3-pro";
+  }
+  return boardId === "mofei" ? "mofei" : boardId;
 }
 
 async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage) {
@@ -193,6 +258,7 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
 
     const qemuModule = await import(cacheBustUrl(absoluteUrl(manifest.qemuScript)));
     const factory = qemuModule.default;
+    const qemuSimBoard = qemuSimBoardFor(lastBoardId);
     if (typeof factory === "function") {
       return factory({
         noInitialRun: true,
@@ -201,7 +267,8 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
           MOFEI_ROM_BINARY: rom.path,
           MOFEI_FIRMWARE_ELF: kernel.path,
           MOFEI_FIRMWARE_SYMBOLS: symbols.path,
-          MOFEI_SIM_BOARD: lastBoardId === "mofei" ? "mofei" : lastBoardId,
+          MOFEI_SIM_BOARD: qemuSimBoard,
+          PANDA_SIM_BOARD: lastBoardId,
         },
         pty: qemuPty,
         preRun: [
@@ -235,7 +302,8 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
               target.ENV.MOFEI_ROM_BINARY = rom.path;
               target.ENV.MOFEI_FIRMWARE_ELF = kernel.path;
               target.ENV.MOFEI_FIRMWARE_SYMBOLS = symbols.path;
-              target.ENV.MOFEI_SIM_BOARD = lastBoardId === "mofei" ? "mofei" : lastBoardId;
+              target.ENV.MOFEI_SIM_BOARD = qemuSimBoard;
+              target.ENV.PANDA_SIM_BOARD = lastBoardId;
             }
           },
         ],
@@ -257,6 +325,16 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
   })();
 
   return qemuModulePromise;
+}
+
+// 只向真实来宾控制台发送一条有界命令；ACK 必须来自固件，宿主不合成执行结果。
+function sendSerialLine(line) {
+  if (!running) return "browser_serial_runtime_not_running";
+  if (typeof line !== "string" || !line || /[\r\n\0]/.test(line)) return "browser_serial_line_invalid";
+  const bytes = new TextEncoder().encode(line + "\n");
+  if (bytes.byteLength > 513) return "browser_serial_line_invalid";
+  qemuPty.pushInput(Array.from(bytes));
+  return undefined;
 }
 
 function createBrowserQemuPty() {
@@ -354,7 +432,7 @@ function subscribe(listeners, listener) {
   };
 }
 
-function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
+function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath, clockArgs) {
   if (!instance || typeof instance.callMain !== "function") {
     throw new Error("qemu module loaded without callMain");
   }
@@ -365,7 +443,7 @@ function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
     "-smp",
     "1",
     "-chardev",
-    "null,id=mofei",
+    lastBoardId === "s37uc" ? "file,id=mofei,path=/dev/panda-uc8253c" : "null,id=mofei",
     "-display",
     "none",
     "-serial",
@@ -375,6 +453,14 @@ function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath) {
     "-L",
     "/mofei",
   ];
+  if (lastBoardId === "s37uc") installUc8253cDevice(instance.FS, (channel, flags, bytes) => {
+    if (channel === IPC_FRAMEBUFFER_CHANNEL) emitFramebuffer(flags, bytes, true);
+    else if (channel === IPC_CONTROL_CHANNEL) postMessage({type:"peripheralControl",payload:Array.from(bytes)});
+    else if (channel === 8) log(new TextDecoder().decode(bytes));
+  });
+  args.push(...clockArgs);
+  args.push(...functionalClockArgs(runtimeManifest?.clockProfile));
+  log(`[browser-qemu] clock profile=${runtimeManifest?.clockProfile ?? "default"} argv=${JSON.stringify(functionalClockArgs(runtimeManifest?.clockProfile))}`);
   args.push("-kernel", firmwarePath);
   if (flashImagePath) {
     args.push("-drive", `file=${flashImagePath},if=mtd,format=raw`);
@@ -462,6 +548,7 @@ async function fetchSdImage(sdImageUrl) {
     path: "/mofei/sdcard.img",
     bytes,
     storageKey: storedRecord?.storageKey ?? sdImageStorageKey(lastBoardId),
+    templateArtifactIdentity: JSON.stringify(artifactUrls),
     templateFingerprint,
     storedTemplateFingerprint: stored?.templateFingerprint ?? null,
     persisted: Boolean(stored),
@@ -520,6 +607,50 @@ async function fetchSdImageArtifacts(urls) {
   return artifactBytes;
 }
 
+async function decodeSdImageArtifact(url, bytes) {
+  if (!isGzipArtifact(url, bytes)) {
+    return bytes;
+  }
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("browser_sd_card_gzip_unsupported");
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  const limit=runtimeManifest?.qemuSdRawBytes || 256*1024*1024;
+  const reader=stream.getReader();const chunks=[];let total=0;
+  try {
+    while(true) {
+      const {value,done}=await reader.read();if(done)break;
+      total+=value.byteLength;
+      if(total>limit){await reader.cancel();throw new Error("browser_sd_card_decoded_size_exceeded");}
+      chunks.push(value);
+    }
+  } finally {reader.releaseLock();}
+  if(runtimeManifest?.qemuSdRawBytes && total!==runtimeManifest.qemuSdRawBytes)throw new Error("browser_sd_card_decoded_size_mismatch");
+  const result=new Uint8Array(total);let offset=0;
+  for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
+  return result;
+}
+
+function isGzipArtifact(url, bytes) {
+  return String(url).endsWith(".gz") || (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b);
+}
+
+async function loadEditableSdCard(manifest, boardId) {
+  if (!manifest || !manifest.qemuSdImage) {
+    return null;
+  }
+  const artifactUrls = normalizeSdImageArtifactUrls(manifest.qemuSdImage);
+  if (!artifactUrls) {
+    return null;
+  }
+  const storageKey = sdImageStorageKey(boardId);
+  if (editableSdCard && editableSdCard.storageKey === storageKey && editableSdCard.templateArtifactIdentity === JSON.stringify(artifactUrls) && editableSdCard.bytes instanceof Uint8Array) {
+    return editableSdCard;
+  }
+  editableSdCard = await fetchSdImage(manifest.qemuSdImage);
+  return editableSdCard;
+}
+
 async function fetchBootloader(bootloaderUrl) {
   if (!bootloaderUrl) {
     throw new Error("browser qemu bootloader artifact is missing");
@@ -561,34 +692,6 @@ async function fetchBinaryArtifact(url, label) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-async function decodeSdImageArtifact(url, bytes) {
-  if (!isGzipArtifact(url, bytes)) {
-    return bytes;
-  }
-  if (typeof DecompressionStream !== "function") {
-    throw new Error("browser_sd_card_gzip_unsupported");
-  }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
-  const limit=runtimeManifest?.qemuSdRawBytes || 256*1024*1024;
-  const reader=stream.getReader();const chunks=[];let total=0;
-  try {
-    while(true) {
-      const {value,done}=await reader.read();if(done)break;
-      total+=value.byteLength;
-      if(total>limit){await reader.cancel();throw new Error("browser_sd_card_decoded_size_exceeded");}
-      chunks.push(value);
-    }
-  } finally {reader.releaseLock();}
-  if(runtimeManifest?.qemuSdRawBytes && total!==runtimeManifest.qemuSdRawBytes)throw new Error("browser_sd_card_decoded_size_mismatch");
-  const result=new Uint8Array(total);let offset=0;
-  for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
-  return result;
-}
-
-function isGzipArtifact(url, bytes) {
-  return String(url).endsWith(".gz") || (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b);
-}
-
 function startSdCardPersistence() {
   stopSdCardPersistence();
   if (!activeSdCard) {
@@ -621,12 +724,131 @@ async function persistActiveSdCard(reason) {
       templateFingerprint: activeSdCard.templateFingerprint,
       savedAt: Date.now(),
     });
+    editableSdCard = {
+      path: activeSdCard.path,
+      storageKey: activeSdCard.storageKey,
+      templateFingerprint: activeSdCard.templateFingerprint,
+      storedTemplateFingerprint: activeSdCard.templateFingerprint,
+      bytes,
+      persisted: true,
+      templateConflict: false,
+    };
     if (reason !== "interval") {
       log(`[browser-qemu] persisted browser SD image reason=${reason} bytes=${bytes.byteLength}`);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     emitError(`[browser-qemu] failed to persist browser SD image: ${message}`);
+  }
+}
+
+async function persistEditableSdCard(sdCard, reason) {
+  if (!sdCard || !(sdCard.bytes instanceof Uint8Array)) {
+    return;
+  }
+  await writeStoredSdCard(sdCard.storageKey, {
+    bytes: sdCard.bytes,
+    byteLength: sdCard.bytes.byteLength,
+    templateFingerprint: sdCard.templateFingerprint,
+    savedAt: Date.now(),
+  });
+  sdCard.persisted = true;
+  if (reason !== "interval") {
+    log(`[browser-qemu] persisted browser SD image reason=${reason} bytes=${sdCard.bytes.byteLength}`);
+  }
+}
+
+async function withEditableSdCard(command, mutate, fn) {
+  if (running) {
+    throw new Error("browser_sd_card_busy_running");
+  }
+  if (!runtimeManifest || runtimeManifest.kind !== "wasm-worker") {
+    throw new Error("browser_wasm_runtime_manifest_missing");
+  }
+  lastBoardId = command.boardId || lastBoardId;
+  const sdCard = await loadEditableSdCard(runtimeManifest, lastBoardId);
+  if (mutate && sdCard?.templateConflict) throw new Error("browser_sd_card_template_conflict");
+
+  if (!sdCard) {
+    throw new Error("browser_sd_card_image_missing");
+  }
+  const value = await withFatFileSystem(sdCard.bytes, fn);
+  if (mutate) {
+    await persistEditableSdCard(sdCard, command.type);
+  }
+  return value;
+}
+
+async function listSdDirectory(command) {
+  try {
+    const path = normalizeSdPath(command.path || "/");
+    const payload = await withEditableSdCard(command, false, (ff) => ({
+      path,
+      entries: readFatDirectory(ff, path),
+    }));
+    result(command.requestId, true, "sd_directory", undefined, payload);
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
+  }
+}
+
+async function readSdFile(command) {
+  try {
+    const path = normalizeSdPath(command.path || "/");
+    const payload = await withEditableSdCard(command, false, (ff) => ({
+      path,
+      bytes: readFatFile(ff, path).buffer,
+    }));
+    result(command.requestId, true, "sd_file", undefined, payload);
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
+  }
+}
+
+async function writeSdFile(command) {
+  try {
+    const path = normalizeSdPath(command.path || "/");
+    const bytes = command.bytes instanceof ArrayBuffer
+      ? new Uint8Array(command.bytes)
+      : command.bytes instanceof Uint8Array
+        ? command.bytes
+        : null;
+    if (!bytes) {
+      throw new Error("browser_sd_file_bytes_missing");
+    }
+    await withEditableSdCard(command, true, (ff) => {
+      writeFatFile(ff, path, bytes);
+      return null;
+    });
+    result(command.requestId, true, "sd_file_written");
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
+  }
+}
+
+async function createSdDirectory(command) {
+  try {
+    const path = normalizeSdPath(command.path || "/");
+    await withEditableSdCard(command, true, (ff) => {
+      ensureFatDirectory(ff, path);
+      return null;
+    });
+    result(command.requestId, true, "sd_directory_created");
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
+  }
+}
+
+async function deleteSdPath(command) {
+  try {
+    const path = normalizeSdPath(command.path || "/");
+    await withEditableSdCard(command, true, (ff) => {
+      removeFatPath(ff, path, Boolean(command.recursive));
+      return null;
+    });
+    result(command.requestId, true, "sd_path_deleted");
+  } catch (error) {
+    result(command.requestId, false, undefined, sdErrorMessage(error));
   }
 }
 
@@ -639,18 +861,19 @@ async function exportSdImage(command) {
       throw new Error("browser_wasm_runtime_manifest_missing");
     }
     lastBoardId = command.boardId || lastBoardId;
-    const sdImage = await fetchSdImage(runtimeManifest.qemuSdImage);
-    if (!sdImage) {
+    const sdCard = await loadEditableSdCard(runtimeManifest, lastBoardId);
+    if (!sdCard) {
       throw new Error("browser_sd_card_image_missing");
     }
-    validateSdImageBytes(sdImage.bytes, sdImage.bytes.byteLength);
+    validateSdImageBytes(sdCard.bytes, sdCard.bytes.byteLength);
+    const bytes = sdCard.bytes.slice().buffer;
     result(command.requestId, true, "sd_image_exported", undefined, {
-      path: sdImage.path,
-      byteLength: sdImage.bytes.byteLength,
-      templateFingerprint: sdImage.templateFingerprint ?? null,
-      storedTemplateFingerprint: sdImage.storedTemplateFingerprint ?? sdImage.templateFingerprint ?? null,
-      templateConflict: Boolean(sdImage.templateConflict),
-      bytes: sdImage.bytes.slice().buffer,
+      path: sdCard.path,
+      byteLength: sdCard.bytes.byteLength,
+      templateFingerprint: sdCard.templateFingerprint ?? null,
+      storedTemplateFingerprint: sdCard.storedTemplateFingerprint ?? sdCard.templateFingerprint ?? null,
+      templateConflict: Boolean(sdCard.templateConflict),
+      bytes,
     });
   } catch (error) {
     result(command.requestId, false, undefined, sdErrorMessage(error));
@@ -682,6 +905,7 @@ async function importSdImage(command) {
     const expectedByteLength = runtimeManifest.qemuSdRawBytes ?? templateBytes.byteLength;
     validateSdImageBytes(templateBytes, expectedByteLength);
     validateSdImageBytes(bytes, expectedByteLength);
+    await withFatFileSystem(bytes, () => null);
     const storageKey = sdImageStorageKey(lastBoardId);
     const templateFingerprint = fingerprintBytes(templateBytes);
     await writeStoredSdCard(storageKey, {
@@ -690,6 +914,16 @@ async function importSdImage(command) {
       templateFingerprint,
       savedAt: Date.now(),
     });
+    editableSdCard = {
+      path: "/mofei/sdcard.img",
+      storageKey,
+      templateArtifactIdentity: JSON.stringify(artifactUrls),
+      templateFingerprint,
+      storedTemplateFingerprint: templateFingerprint,
+      bytes,
+      persisted: true,
+      templateConflict: false,
+    };
     result(command.requestId, true, "sd_image_imported", undefined, {
       byteLength: bytes.byteLength,
       templateConflict: false,
@@ -697,6 +931,273 @@ async function importSdImage(command) {
   } catch (error) {
     result(command.requestId, false, undefined, sdErrorMessage(error));
   }
+}
+
+async function withFatFileSystem(image, fn) {
+  const ff = await createFatFs({
+    diskio: new RawSdImageDisk(image),
+    locateFile(path) {
+      return path === "fatfs.wasm" ? fatFsWasmUrl : path;
+    },
+  });
+  const fatfs = ff.malloc(FatFs.sizeof_FATFS);
+  let mounted = false;
+  try {
+    checkFatResult(ff.f_mount(fatfs, "", 1), "mount");
+    mounted = true;
+    return fn(ff);
+  } finally {
+    if (mounted) {
+      ff.f_unmount("");
+    }
+    ff.free(fatfs);
+  }
+}
+
+class RawSdImageDisk {
+  constructor(image) {
+    this.image = image;
+    const sectorSize = image.length >= 13 ? image[11] | (image[12] << 8) : SD_CARD_SECTOR_SIZE_DEFAULT;
+    this.sectorSize = sectorSize > 0 ? sectorSize : SD_CARD_SECTOR_SIZE_DEFAULT;
+  }
+
+  initialize() {
+    return FatFs.RES_OK;
+  }
+
+  status() {
+    return FatFs.RES_OK;
+  }
+
+  read(ff, _pdrv, buff, sector, count) {
+    const offset = sector * this.sectorSize;
+    const byteLength = count * this.sectorSize;
+    if (offset < 0 || offset + byteLength > this.image.byteLength) {
+      return FatFs.RES_PARERR;
+    }
+    ff.HEAPU8.set(this.image.subarray(offset, offset + byteLength), buff);
+    return FatFs.RES_OK;
+  }
+
+  write(ff, _pdrv, buff, sector, count) {
+    const offset = sector * this.sectorSize;
+    const byteLength = count * this.sectorSize;
+    if (offset < 0 || offset + byteLength > this.image.byteLength) {
+      return FatFs.RES_PARERR;
+    }
+    this.image.set(ff.HEAPU8.subarray(buff, buff + byteLength), offset);
+    return FatFs.RES_OK;
+  }
+
+  ioctl(ff, _pdrv, cmd, buff) {
+    switch (cmd) {
+      case FatFs.CTRL_SYNC:
+        return FatFs.RES_OK;
+      case FatFs.GET_SECTOR_COUNT:
+        ff.setValue(buff, Math.floor(this.image.byteLength / this.sectorSize), "i32");
+        return FatFs.RES_OK;
+      case FatFs.GET_SECTOR_SIZE:
+        ff.setValue(buff, this.sectorSize, "i16");
+        return FatFs.RES_OK;
+      case FatFs.GET_BLOCK_SIZE:
+        ff.setValue(buff, 1, "i32");
+        return FatFs.RES_OK;
+      default:
+        return FatFs.RES_PARERR;
+    }
+  }
+}
+
+function readFatDirectory(ff, path) {
+  const dir = ff.malloc(FatFs.sizeof_DIR);
+  const info = ff.malloc(FatFs.sizeof_FILINFO);
+  const entries = [];
+  try {
+    checkFatResult(ff.f_opendir(dir, path), `opendir:${path}`);
+    while (true) {
+      checkFatResult(ff.f_readdir(dir, info), `readdir:${path}`);
+      const name = ff.FILINFO_fname(info);
+      if (!name) {
+        break;
+      }
+      if (name === "." || name === "..") {
+        continue;
+      }
+      const attr = ff.FILINFO_fattrib(info);
+      const childPath = joinSdPath(path, name);
+      entries.push({
+        name,
+        path: childPath,
+        kind: attr & FatFs.AM_DIR ? "directory" : "file",
+        size: ff.FILINFO_fsize(info),
+        attributes: attr,
+      });
+    }
+  } finally {
+    ff.f_closedir(dir);
+    ff.free(info);
+    ff.free(dir);
+  }
+  entries.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+  return entries;
+}
+
+function readFatFile(ff, path) {
+  const info = statFatPath(ff, path);
+  if (info.kind === "directory") {
+    throw new Error(`browser_sd_path_is_directory:${path}`);
+  }
+  const file = ff.malloc(FatFs.sizeof_FIL);
+  const readPtr = ff.malloc(4);
+  const bufferPtr = ff.malloc(SD_CARD_FILE_CHUNK_BYTES);
+  const out = new Uint8Array(info.size);
+  let offset = 0;
+  try {
+    checkFatResult(ff.f_open(file, path, FatFs.FA_READ | FatFs.FA_OPEN_EXISTING), `open:${path}`);
+    while (offset < out.length) {
+      const wanted = Math.min(SD_CARD_FILE_CHUNK_BYTES, out.length - offset);
+      checkFatResult(ff.f_read(file, bufferPtr, wanted, readPtr), `read:${path}`);
+      const readBytes = ff.getValue(readPtr, "i32") >>> 0;
+      if (readBytes === 0) {
+        break;
+      }
+      out.set(ff.HEAPU8.subarray(bufferPtr, bufferPtr + readBytes), offset);
+      offset += readBytes;
+    }
+    return offset === out.length ? out : out.slice(0, offset);
+  } finally {
+    ff.f_close(file);
+    ff.free(bufferPtr);
+    ff.free(readPtr);
+    ff.free(file);
+  }
+}
+
+function writeFatFile(ff, path, bytes) {
+  if (path === "/") {
+    throw new Error("browser_sd_root_is_not_file");
+  }
+  const parent = parentSdPath(path);
+  ensureFatDirectory(ff, parent);
+  const file = ff.malloc(FatFs.sizeof_FIL);
+  const writtenPtr = ff.malloc(4);
+  const bufferPtr = ff.malloc(SD_CARD_FILE_CHUNK_BYTES);
+  try {
+    checkFatResult(ff.f_open(file, path, FatFs.FA_WRITE | FatFs.FA_CREATE_ALWAYS), `open-write:${path}`);
+    for (let offset = 0; offset < bytes.length; offset += SD_CARD_FILE_CHUNK_BYTES) {
+      const chunk = bytes.subarray(offset, offset + SD_CARD_FILE_CHUNK_BYTES);
+      ff.HEAPU8.set(chunk, bufferPtr);
+      checkFatResult(ff.f_write(file, bufferPtr, chunk.length, writtenPtr), `write:${path}`);
+      const written = ff.getValue(writtenPtr, "i32") >>> 0;
+      if (written !== chunk.length) {
+        throw new Error(`browser_sd_short_write:${path}:${written}/${chunk.length}`);
+      }
+    }
+    checkFatResult(ff.f_sync(file), `sync:${path}`);
+  } finally {
+    ff.f_close(file);
+    ff.free(bufferPtr);
+    ff.free(writtenPtr);
+    ff.free(file);
+  }
+}
+
+function ensureFatDirectory(ff, path) {
+  if (path === "/") {
+    return;
+  }
+  let current = "";
+  for (const part of path.split("/").filter(Boolean)) {
+    current = `${current}/${part}`;
+    const code = ff.f_mkdir(current);
+    if (code === FatFs.FR_OK || code === FatFs.FR_EXIST) {
+      continue;
+    }
+    const stat = tryStatFatPath(ff, current);
+    if (stat && stat.kind === "directory") {
+      continue;
+    }
+    checkFatResult(code, `mkdir:${current}`);
+  }
+}
+
+function removeFatPath(ff, path, recursive) {
+  if (path === "/") {
+    throw new Error("browser_sd_cannot_delete_root");
+  }
+  const info = statFatPath(ff, path);
+  if (info.kind === "directory" && recursive) {
+    for (const entry of readFatDirectory(ff, path)) {
+      removeFatPath(ff, entry.path, true);
+    }
+  }
+  checkFatResult(ff.f_unlink(path), `unlink:${path}`);
+}
+
+function statFatPath(ff, path) {
+  const info = tryStatFatPath(ff, path);
+  if (!info) {
+    throw new Error(`browser_sd_path_missing:${path}`);
+  }
+  return info;
+}
+
+function tryStatFatPath(ff, path) {
+  const info = ff.malloc(FatFs.sizeof_FILINFO);
+  try {
+    const code = ff.f_stat(path, info);
+    if (code === FatFs.FR_NO_FILE || code === FatFs.FR_NO_PATH) {
+      return null;
+    }
+    checkFatResult(code, `stat:${path}`);
+    const attr = ff.FILINFO_fattrib(info);
+    return {
+      kind: attr & FatFs.AM_DIR ? "directory" : "file",
+      size: ff.FILINFO_fsize(info),
+      attributes: attr,
+    };
+  } finally {
+    ff.free(info);
+  }
+}
+
+function checkFatResult(code, label) {
+  if (code !== FatFs.FR_OK) {
+    throw new Error(`browser_sd_fatfs_error:${label}:${code}`);
+  }
+  return true;
+}
+
+function normalizeSdPath(input) {
+  const raw = String(input || "/").replaceAll("\\", "/").trim();
+  const parts = raw.split("/").filter(Boolean);
+  const normalized = [];
+  for (const part of parts) {
+    if (part === "." || part === ".." || part.includes("\0")) {
+      throw new Error(`browser_sd_invalid_path:${input}`);
+    }
+    normalized.push(part);
+  }
+  return normalized.length > 0 ? `/${normalized.join("/")}` : "/";
+}
+
+function parentSdPath(path) {
+  const index = path.lastIndexOf("/");
+  if (index <= 0) {
+    return "/";
+  }
+  return path.slice(0, index);
+}
+
+function joinSdPath(parent, name) {
+  return parent === "/" ? `/${name}` : `${parent}/${name}`;
+}
+
+function sdErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function fingerprintBytes(bytes) {
@@ -929,6 +1430,13 @@ function ensureDirectory(fs, path) {
 }
 
 function handleQemuIpc(instance, channel, flags, payloadPtr, payloadLen) {
+  if (
+    channel === IPC_CONTROL_CHANNEL
+    && (!Number.isInteger(payloadLen) || payloadLen < 0 || payloadLen > PERIPHERAL_CONTROL_MAX_PAYLOAD)
+  ) {
+    emitError(`[browser-qemu] dropped oversized peripheral control payload len=${payloadLen}`);
+    return;
+  }
   const bytes = readHeapBytes(instance, payloadPtr, payloadLen);
   if (bytes === null) {
     emitError(
@@ -966,22 +1474,59 @@ function readHeapBytes(instance, ptr, len) {
 }
 
 function framebufferProfile(boardId) {
-  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1" };
-  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16" };
-  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16" };
-  return { width: 800, height: 480, format: "mono1" };
+  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
+  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
+  if (boardId === "read-pico") return { width: 684, height: 1216, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "eego-a4") return { width: 552, height: 768, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "molink" || boardId === "x4pro") {
+    return { width: 800, height: 480, format: "mono1", landscapeSsd1677: true };
+  }
+  return { width: 800, height: 480, format: "mono1", landscapeSsd1677: false };
 }
 
-function emitFramebuffer(flags, framebuffer) {
-  const { width, height, format } = framebufferProfile(lastBoardId);
-  const expectedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
-  if (framebuffer.length !== expectedBytes) {
+function unscrambleSsd1677WireToGuestBytes(wireBytes) {
+  const guest = new Uint8Array(48000);
+  guest.fill(0xff);
+  for (let y = 0; y < 800; y += 1) {
+    const dstRowOffset = y * 60;
+    const srcColByte = y >> 3;
+    const srcMask = 0x80 >> (y & 7);
+    for (let x = 0; x < 480; x += 1) {
+      const srcIndex = (479 - x) * 100 + srcColByte;
+      if ((wireBytes[srcIndex] & srcMask) === 0) {
+        const dstIndex = dstRowOffset + (x >> 3);
+        guest[dstIndex] &= ~(0x80 >> (x & 7));
+      }
+    }
+  }
+  return guest;
+}
+
+function emitFramebuffer(flags, framebuffer, portraitUc = false) {
+  const { width, height, format, landscapeSsd1677 } = framebufferProfile(lastBoardId);
+  const packedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
+  const strideBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil(width / 8) * height;
+  const expectedBytes = packedBytes;
+  const validLength = format === "mono1"
+    ? framebuffer.length === packedBytes ||
+      framebuffer.length === strideBytes ||
+      (framebuffer.length === 259200 && strideBytes <= 259200)
+    : framebuffer.length === expectedBytes;
+  if (!validLength) {
     emitError(
       `[browser-qemu] dropped ${format} framebuffer payload len=${framebuffer.length}, expected=${expectedBytes}`,
     );
     return;
   }
-  const rgba = format === "gray16" ? gray16ToRgba(framebuffer, width, height) : oneBitToRgba(framebuffer, width, height);
+  const sliceBytes = framebuffer.length === 259200 ? strideBytes : framebuffer.length;
+  const frameBytes = framebuffer.length === sliceBytes ? framebuffer : framebuffer.subarray(0, sliceBytes);
+  const linearBytes = format === "mono1" && landscapeSsd1677 && frameBytes.length === 48000
+    ? unscrambleSsd1677WireToGuestBytes(frameBytes)
+    : frameBytes;
+  const rgba = portraitUc
+    ? uc8253cRgbaToWire(oneBitToRgba(linearBytes, 240, 416))
+    : format === "gray16" ? gray16ToRgba(linearBytes, width, height) : oneBitToRgba(linearBytes, width, height);
   postMessage({
     type: "framebuffer",
     payload: {
@@ -1013,6 +1558,27 @@ function gray16ToRgba(framebuffer, width, height) {
 
 function oneBitToRgba(oneBitFramebuffer, width, height) {
   const rgba = new Uint8Array(width * height * 4);
+  const rowStride = Math.ceil(width / 8);
+  const useRowStride = (width & 7) !== 0 && oneBitFramebuffer.length >= rowStride * height;
+  if (useRowStride) {
+    let pixel = 0;
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * rowStride;
+      for (let x = 0; x < width; x++) {
+        const byte = oneBitFramebuffer[rowOffset + (x >> 3)] ?? 0xff;
+        const bit = 7 - (x & 7);
+        const white = (byte >> bit) & 1;
+        const value = white ? 255 : 16;
+        const idx = pixel * 4;
+        rgba[idx] = value;
+        rgba[idx + 1] = value;
+        rgba[idx + 2] = value;
+        rgba[idx + 3] = 255;
+        pixel++;
+      }
+    }
+    return rgba;
+  }
   const pixels = width * height;
   for (let pixel = 0; pixel < pixels; pixel++) {
     const byte = oneBitFramebuffer[pixel >> 3] ?? 0xff;
@@ -1054,26 +1620,50 @@ function injectTouch(input) {
   }
   const fn = qemuInstance._mofei_wasm_inject_touch;
   if (typeof fn === "function") {
-    fn(input.action >>> 0, input.x >>> 0, input.y >>> 0, input.fingerId >>> 0);
+    if (lastBoardId === "x4pro") {
+      const swappedX = Math.round(input.y) >>> 0;
+      const swappedY = Math.round(input.x) >>> 0;
+      const fingerId = ((input.fingerId >>> 0) & 0x7f) | 0x80;
+      fn(input.action >>> 0, swappedX, swappedY, fingerId);
+      return;
+    }
+    if (lastBoardId === "eego-a4") {
+      const scaledX = Math.min(539, Math.max(0, Math.round((input.x * 539) / 551))) >>> 0;
+      const clampedY = Math.min(767, Math.max(0, Math.round(input.y))) >>> 0;
+      fn(input.action >>> 0, scaledX, clampedY, 0);
+      return;
+    }
+    fn(input.action >>> 0, Math.round(input.x) >>> 0, Math.round(input.y) >>> 0, input.fingerId >>> 0);
   }
 }
 
 function injectPeripheralControl(payload) {
-  if (!qemuInstance || !Array.isArray(payload)) {
-    return;
-  }
-  const bytes = Uint8Array.from(payload);
+  const validationError = validatePeripheralControlPayload(payload);
+  if (validationError) return validationError;
+  if (!running || !qemuInstance) return "not_running";
   const fn = qemuInstance._mofei_wasm_i2c_control;
-  if (typeof fn !== "function") {
-    return;
-  }
+  if (typeof fn !== "function") return "peripheral_control_unavailable";
+  const bytes = Uint8Array.from(payload);
   const ptr = qemuInstance._malloc(bytes.length);
+  if (!ptr) return "peripheral_control_allocation_failed";
   try {
     qemuInstance.HEAPU8.set(bytes, ptr);
     fn(ptr, bytes.length);
   } finally {
     qemuInstance._free(ptr);
   }
+  return null;
+}
+
+function validatePeripheralControlPayload(payload) {
+  if (!Array.isArray(payload)) return "peripheral_control_payload_invalid";
+  if (payload.length < PERIPHERAL_CONTROL_MIN_PAYLOAD || payload.length > PERIPHERAL_CONTROL_MAX_PAYLOAD) {
+    return "peripheral_control_length_invalid";
+  }
+  if (!payload.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 0xff)) {
+    return "peripheral_control_byte_invalid";
+  }
+  return null;
 }
 
 function locateQemuFile(path, manifest) {
@@ -1101,10 +1691,6 @@ function cacheBustUrl(path) {
   const url = new URL(path);
   url.searchParams.set("browser-worker-import", "1");
   return url.toString();
-}
-
-function sdErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function result(requestId, ok, status, error, data) {

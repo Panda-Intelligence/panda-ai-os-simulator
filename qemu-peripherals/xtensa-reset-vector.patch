@@ -1319,7 +1319,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
  }
 
  /*!
-@@ -158,116 +1114,4254 @@
+@@ -158,116 +1114,4288 @@
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */
@@ -1787,8 +1787,11 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +static unsigned g_button_queue_count;
 +
 +void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t touch_id) {
-+  if (x >= 480) x = 479;
-+  if (y >= 800) y = 799;
++  uint16_t max_w = 480;
++  uint16_t max_h = 800;
++  mofei_sim_board_touch_dimensions(&max_w, &max_h);
++  if (max_w > 0 && x >= max_w) x = max_w - 1u;
++  if (max_h > 0 && y >= max_h) y = max_h - 1u;
 +  if (g_touch_queue_count == MOFEI_TOUCH_QUEUE_CAP) {
 +    g_touch_queue_head = (g_touch_queue_head + 1) % MOFEI_TOUCH_QUEUE_CAP;
 +    g_touch_queue_count--;
@@ -1937,8 +1940,11 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +  if (type == 0 || type > 6) {
 +    return;
 +  }
-+  if (x >= 480) x = 479;
-+  if (y >= 800) y = 799;
++  uint16_t max_w = 480;
++  uint16_t max_h = 800;
++  mofei_sim_board_touch_dimensions(&max_w, &max_h);
++  if (max_w > 0 && x >= max_w) x = max_w - 1u;
++  if (max_h > 0 && y >= max_h) y = max_h - 1u;
 +
 +  const bool ok = mofeiSimulatorWriteU8(mofei_sim_addrs.g_mofeiSimTouchEventType_addr, type) &&
 +                  mofeiSimulatorWriteU16(mofei_sim_addrs.g_mofeiSimTouchEventX_addr, x) &&
@@ -4988,7 +4994,8 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +  static uint32_t wired_framebuffer_addr;
 +  static bool timer_started;
 +
-+  if (mofei_sim_board_is_lilygo_t5s3_pro() || mofei_sim_board_is_m5papers3()) {
++  const uint32_t direct_fb_bytes = mofei_sim_board_direct_framebuffer_bytes();
++  if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_LILYGO_FRAMEBUFFER_BYTES) {
 +    static uint8_t lilygo_framebuffer[MOFEI_LILYGO_FRAMEBUFFER_BYTES];
 +    static uint32_t lilygo_publish_count;
 +    uint32_t framebuffer_addr = 0;
@@ -5007,14 +5014,42 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +    if (framebuffer_addr == 0) {
 +      framebuffer_addr = object_framebuffer_addr;
 +    }
++    if (framebuffer_addr == 0 && mofei_sim_addrs.gfxSimulatorFrameBuffer_addr) {
++      framebuffer_addr = mofei_sim_addrs.gfxSimulatorFrameBuffer_addr;
++    }
 +
-+    const bool read_ok = framebuffer_addr != 0 &&
-+                         framebuffer_addr != mofei_sim_addrs.murphySimulatorFramebufferStorage_addr &&
-+                         mofei_read_guest_memory(framebuffer_addr, lilygo_framebuffer, sizeof(lilygo_framebuffer));
++    const bool is_gray16_direct = mofei_sim_board_is_lilygo_t5s3_pro() || mofei_sim_board_is_m5papers3();
++    const bool is_read_pico_direct = mofei_sim_board_is_read_pico();
++    const uint32_t guest_fb_bytes = is_read_pico_direct ? (86u * 1216u) : direct_fb_bytes;
++    const bool storage_valid =
++        !is_gray16_direct || framebuffer_addr != mofei_sim_addrs.murphySimulatorFramebufferStorage_addr;
++    const bool read_ok = framebuffer_addr != 0 && storage_valid &&
++                         mofei_read_guest_memory(framebuffer_addr, lilygo_framebuffer, guest_fb_bytes);
++    if (read_ok && is_read_pico_direct) {
++      /* Guest Framebuffer rows for 684x1216 Mono1 are byte-aligned to 86 bytes
++       * (684 bits + 4 padding bits). Pack each pair of 86-byte rows into 171
++       * contiguous bytes (103,968 bytes total) for the 1-bit IPC channel. */
++      for (uint32_t pair = 0; pair < (1216u / 2u); ++pair) {
++        const uint8_t* row0 = lilygo_framebuffer + pair * 172u;
++        const uint8_t* row1 = row0 + 86u;
++        uint8_t* dst = lilygo_framebuffer + pair * 171u;
++        const uint8_t r0_85 = row0[85];
++        uint8_t prev = row1[0];
++        memmove(dst, row0, 85u);
++        dst[85] = (uint8_t)((r0_85 & 0xF0u) | (prev >> 4u));
++        for (uint32_t j = 1; j < 85u; ++j) {
++          const uint8_t cur = row1[j];
++          dst[85u + j] = (uint8_t)((prev << 4u) | (cur >> 4u));
++          prev = cur;
++        }
++        dst[170] = (uint8_t)((prev << 4u) | (row1[85] >> 4u));
++      }
++    }
 +    uint32_t non_white_bytes = 0;
 +    if (read_ok) {
-+      for (uint32_t i = 0; i < sizeof(lilygo_framebuffer); ++i) {
-+        non_white_bytes += lilygo_framebuffer[i] != 0;
++      const uint8_t white_byte = is_gray16_direct ? 0x00u : 0xFFu;
++      for (uint32_t i = 0; i < direct_fb_bytes; ++i) {
++        non_white_bytes += lilygo_framebuffer[i] != white_byte;
 +      }
 +    }
 +    if (lilygo_publish_count < 8) {
@@ -5026,13 +5061,12 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr)
 +                  : 0,
 +              framebuffer_object, object_framebuffer_addr, framebuffer_addr, read_ok ? 1u : 0u, non_white_bytes,
-+              (uint32_t)sizeof(lilygo_framebuffer), read_ok ? lilygo_framebuffer[0] : 0,
-+              read_ok ? lilygo_framebuffer[1] : 0, read_ok ? lilygo_framebuffer[2] : 0,
-+              read_ok ? lilygo_framebuffer[3] : 0);
++              direct_fb_bytes, read_ok ? lilygo_framebuffer[0] : 0, read_ok ? lilygo_framebuffer[1] : 0,
++              read_ok ? lilygo_framebuffer[2] : 0, read_ok ? lilygo_framebuffer[3] : 0);
 +    }
 +    lilygo_publish_count++;
 +    if (read_ok) {
-+      ssd1677_publish_direct_framebuffer(lilygo_framebuffer, sizeof(lilygo_framebuffer));
++      ssd1677_publish_direct_framebuffer(lilygo_framebuffer, direct_fb_bytes);
 +    }
 +    return;
 +  }

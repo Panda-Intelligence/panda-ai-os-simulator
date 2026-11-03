@@ -1,7 +1,7 @@
 // Compatibility entry for an explicitly supplied, source-labelled runtime set.
 // No downloads, guest execution, public deployment or account operations occur.
 import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,18 @@ import { assembleWebArtifacts } from "./pack-web-manifest.mjs";
 import { patchQemuScriptForBrowserWorker } from "./patch-browser-qemu.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const REQUIRED_BUILD_BOARDS = [
+  "default",
+  "s3wroom",
+  "s37uc",
+  "m5papers3",
+  "lilygo-t5s3-pro",
+  "read-pico",
+  "molink",
+  "x4pro",
+  "metalio-eink4",
+  "eego-a4",
+];
 const MAX_BYTES = 256 * 1024 * 1024;
 const MAX_JSON_BYTES = 4 * 1024 * 1024;
 const sha = data => createHash("sha256").update(data).digest("hex");
@@ -141,6 +153,12 @@ function cli(argv) {
     const key=keys[argv[i]],value=argv[i+1];
     if (!key || !value || value.startsWith("--") || key in opts) fail("cli_arguments");
     opts[key]=key==="sdRawBytes" ? Number(value) : value;
+  }
+  if (existsSync(resolve(ROOT, "src/browserSimulatorRuntimeWorker.js"))) {
+    copyFileSync(
+      resolve(ROOT, "src/browserSimulatorRuntimeWorker.js"),
+      resolve(ROOT, "public/simulator-runtime/browser-simulator-worker.js"),
+    );
   }
   const result=packageExistingRuntime(opts);
   console.log(JSON.stringify({status:"private-package-written",...result,guestBootQualified:false}));

@@ -5,6 +5,13 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
+test("packaged compatibility worker matches the canonical worker including the clock profile", () => {
+  assert.equal(
+    readFileSync(new URL("../public/simulator-runtime/browser-simulator-worker.js", import.meta.url), "utf8"),
+    readFileSync(new URL("../src/browserSimulatorRuntimeWorker.js", import.meta.url), "utf8"),
+  );
+});
+
 test("Studio declares one fixed instruction-clock profile and keeps ordinary simulator defaults", () => {
   assert.deepEqual(functionalClockArgs(undefined), []);
   assert.deepEqual(functionalClockArgs("studio-functional-icount-v1"), ["-icount", "shift=3,align=off,sleep=on"]);
