@@ -228,9 +228,19 @@ async function stopRuntime(requestId, emitResult) {
   await persistActiveSdCard("stop");
   stopSdCardPersistence();
   running = false;
+  qemuIpcOwner.instance = null;
+  qemuInstance = null;
+  qemuModulePromise = null;
   if (emitResult) {
     result(requestId, true, "stopped");
   }
+}
+
+function qemuSimBoardFor(boardId) {
+  if (boardId === "read-pico" || boardId === "eego-a4") {
+    return "lilygo-t5s3-pro";
+  }
+  return boardId === "mofei" ? "mofei" : boardId;
 }
 
 async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, partitionTable, otaData, flashImage, rom, sdImage) {
@@ -248,6 +258,7 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
 
     const qemuModule = await import(cacheBustUrl(absoluteUrl(manifest.qemuScript)));
     const factory = qemuModule.default;
+    const qemuSimBoard = qemuSimBoardFor(lastBoardId);
     if (typeof factory === "function") {
       return factory({
         noInitialRun: true,
@@ -256,7 +267,8 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
           MOFEI_ROM_BINARY: rom.path,
           MOFEI_FIRMWARE_ELF: kernel.path,
           MOFEI_FIRMWARE_SYMBOLS: symbols.path,
-          MOFEI_SIM_BOARD: lastBoardId === "mofei" ? "mofei" : lastBoardId,
+          MOFEI_SIM_BOARD: qemuSimBoard,
+          PANDA_SIM_BOARD: lastBoardId,
         },
         pty: qemuPty,
         preRun: [
@@ -290,7 +302,8 @@ async function loadQemuModule(manifest, firmware, kernel, symbols, bootloader, p
               target.ENV.MOFEI_ROM_BINARY = rom.path;
               target.ENV.MOFEI_FIRMWARE_ELF = kernel.path;
               target.ENV.MOFEI_FIRMWARE_SYMBOLS = symbols.path;
-              target.ENV.MOFEI_SIM_BOARD = lastBoardId === "mofei" ? "mofei" : lastBoardId;
+              target.ENV.MOFEI_SIM_BOARD = qemuSimBoard;
+              target.ENV.PANDA_SIM_BOARD = lastBoardId;
             }
           },
         ],
@@ -1459,24 +1472,59 @@ function readHeapBytes(instance, ptr, len) {
 }
 
 function framebufferProfile(boardId) {
-  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1" };
-  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16" };
-  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16" };
-  return { width: 800, height: 480, format: "mono1" };
+  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
+  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
+  if (boardId === "read-pico") return { width: 684, height: 1216, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "eego-a4") return { width: 552, height: 768, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "molink" || boardId === "x4pro") {
+    return { width: 800, height: 480, format: "mono1", landscapeSsd1677: true };
+  }
+  return { width: 800, height: 480, format: "mono1", landscapeSsd1677: false };
+}
+
+function unscrambleSsd1677WireToGuestBytes(wireBytes) {
+  const guest = new Uint8Array(48000);
+  guest.fill(0xff);
+  for (let y = 0; y < 800; y += 1) {
+    const dstRowOffset = y * 60;
+    const srcColByte = y >> 3;
+    const srcMask = 0x80 >> (y & 7);
+    for (let x = 0; x < 480; x += 1) {
+      const srcIndex = (479 - x) * 100 + srcColByte;
+      if ((wireBytes[srcIndex] & srcMask) === 0) {
+        const dstIndex = dstRowOffset + (x >> 3);
+        guest[dstIndex] &= ~(0x80 >> (x & 7));
+      }
+    }
+  }
+  return guest;
 }
 
 function emitFramebuffer(flags, framebuffer, portraitUc = false) {
-  const { width, height, format } = framebufferProfile(lastBoardId);
-  const expectedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
-  if (framebuffer.length !== expectedBytes) {
+  const { width, height, format, landscapeSsd1677 } = framebufferProfile(lastBoardId);
+  const packedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
+  const strideBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil(width / 8) * height;
+  const expectedBytes = packedBytes;
+  const validLength = format === "mono1"
+    ? framebuffer.length === packedBytes ||
+      framebuffer.length === strideBytes ||
+      (framebuffer.length === 259200 && strideBytes <= 259200)
+    : framebuffer.length === expectedBytes;
+  if (!validLength) {
     emitError(
       `[browser-qemu] dropped ${format} framebuffer payload len=${framebuffer.length}, expected=${expectedBytes}`,
     );
     return;
   }
+  const sliceBytes = framebuffer.length === 259200 ? strideBytes : framebuffer.length;
+  const frameBytes = framebuffer.length === sliceBytes ? framebuffer : framebuffer.subarray(0, sliceBytes);
+  const linearBytes = format === "mono1" && landscapeSsd1677 && frameBytes.length === 48000
+    ? unscrambleSsd1677WireToGuestBytes(frameBytes)
+    : frameBytes;
   const rgba = portraitUc
-    ? uc8253cRgbaToWire(oneBitToRgba(framebuffer, 240, 416))
-    : format === "gray16" ? gray16ToRgba(framebuffer, width, height) : oneBitToRgba(framebuffer, width, height);
+    ? uc8253cRgbaToWire(oneBitToRgba(linearBytes, 240, 416))
+    : format === "gray16" ? gray16ToRgba(linearBytes, width, height) : oneBitToRgba(linearBytes, width, height);
   postMessage({
     type: "framebuffer",
     payload: {
@@ -1508,6 +1556,27 @@ function gray16ToRgba(framebuffer, width, height) {
 
 function oneBitToRgba(oneBitFramebuffer, width, height) {
   const rgba = new Uint8Array(width * height * 4);
+  const rowStride = Math.ceil(width / 8);
+  const useRowStride = (width & 7) !== 0 && oneBitFramebuffer.length >= rowStride * height;
+  if (useRowStride) {
+    let pixel = 0;
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * rowStride;
+      for (let x = 0; x < width; x++) {
+        const byte = oneBitFramebuffer[rowOffset + (x >> 3)] ?? 0xff;
+        const bit = 7 - (x & 7);
+        const white = (byte >> bit) & 1;
+        const value = white ? 255 : 16;
+        const idx = pixel * 4;
+        rgba[idx] = value;
+        rgba[idx + 1] = value;
+        rgba[idx + 2] = value;
+        rgba[idx + 3] = 255;
+        pixel++;
+      }
+    }
+    return rgba;
+  }
   const pixels = width * height;
   for (let pixel = 0; pixel < pixels; pixel++) {
     const byte = oneBitFramebuffer[pixel >> 3] ?? 0xff;
@@ -1549,7 +1618,20 @@ function injectTouch(input) {
   }
   const fn = qemuInstance._mofei_wasm_inject_touch;
   if (typeof fn === "function") {
-    fn(input.action >>> 0, input.x >>> 0, input.y >>> 0, input.fingerId >>> 0);
+    if (lastBoardId === "x4pro") {
+      const swappedX = Math.round(input.y) >>> 0;
+      const swappedY = Math.round(input.x) >>> 0;
+      const fingerId = ((input.fingerId >>> 0) & 0x7f) | 0x80;
+      fn(input.action >>> 0, swappedX, swappedY, fingerId);
+      return;
+    }
+    if (lastBoardId === "eego-a4") {
+      const scaledX = Math.min(539, Math.max(0, Math.round((input.x * 539) / 551))) >>> 0;
+      const clampedY = Math.min(767, Math.max(0, Math.round(input.y))) >>> 0;
+      fn(input.action >>> 0, scaledX, clampedY, 0);
+      return;
+    }
+    fn(input.action >>> 0, Math.round(input.x) >>> 0, Math.round(input.y) >>> 0, input.fingerId >>> 0);
   }
 }
 

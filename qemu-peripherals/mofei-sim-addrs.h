@@ -19,6 +19,11 @@ typedef enum MofeiSimBoardKind {
   MOFEI_SIM_BOARD_S37UC = 1,
   MOFEI_SIM_BOARD_LILYGO_T5S3_PRO = 2,
   MOFEI_SIM_BOARD_M5PAPERS3 = 3,
+  MOFEI_SIM_BOARD_READ_PICO = 4,
+  MOFEI_SIM_BOARD_MOLINK = 5,
+  MOFEI_SIM_BOARD_X4PRO = 6,
+  MOFEI_SIM_BOARD_METALIO_EINK4 = 7,
+  MOFEI_SIM_BOARD_EEGO_A4 = 8,
 } MofeiSimBoardKind;
 
 extern MofeiSimBoardKind mofei_sim_active_board;
@@ -28,6 +33,72 @@ static inline bool mofei_sim_board_is_lilygo_t5s3_pro(void) {
   return mofei_sim_active_board == MOFEI_SIM_BOARD_LILYGO_T5S3_PRO;
 }
 static inline bool mofei_sim_board_is_m5papers3(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_M5PAPERS3; }
+static inline bool mofei_sim_board_is_read_pico(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_READ_PICO; }
+static inline bool mofei_sim_board_is_molink(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_MOLINK; }
+static inline bool mofei_sim_board_is_x4pro(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_X4PRO; }
+static inline bool mofei_sim_board_is_metalio_eink4(void) {
+  return mofei_sim_active_board == MOFEI_SIM_BOARD_METALIO_EINK4;
+}
+static inline bool mofei_sim_board_is_eego_a4(void) { return mofei_sim_active_board == MOFEI_SIM_BOARD_EEGO_A4; }
+
+static inline bool mofei_sim_ascii_ieq(const char* a, const char* b) {
+  if (!a || !b) {
+    return false;
+  }
+  while (*a && *b) {
+    char ca = *a++;
+    char cb = *b++;
+    if (ca >= 'A' && ca <= 'Z') {
+      ca = (char)(ca - 'A' + 'a');
+    }
+    if (cb >= 'A' && cb <= 'Z') {
+      cb = (char)(cb - 'A' + 'a');
+    }
+    if (ca != cb) {
+      return false;
+    }
+  }
+  return *a == '\0' && *b == '\0';
+}
+
+static inline bool try_parse_mofei_sim_board_env(const char* env_board, MofeiSimBoardKind* out_board) {
+  if (!env_board || !env_board[0]) {
+    return false;
+  }
+  MofeiSimBoardKind parsed = MOFEI_SIM_BOARD_MOFEI;
+  if (mofei_sim_ascii_ieq(env_board, "s37uc")) {
+    parsed = MOFEI_SIM_BOARD_S37UC;
+  } else if (mofei_sim_ascii_ieq(env_board, "lilygo-t5s3-pro") || mofei_sim_ascii_ieq(env_board, "lilygo_t5s3_pro")) {
+    parsed = MOFEI_SIM_BOARD_LILYGO_T5S3_PRO;
+  } else if (mofei_sim_ascii_ieq(env_board, "m5papers3")) {
+    parsed = MOFEI_SIM_BOARD_M5PAPERS3;
+  } else if (mofei_sim_ascii_ieq(env_board, "read-pico") || mofei_sim_ascii_ieq(env_board, "read_pico")) {
+    parsed = MOFEI_SIM_BOARD_READ_PICO;
+  } else if (mofei_sim_ascii_ieq(env_board, "molink")) {
+    parsed = MOFEI_SIM_BOARD_MOLINK;
+  } else if (mofei_sim_ascii_ieq(env_board, "x4pro")) {
+    parsed = MOFEI_SIM_BOARD_X4PRO;
+  } else if (mofei_sim_ascii_ieq(env_board, "metalio-eink4") || mofei_sim_ascii_ieq(env_board, "metalio_eink4")) {
+    parsed = MOFEI_SIM_BOARD_METALIO_EINK4;
+  } else if (mofei_sim_ascii_ieq(env_board, "eego-a4") || mofei_sim_ascii_ieq(env_board, "eego_a4")) {
+    parsed = MOFEI_SIM_BOARD_EEGO_A4;
+  } else if (mofei_sim_ascii_ieq(env_board, "mofei") || mofei_sim_ascii_ieq(env_board, "default") ||
+             mofei_sim_ascii_ieq(env_board, "s3wroom") || mofei_sim_ascii_ieq(env_board, "s3r8")) {
+    parsed = MOFEI_SIM_BOARD_MOFEI;
+  } else {
+    return false;
+  }
+  if (out_board) {
+    *out_board = parsed;
+  }
+  return true;
+}
+
+static inline MofeiSimBoardKind parse_mofei_sim_board_env(const char* env_board) {
+  MofeiSimBoardKind parsed = MOFEI_SIM_BOARD_MOFEI;
+  (void)try_parse_mofei_sim_board_env(env_board, &parsed);
+  return parsed;
+}
 
 /* Both boards read GT911 registers through the same bounded I2C model. */
 static inline bool mofei_sim_board_uses_gt911(void) {
@@ -42,6 +113,73 @@ static inline bool mofei_sim_board_uses_gt911(void) {
 #define MOFEI_PAPERS3_FRAMEBUFFER_WIDTH MOFEI_LILYGO_FRAMEBUFFER_WIDTH
 #define MOFEI_PAPERS3_FRAMEBUFFER_HEIGHT MOFEI_LILYGO_FRAMEBUFFER_HEIGHT
 #define MOFEI_PAPERS3_FRAMEBUFFER_BYTES MOFEI_LILYGO_FRAMEBUFFER_BYTES
+#define MOFEI_READ_PICO_FRAMEBUFFER_WIDTH 684u
+#define MOFEI_READ_PICO_FRAMEBUFFER_HEIGHT 1216u
+#define MOFEI_READ_PICO_FRAMEBUFFER_BYTES \
+  ((MOFEI_READ_PICO_FRAMEBUFFER_WIDTH * MOFEI_READ_PICO_FRAMEBUFFER_HEIGHT) / 8u)
+#define MOFEI_EEGO_A4_FRAMEBUFFER_WIDTH 552u
+#define MOFEI_EEGO_A4_FRAMEBUFFER_HEIGHT 768u
+#define MOFEI_EEGO_A4_FRAMEBUFFER_BYTES ((MOFEI_EEGO_A4_FRAMEBUFFER_WIDTH * MOFEI_EEGO_A4_FRAMEBUFFER_HEIGHT) / 8u)
+
+static inline uint32_t mofei_sim_board_direct_framebuffer_bytes(void) {
+  switch (mofei_sim_active_board) {
+    case MOFEI_SIM_BOARD_LILYGO_T5S3_PRO:
+    case MOFEI_SIM_BOARD_M5PAPERS3:
+      return MOFEI_LILYGO_FRAMEBUFFER_BYTES;
+    case MOFEI_SIM_BOARD_READ_PICO:
+      return MOFEI_READ_PICO_FRAMEBUFFER_BYTES;
+    case MOFEI_SIM_BOARD_EEGO_A4:
+      return MOFEI_EEGO_A4_FRAMEBUFFER_BYTES;
+    case MOFEI_SIM_BOARD_MOFEI:
+    case MOFEI_SIM_BOARD_S37UC:
+    case MOFEI_SIM_BOARD_MOLINK:
+    case MOFEI_SIM_BOARD_X4PRO:
+    case MOFEI_SIM_BOARD_METALIO_EINK4:
+    default:
+      return 0u;
+  }
+}
+
+static inline void mofei_sim_board_touch_dimensions(uint16_t* width, uint16_t* height) {
+  uint16_t w = 480u;
+  uint16_t h = 800u;
+  switch (mofei_sim_active_board) {
+    case MOFEI_SIM_BOARD_M5PAPERS3:
+      w = 960u;
+      h = 540u;
+      break;
+    case MOFEI_SIM_BOARD_LILYGO_T5S3_PRO:
+      w = 540u;
+      h = 960u;
+      break;
+    case MOFEI_SIM_BOARD_READ_PICO:
+      w = 684u;
+      h = 1216u;
+      break;
+    case MOFEI_SIM_BOARD_MOLINK:
+    case MOFEI_SIM_BOARD_X4PRO:
+      w = 800u;
+      h = 480u;
+      break;
+    case MOFEI_SIM_BOARD_EEGO_A4:
+      w = 552u;
+      h = 768u;
+      break;
+    case MOFEI_SIM_BOARD_S37UC:
+    case MOFEI_SIM_BOARD_METALIO_EINK4:
+    case MOFEI_SIM_BOARD_MOFEI:
+    default:
+      w = 480u;
+      h = 800u;
+      break;
+  }
+  if (width) {
+    *width = w;
+  }
+  if (height) {
+    *height = h;
+  }
+}
 
 /* ESP32-S3 simulator guest memory ranges used by QEMU helper paths. */
 #define MOFEI_SIM_EXTMEM_REGION_SIZE 0x02000000u
@@ -448,45 +586,45 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableStudyQuizScene_addr;
   uint32_t murphyVtableStudyReportScene_addr;
   uint32_t murphyVtableStudyRecoveryScene_addr;
-  uint32_t murphyVtableKeyboardScene_addr;      /* vtable for murphy::ui::KeyboardScene */
-  uint32_t murphyVtableConfirmationScene_addr;  /* vtable for panda::ui::ConfirmationScene */
-  uint32_t murphyVtableReaderScene_addr;        /* vtable for murphy::app::ReaderScene */
-  uint32_t murphyVtableSleepScene_addr;         /* vtable for murphy::app::SleepScene */
-  uint32_t murphyVtableWallpaperPickerScene_addr; /* WallpaperPickerScene 的 vtable */
-  uint32_t murphyVtablePandaHubScene_addr;      /* vtable for murphy::app::PandaHubScene */
-  uint32_t murphyVtablePandaLuaAppScene_addr;   /* vtable for murphy::app::PandaLuaAppScene */
-  uint32_t murphyVtableButtonRemapScene_addr;   /* vtable for murphy::app::ButtonRemapScene */
-  uint32_t murphyVtableDiagnosticsScene_addr;   /* vtable for murphy::app::DiagnosticsScene */
-  uint32_t murphyVtableFontPickerScene_addr;    /* vtable for murphy::app::FontPickerScene */
-  uint32_t murphyVtableEnumEditorScene_addr;    /* vtable for murphy::app::EnumEditorScene */
-  uint32_t murphyVtableToggleGroupScene_addr;   /* vtable for murphy::app::ToggleGroupScene */
-  uint32_t murphyVtableSearchResultsScene_addr; /* vtable for murphy::app::SearchResultsScene */
-  uint32_t murphyVtableBookmarkListScene_addr;  /* vtable for murphy::app::BookmarkListScene */
-  uint32_t murphyVtableChapterListScene_addr;   /* vtable for murphy::app::ChapterListScene */
-  uint32_t murphyVtablePercentJumpScene_addr;   /* vtable for murphy::app::PercentJumpScene */
-  uint32_t murphyVtableDictionaryScene_addr;    /* vtable for murphy::app::ReaderDictionaryResultScene */
-  uint32_t murphyVtableSudokuScene_addr;        /* vtable for murphy::app::SudokuScene */
-  uint32_t murphyVtableVirtualPetScene_addr;    /* vtable for murphy::app::VirtualPetScene */
-  uint32_t murphyVtableWordPuzzleScene_addr;    /* WordPuzzleScene 的 vtable */
-  uint32_t murphyVtablePandaCloudAccountScene_addr; /* PandaCloudAccountScene 的 vtable */
-  uint32_t murphyVtableGnssScene_addr;          /* GnssScene 的 vtable */
-  uint32_t murphyVtableGridOrderScene_addr;     /* GridOrderScene 的 vtable */
-  uint32_t murphyVtableRegionOnboardingScene_addr; /* RegionOnboardingScene 的 vtable */
-  uint32_t murphyVtableClockFocusScene_addr;    /* ClockFocusScene 的 vtable */
-  uint32_t murphyVtableTimerToolsScene_addr;    /* TimerToolsScene 的 vtable */
+  uint32_t murphyVtableKeyboardScene_addr;               /* vtable for murphy::ui::KeyboardScene */
+  uint32_t murphyVtableConfirmationScene_addr;           /* vtable for panda::ui::ConfirmationScene */
+  uint32_t murphyVtableReaderScene_addr;                 /* vtable for murphy::app::ReaderScene */
+  uint32_t murphyVtableSleepScene_addr;                  /* vtable for murphy::app::SleepScene */
+  uint32_t murphyVtableWallpaperPickerScene_addr;        /* WallpaperPickerScene 的 vtable */
+  uint32_t murphyVtablePandaHubScene_addr;               /* vtable for murphy::app::PandaHubScene */
+  uint32_t murphyVtablePandaLuaAppScene_addr;            /* vtable for murphy::app::PandaLuaAppScene */
+  uint32_t murphyVtableButtonRemapScene_addr;            /* vtable for murphy::app::ButtonRemapScene */
+  uint32_t murphyVtableDiagnosticsScene_addr;            /* vtable for murphy::app::DiagnosticsScene */
+  uint32_t murphyVtableFontPickerScene_addr;             /* vtable for murphy::app::FontPickerScene */
+  uint32_t murphyVtableEnumEditorScene_addr;             /* vtable for murphy::app::EnumEditorScene */
+  uint32_t murphyVtableToggleGroupScene_addr;            /* vtable for murphy::app::ToggleGroupScene */
+  uint32_t murphyVtableSearchResultsScene_addr;          /* vtable for murphy::app::SearchResultsScene */
+  uint32_t murphyVtableBookmarkListScene_addr;           /* vtable for murphy::app::BookmarkListScene */
+  uint32_t murphyVtableChapterListScene_addr;            /* vtable for murphy::app::ChapterListScene */
+  uint32_t murphyVtablePercentJumpScene_addr;            /* vtable for murphy::app::PercentJumpScene */
+  uint32_t murphyVtableDictionaryScene_addr;             /* vtable for murphy::app::ReaderDictionaryResultScene */
+  uint32_t murphyVtableSudokuScene_addr;                 /* vtable for murphy::app::SudokuScene */
+  uint32_t murphyVtableVirtualPetScene_addr;             /* vtable for murphy::app::VirtualPetScene */
+  uint32_t murphyVtableWordPuzzleScene_addr;             /* WordPuzzleScene 的 vtable */
+  uint32_t murphyVtablePandaCloudAccountScene_addr;      /* PandaCloudAccountScene 的 vtable */
+  uint32_t murphyVtableGnssScene_addr;                   /* GnssScene 的 vtable */
+  uint32_t murphyVtableGridOrderScene_addr;              /* GridOrderScene 的 vtable */
+  uint32_t murphyVtableRegionOnboardingScene_addr;       /* RegionOnboardingScene 的 vtable */
+  uint32_t murphyVtableClockFocusScene_addr;             /* ClockFocusScene 的 vtable */
+  uint32_t murphyVtableTimerToolsScene_addr;             /* TimerToolsScene 的 vtable */
   uint32_t murphyVtablePomodoroDurationEditorScene_addr; /* PomodoroDurationEditorScene 的 vtable */
-  uint32_t murphyVtableAlarmListScene_addr;     /* AlarmListScene 的 vtable */
-  uint32_t murphyVtableAlarmEditorScene_addr;   /* AlarmEditorScene 的 vtable */
-  uint32_t murphyVtableAlarmWeekdayEditorScene_addr; /* AlarmWeekdayEditorScene 的 vtable */
-  uint32_t murphyVtableHanaAssistantScene_addr; /* HanaAssistantScene 的 vtable */
-  uint32_t murphyVtableWeReadScene_addr;        /* WeReadScene 的 vtable */
-  uint32_t murphyVtableOtaStatusScene_addr;     /* OtaStatusScene 的 vtable */
-  uint32_t murphyVtableMessageScene_addr;       /* MessageScene 的 vtable */
-  uint32_t fillRect_addr;                       /* GfxRenderer::fillRect(int,int,int,int,bool) const */
-  uint32_t displayBuffer_addr;                  /* GfxRenderer::displayBuffer(HalDisplay::RefreshMode) const */
-  uint32_t renderActivitySync_addr;             /* renderActivitySynchronously(Activity*) */
-  uint32_t drawLine_addr;                       /* GfxRenderer::drawLine(int,int,int,int,bool) const */
-  uint32_t fillPhysicalRect_addr;               /* fillPhysicalRect(uint8_t*,int,int,int,int,bool) */
+  uint32_t murphyVtableAlarmListScene_addr;              /* AlarmListScene 的 vtable */
+  uint32_t murphyVtableAlarmEditorScene_addr;            /* AlarmEditorScene 的 vtable */
+  uint32_t murphyVtableAlarmWeekdayEditorScene_addr;     /* AlarmWeekdayEditorScene 的 vtable */
+  uint32_t murphyVtableHanaAssistantScene_addr;          /* HanaAssistantScene 的 vtable */
+  uint32_t murphyVtableWeReadScene_addr;                 /* WeReadScene 的 vtable */
+  uint32_t murphyVtableOtaStatusScene_addr;              /* OtaStatusScene 的 vtable */
+  uint32_t murphyVtableMessageScene_addr;                /* MessageScene 的 vtable */
+  uint32_t fillRect_addr;                                /* GfxRenderer::fillRect(int,int,int,int,bool) const */
+  uint32_t displayBuffer_addr;                           /* GfxRenderer::displayBuffer(HalDisplay::RefreshMode) const */
+  uint32_t renderActivitySync_addr;                      /* renderActivitySynchronously(Activity*) */
+  uint32_t drawLine_addr;                                /* GfxRenderer::drawLine(int,int,int,int,bool) const */
+  uint32_t fillPhysicalRect_addr;                        /* fillPhysicalRect(uint8_t*,int,int,int,int,bool) */
   /* EPUB open pipeline trace points for simulator E2E diagnosis */
   uint32_t epubLoad_addr;                 /* Epub::load(bool,bool) */
   uint32_t epubSetupCacheDir_addr;        /* Epub::setupCacheDir() const */

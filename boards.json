@@ -133,6 +133,117 @@
         { "id": 0, "label": "BOOT", "aliases": ["back", "boot"] },
         { "id": 6, "label": "PWR", "aliases": ["home", "power", "pwr"] }
       ]
+    },
+    {
+      "id": "read-pico",
+      "displayName": "Read Pico (ED052TC4 684x1216 Parallel)",
+      "rawWidth": 1216,
+      "rawHeight": 684,
+      "framebufferWidth": 684,
+      "framebufferHeight": 1216,
+      "framebufferFormat": "mono1",
+      "outputWidth": 684,
+      "outputHeight": 1216,
+      "touchI2cAddr": "0x00",
+      "qemu": {
+        "displayType": "direct-framebuffer",
+        "touchType": "none"
+      },
+      "capabilities": ["display.mono1", "storage.sdspi", "button.up", "button.down", "button.power"],
+      "keyMap": [
+        { "id": 4, "label": "PageUp", "aliases": ["up", "pageup"] },
+        { "id": 5, "label": "PageDown", "aliases": ["down", "pagedown"] },
+        { "id": 6, "label": "Power", "aliases": ["select", "power", "pwr", "confirm"] }
+      ]
+    },
+    {
+      "id": "molink",
+      "displayName": "MoLink (GDEQ0426T82 800x480 Landscape)",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 800,
+      "outputHeight": 480,
+      "touchI2cAddr": "0x00",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "none"
+      },
+      "capabilities": ["display.mono1", "storage.sdspi", "button.up", "button.down", "button.left", "button.right", "button.confirm", "button.back"],
+      "keyMap": [
+        { "id": 4, "label": "Up", "aliases": ["up"] },
+        { "id": 5, "label": "Down", "aliases": ["down"] },
+        { "id": 2, "label": "Left", "aliases": ["left"] },
+        { "id": 3, "label": "Right", "aliases": ["right"] },
+        { "id": 1, "label": "Center", "aliases": ["select", "confirm", "enter", "center"] },
+        { "id": 0, "label": "Back", "aliases": ["back", "esc"] }
+      ]
+    },
+    {
+      "id": "x4pro",
+      "displayName": "X4Pro (GDEQ0426T82 800x480 Touch)",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 800,
+      "outputHeight": 480,
+      "touchI2cAddr": "0x40",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "chsc6440"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.dual", "storage.sdspi", "button.up", "button.down", "button.power"],
+      "keyMap": [
+        { "id": 4, "label": "PageUp", "aliases": ["up", "pageup"] },
+        { "id": 5, "label": "PageDown", "aliases": ["down", "pagedown"] },
+        { "id": 6, "label": "Power", "aliases": ["select", "power", "pwr", "confirm"] }
+      ]
+    },
+    {
+      "id": "metalio-eink4",
+      "displayName": "MetalIO E-Ink 4 (SSD1677 480x800 CST816S)",
+      "rawWidth": 800,
+      "rawHeight": 480,
+      "framebufferWidth": 800,
+      "framebufferHeight": 480,
+      "framebufferFormat": "mono1",
+      "outputWidth": 480,
+      "outputHeight": 800,
+      "touchI2cAddr": "0x15",
+      "qemu": {
+        "displayType": "ssd1677-gdeq0426",
+        "touchType": "cst816s"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.dual", "storage.sdspi", "time.rtc", "button.power"],
+      "keyMap": [
+        { "id": 6, "label": "Power", "aliases": ["select", "power", "pwr", "confirm"] }
+      ]
+    },
+    {
+      "id": "eego-a4",
+      "displayName": "EEGO A4 (GDEQ0397T82P 552x768 Touch)",
+      "rawWidth": 768,
+      "rawHeight": 552,
+      "framebufferWidth": 552,
+      "framebufferHeight": 768,
+      "framebufferFormat": "mono1",
+      "outputWidth": 552,
+      "outputHeight": 768,
+      "touchI2cAddr": "0x40",
+      "qemu": {
+        "displayType": "direct-framebuffer",
+        "touchType": "gslx680"
+      },
+      "capabilities": ["input.touch", "display.mono1", "frontlight.single", "storage.sdspi", "time.rtc", "button.up", "button.down", "button.power"],
+      "keyMap": [
+        { "id": 4, "label": "PageUp", "aliases": ["up", "pageup"] },
+        { "id": 5, "label": "PageDown", "aliases": ["down", "pagedown"] },
+        { "id": 6, "label": "Power", "aliases": ["select", "power", "pwr", "confirm"] }
+      ]
     }
   ]
 }

@@ -920,7 +920,7 @@ static SampleGuestFrameResult sample_guest_framebuffer(bool allow_low_content_fr
       const bool is_white = non_white == 0;
       if (has_content || allow_low_content_frame) {
         for (int row = 0; row < EPD_HEIGHT; row++) {
-          if (g_fb_data_guest_addr != 0) {
+          if (g_fb_data_guest_addr != 0 && !mofei_sim_board_is_molink() && !mofei_sim_board_is_x4pro()) {
             copy_murphy_logical_framebuffer_to_panel_ram(g_ssd1677, guest_fb);
             break;
           }

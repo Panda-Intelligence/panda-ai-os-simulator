@@ -207,6 +207,21 @@ static const char* mofei_sim_board_name(void) {
   if (mofei_sim_board_is_lilygo_t5s3_pro()) {
     return "lilygo-t5s3-pro";
   }
+  if (mofei_sim_board_is_read_pico()) {
+    return "read-pico";
+  }
+  if (mofei_sim_board_is_molink()) {
+    return "molink";
+  }
+  if (mofei_sim_board_is_x4pro()) {
+    return "x4pro";
+  }
+  if (mofei_sim_board_is_metalio_eink4()) {
+    return "metalio-eink4";
+  }
+  if (mofei_sim_board_is_eego_a4()) {
+    return "eego-a4";
+  }
   return "mofei";
 }
 
@@ -221,6 +236,27 @@ static bool mofei_sim_path_mentions_lilygo_t5s3_pro(const char* path) {
 static bool mofei_sim_path_mentions_m5papers3(const char* path) {
   return path && (g_strrstr(path, "m5papers3") || g_strrstr(path, "M5PAPERS3"));
 }
+
+static bool mofei_sim_path_mentions_read_pico(const char* path) {
+  return path && (g_strrstr(path, "read-pico") || g_strrstr(path, "READ-PICO"));
+}
+
+static bool mofei_sim_path_mentions_molink(const char* path) {
+  return path && (g_strrstr(path, "molink") || g_strrstr(path, "MOLINK"));
+}
+
+static bool mofei_sim_path_mentions_x4pro(const char* path) {
+  return path && (g_strrstr(path, "x4pro") || g_strrstr(path, "X4PRO"));
+}
+
+static bool mofei_sim_path_mentions_metalio_eink4(const char* path) {
+  return path && (g_strrstr(path, "metalio-eink4") || g_strrstr(path, "METALIO-EINK4"));
+}
+
+static bool mofei_sim_path_mentions_eego_a4(const char* path) {
+  return path && (g_strrstr(path, "eego-a4") || g_strrstr(path, "EEGO-A4"));
+}
+
 static void mofei_sim_select_board(const char* firmware_path) {
   const char* env_board = getenv("MOFEI_SIM_BOARD");
   if (env_board && env_board[0]) {
@@ -240,6 +276,9 @@ static void mofei_sim_select_board(const char* firmware_path) {
       mofei_sim_active_board = MOFEI_SIM_BOARD_MOFEI;
       return;
     }
+    if (try_parse_mofei_sim_board_env(env_board, &mofei_sim_active_board)) {
+      return;
+    }
     fprintf(stderr, "[QEMU-SIM] WARNING: unsupported MOFEI_SIM_BOARD=%s, falling back to firmware path/default\n",
             env_board);
   }
@@ -250,6 +289,16 @@ static void mofei_sim_select_board(const char* firmware_path) {
     mofei_sim_active_board = MOFEI_SIM_BOARD_LILYGO_T5S3_PRO;
   } else if (mofei_sim_path_mentions_m5papers3(firmware_path)) {
     mofei_sim_active_board = MOFEI_SIM_BOARD_M5PAPERS3;
+  } else if (mofei_sim_path_mentions_read_pico(firmware_path)) {
+    mofei_sim_active_board = MOFEI_SIM_BOARD_READ_PICO;
+  } else if (mofei_sim_path_mentions_molink(firmware_path)) {
+    mofei_sim_active_board = MOFEI_SIM_BOARD_MOLINK;
+  } else if (mofei_sim_path_mentions_x4pro(firmware_path)) {
+    mofei_sim_active_board = MOFEI_SIM_BOARD_X4PRO;
+  } else if (mofei_sim_path_mentions_metalio_eink4(firmware_path)) {
+    mofei_sim_active_board = MOFEI_SIM_BOARD_METALIO_EINK4;
+  } else if (mofei_sim_path_mentions_eego_a4(firmware_path)) {
+    mofei_sim_active_board = MOFEI_SIM_BOARD_EEGO_A4;
   } else {
     mofei_sim_active_board = MOFEI_SIM_BOARD_MOFEI;
   }

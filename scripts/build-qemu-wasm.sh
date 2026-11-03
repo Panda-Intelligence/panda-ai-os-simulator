@@ -383,7 +383,8 @@ const artifactInfo = (fileName) => {
 };
 const sharedNames = ["qemu-system-xtensa.js", "qemu-system-xtensa.wasm", "bootloader.bin",
   "partition-table.bin", "ota_data_initial.bin", "esp32s3_rev0_rom.bin"];
-const sharedArtifacts = Object.fromEntries(sharedNames.map((name) => [name, artifactInfo(name)]).filter(([, value]) => value));
+const optionalNames = ["qemu-system-xtensa.worker.js", "qemu-system-xtensa.data", "sdcard.img", "load.js"];
+const sharedArtifacts = Object.fromEntries([...sharedNames, ...optionalNames].map((name) => [name, artifactInfo(name)]).filter(([, value]) => value));
 const missingRequired = sharedNames.filter((name) => !sharedArtifacts[name]);
 const boards = {};
 for (const buildBoard of requiredBoards) {
@@ -399,13 +400,20 @@ for (const buildBoard of requiredBoards) {
   const firmware = Object.fromEntries(Object.entries(names).slice(0, 3).map(([kind, name]) => [kind, artifactInfo(name)]));
   const missing = Object.entries(firmware).filter(([, value]) => !value).map(([kind]) => kind);
   const provenancePath = join(outputDir, names.provenance);
-  const provenance = existsSync(provenancePath) ? JSON.parse(readFileSync(provenancePath, "utf8")) : null;
+  const rawProvenance = existsSync(provenancePath) ? JSON.parse(readFileSync(provenancePath, "utf8")) : null;
+  const provenance = rawProvenance ? { ...rawProvenance, sourceRevision } : null;
   if (!provenance) missing.push("provenance");
   if (missing.length) missingRequired.push(`${buildBoard}: missing ${missing.join(", ")}`);
   const boardId = buildBoard === "default" ? "mofei" : profile.id;
   boards[boardId] = { status: missing.length === 0 ? "ready" : "missing", buildBoard,
     framebuffer: { width: profile.framebufferWidth, height: profile.framebufferHeight, format: profile.framebufferFormat },
-    firmware, provenance };
+    firmware,
+    bootArtifacts: {
+      bootloader: artifactInfo(`bootloader${suffix}.bin`),
+      partitionTable: artifactInfo(`partition-table${suffix}.bin`),
+      otaData: artifactInfo(`ota_data_initial${suffix}.bin`),
+    },
+    provenance };
 }
 const status = missingRequired.length === 0 ? "ready" : "missing";
 if (status !== "ready" && allowMissing !== "1") {
