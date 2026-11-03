@@ -64,3 +64,21 @@ test("actual selected ROM setjmp bytes save raw A0 at byte64 and retain the sysc
   assert.equal(rom.subarray(0x2e299,0x2e29c).toString("hex"),"026210");
   assert.equal(rom.subarray(0x2e29c,0x2e2a0).toString("hex"),"0c021df0");
 });
+
+test("selected ROM lock and UART setters match the kernel bootstrap data layout",()=>{
+  const path=process.env.PANDA_ROM_SETJMP_BIN || new URL("../../panda-developers/public/studio-simulator/simulator-runtime/qemu/esp32s3_rev0_rom.bin",import.meta.url);
+  const rom=readFileSync(path);
+  assert.equal(rom.readUInt32LE(0x614),0x400441fc);
+  assert.equal(rom.readUInt32LE(0x441f4),0x3fcef74c);
+  assert.equal(rom.readUInt32LE(0x441f8),0x3fcef748);
+  assert.equal(rom.subarray(0x441fc,0x4420b).toString("hex"),"36410081fdff290881fdff39081df0");
+  assert.equal(rom.readUInt32LE(0x5e4),0x4004421c);
+  assert.equal(rom.readUInt32LE(0x43cbc),0x3fcef754);
+  assert.equal(rom.readUInt32LE(0x44218),0x40043ce8);
+  assert.equal(rom.subarray(0x4426a,0x44276).toString("hex"),"21e2ff822200162800e00800");
+  assert.equal(rom.readUInt32LE(0x6bc),0x400488b4);
+  assert.equal(rom.readUInt32LE(0x1a54),0x400442a4);
+  assert.equal(rom.readUInt32LE(0x44294),0x3fcef744);
+  assert.equal(rom.subarray(0x44298,0x442a3).toString("hex"),"36410081feff2248001df0");
+  assert.equal(rom.subarray(0x442a4,0x442af).toString("hex"),"36410081fbff2208001df0");
+});

@@ -49,6 +49,12 @@ try {
   for (const [board, flag, runtimeBoard] of [["mofei", "--mofei-build", "default"], ["s37uc", "--compact-build", "s37uc"]]) {
     const build = options[flag];
     const cache = readFileSync(join(build, "CMakeCache.txt"), "utf8");
+    const config = readFileSync(join(build, "sdkconfig"), "utf8");
+    // 使用既有模拟器性能配置；实体固件的 SIZE 覆盖会放大指令解释与软件验签开销。
+    if (!/^CONFIG_COMPILER_OPTIMIZATION_PERF=y$/m.test(config)
+      || /^CONFIG_COMPILER_OPTIMIZATION_SIZE=y$/m.test(config)
+      || !/^CONFIG_MBEDTLS_COMPILER_OPTIMIZATION_PERF=y$/m.test(config)
+      || /^CONFIG_MBEDTLS_COMPILER_OPTIMIZATION_SIZE=y$/m.test(config)) throw new Error(`studio_simulator_perf_profile_required:${board}`);
     if (!/^PANDA_SIMULATOR:[^=]+=1$/m.test(cache) || !/^PANDA_PACKAGE_V2_YYJSON_SPIKE:[^=]+=(ON|1)$/m.test(cache)
       || !new RegExp(`^BOARD:[^=]+=${runtimeBoard}$`, "m").test(cache)) throw new Error(`studio_build_configuration_invalid:${board}`);
     const commands = JSON.parse(readFileSync(join(build, "compile_commands.json"), "utf8"));

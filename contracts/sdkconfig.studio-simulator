@@ -1,4 +1,6 @@
 # Public development root for Studio simulator guest execution only.
 # Use only with PANDA_SIMULATOR=1; never include in physical or release defaults.
 CONFIG_PANDA_DEBUG_CONSOLE=y
+CONFIG_MBEDTLS_COMPILER_OPTIMIZATION_PERF=y
+# CONFIG_MBEDTLS_COMPILER_OPTIMIZATION_SIZE is not set
 CONFIG_PANDA_APP_PACKAGE_TRUST_ROOT_PUBLIC_KEY_HEX="04ef77107e5d35e5c903cc32be512371433881dfc167df7e4b5d59c9b3a4e8754e7d7075b49a0b938ed8135b6330c3a6abe76bfbf1ad20714dc7dce1eaf11b5a3d"

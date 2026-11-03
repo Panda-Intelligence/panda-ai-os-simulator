@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,981 +9,4256 @@
+@@ -9,981 +9,4265 @@
   */
 
  #include "qemu/osdep.h"
@@ -1027,6 +1027,15 @@
 +  const uint32_t caller_base[] = {marked_return, stack_top, 0, 0};
 +  address_space_write(&address_space_memory, stack_top - sizeof(caller_base), MEMTXATTRS_UNSPECIFIED, caller_base,
 +                      sizeof(caller_base));
++
++  /* 直接启动跳过 ROM 的 RAM 初始化。复原 ets_install_lock(NULL,NULL) 与
++   * ets_install_uart_printf 的数据状态，保留真实 formatter 和 UART 字符处理代码。 */
++  const uint32_t rom_printf_state[] = {0, 0, 0, 0x40043ce8u};
++  address_space_write(&address_space_memory, 0x3fcef748u, MEMTXATTRS_UNSPECIFIED, rom_printf_state,
++                      sizeof(rom_printf_state));
++  /* 对应 esp_rom_output_set_as_console(0)，只初始化 ROM 的单字节 UART 选择器。 */
++  const uint8_t console_uart = 0;
++  address_space_write(&address_space_memory, 0x3fcef744u, MEMTXATTRS_UNSPECIFIED, &console_uart, sizeof(console_uart));
 +}
 +
 +static void esp32s3_soc_reset(DeviceState* dev) {
@@ -5166,7 +5175,7 @@
  }
 
  static const TypeInfo esp32s3_info = {
-@@ -993,10 +4268,6 @@
+@@ -993,10 +4277,6 @@
      .class_init = esp32s3_machine_class_init,
  };
 

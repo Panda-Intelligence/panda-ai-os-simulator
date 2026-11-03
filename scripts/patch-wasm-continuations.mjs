@@ -118,11 +118,38 @@ export function patchWasmContinuations(source) {
   return source;
 }
 
+export function patchWasmPtyPoll(source) {
+  const file = ts.createSourceFile("qemu-runtime.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+  if (file.parseDiagnostics.length) fail("pty_javascript_syntax");
+  const functions = [];
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "xterm_pty_old_poll") functions.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  if (functions.length !== 1 || functions[0].parameters.map(node => node.name.getText(file)).join(",") !==
+      "fds,nfds,timeout") fail("pty_poll_function");
+  const calls = [];
+  function findPoll(node) {
+    if (ts.isCallExpression(node) && compact(node.expression.getText(file)) === "stream.stream_ops.poll") calls.push(node);
+    ts.forEachChild(node, findPoll);
+  }
+  findPoll(functions[0]);
+  if (calls.length !== 1 || calls[0].arguments.length !== 2 ||
+      calls[0].arguments[0].getText(file) !== "stream") fail("pty_stream_poll");
+  const timeout = calls[0].arguments[1];
+  const replacement = "stream.tty ? timeout : -1";
+  if (compact(timeout.getText(file)) === compact(replacement)) return source;
+  if (compact(timeout.getText(file)) !== "-1") fail("pty_poll_timeout");
+  // xterm-pty 用第二个参数设置等待时间；保留客户机主循环的有限期限和零等待，其他 FD 维持原语义。
+  return source.slice(0, timeout.getStart(file)) + replacement + source.slice(timeout.end);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const target = process.argv[2];
   if (!target || process.argv.length !== 3) throw new Error("Usage: node patch-wasm-continuations.mjs <runtime-js>");
   const source = readFileSync(target, "utf8");
-  const patched = patchWasmContinuations(source);
+  const patched = patchWasmPtyPoll(patchWasmContinuations(source));
   writeFileSync(target, patched);
   console.log("[patch-wasm-continuations] " + target);
 }

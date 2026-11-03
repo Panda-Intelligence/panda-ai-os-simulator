@@ -34,13 +34,17 @@ enum {WINDOW_BASE,WINDOW_START,PS};
 #define MOFEI_SIM_FAKE_APP_STACK_TOP 0x3fd88000u
 #define MEMTXATTRS_UNSPECIFIED 0
 typedef struct { uint32_t regs[16],phys_regs[64],sregs[3],windowbase_next,kernel_entry; } CPUXtensaState;
-static uint32_t memory[256],address_space_memory;
+static uint32_t memory[256],rom_printf_state[4],address_space_memory;
+static uint8_t console_uart=0x69;
 static uint32_t* at(uint32_t addr) {
  assert(addr>=MOFEI_SIM_FAKE_APP_STACK_TOP-sizeof(memory) && addr<MOFEI_SIM_FAKE_APP_STACK_TOP);
  assert(!(addr&3));return &memory[(addr-(MOFEI_SIM_FAKE_APP_STACK_TOP-sizeof(memory)))/4];
 }
 static void address_space_write(void* space,uint32_t addr,int attrs,const void* src,unsigned size) {
- (void)space;(void)attrs;assert(size==16);memcpy(at(addr),src,size);
+ (void)space;(void)attrs;
+ if(addr==0x3fcef744) {assert(size==1);memcpy(&console_uart,src,1);return;}
+ assert(size==16);
+ if(addr==0x3fcef748)memcpy(rom_printf_state,src,size);else memcpy(at(addr),src,size);
 }
 static uint32_t cpu_ldl_data(CPUXtensaState* env,uint32_t addr) {(void)env;return *at(addr);}
 static void cpu_stl_data(CPUXtensaState* env,uint32_t addr,uint32_t value) {(void)env;*at(addr)=value;}
@@ -49,12 +53,16 @@ ${prepare}
 ${spill}
 int main(void) {
  for(unsigned i=0;i<256;i++)memory[i]=0x73657236;
+ for(unsigned i=0;i<4;i++)rom_printf_state[i]=0x6c616833;
  CPUXtensaState env={.kernel_entry=0x40375970};
  mofei_prepare_kernel_call_frame(&env);
  assert(env.sregs[WINDOW_BASE]==0 && env.sregs[WINDOW_START]==1 && env.windowbase_next==0);
  assert(env.sregs[PS]==0x60000 && env.regs[1]==MOFEI_SIM_FAKE_APP_STACK_TOP);
  assert(env.regs[8]==0x80375970 && !memcmp(env.regs,env.phys_regs,sizeof(env.regs)));
  assert(*at(env.regs[1]-12)==MOFEI_SIM_FAKE_APP_STACK_TOP);
+ assert(rom_printf_state[0]==0 && rom_printf_state[1]==0 && rom_printf_state[2]==0);
+ assert(rom_printf_state[3]==0x40043ce8);
+ assert(console_uart==0);
  // 按 ENTRY a1,64 后的寄存器重叠构造第一次 CALL8 窗口溢出。
  const uint32_t root_sp=MOFEI_SIM_FAKE_APP_STACK_TOP-64;
  env.regs[9]=root_sp;env.regs[2]=0x1234;env.regs[3]=0x5678;
@@ -66,6 +74,13 @@ int main(void) {
  mofei_store_window_overflow(&env,8);
  assert(*at(root_sp-48-12)==root_sp);
  assert(*at(root_sp-48-16)==0x80375970);
+ for(unsigned i=0;i<4;i++)rom_printf_state[i]=0x65676172;
+ console_uart=0x69;
+ env.sregs[PS]=0xffffffff;env.sregs[WINDOW_BASE]=12;env.sregs[WINDOW_START]=0x1550;
+ mofei_prepare_kernel_call_frame(&env);
+ assert(env.sregs[PS]==0x60000 && env.sregs[WINDOW_BASE]==0 && env.sregs[WINDOW_START]==1);
+ assert(rom_printf_state[0]==0 && rom_printf_state[1]==0 && rom_printf_state[2]==0 && rom_printf_state[3]==0x40043ce8);
+ assert(console_uart==0);
  puts("kernel caller frame + actual source window spill PASS");
 }
 `);

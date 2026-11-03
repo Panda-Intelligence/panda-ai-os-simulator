@@ -1319,7 +1319,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
  }
 
  /*!
-@@ -158,116 +1114,4288 @@
+@@ -158,116 +1114,4316 @@
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */
@@ -4964,6 +4964,46 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +  return false;
 +}
 +
++typedef struct MofeiDirectFramebufferLayout {
++  uint32_t bits;
++  uint32_t bytes;
++  uint32_t width;
++  uint32_t height;
++  uint32_t format;
++} MofeiDirectFramebufferLayout;
++
++static bool mofei_read_direct_framebuffer_layout(CPUXtensaState* env, uint32_t object, uint32_t exported_bits,
++                                                 MofeiDirectFramebufferLayout* layout) {
++  uint32_t width, height, stride, format_word, bits, capacity;
++  /* 当前 Xtensa Framebuffer 的 DWARF：Size@0、stride@8、format@12、bits@16、capacity@20。 */
++  if (object == 0 || object > UINT32_MAX - 23u || !mofei_read_guest_data_u32_checked(env, object, &width) ||
++      !mofei_read_guest_data_u32_checked(env, object + 4u, &height) ||
++      !mofei_read_guest_data_u32_checked(env, object + 8u, &stride) ||
++      !mofei_read_guest_data_u32_checked(env, object + 12u, &format_word) ||
++      !mofei_read_guest_data_u32_checked(env, object + 16u, &bits) ||
++      !mofei_read_guest_data_u32_checked(env, object + 20u, &capacity)) {
++    return false;
++  }
++  const uint32_t format = format_word & 0xffu;
++  if (width == 0 || width > INT32_MAX || height == 0 || height > INT32_MAX || format > 1u || bits == 0 ||
++      (exported_bits != 0 && exported_bits != bits)) {
++    return false;
++  }
++  const uint32_t pixels_per_byte = format == 1u ? 2u : 8u;
++  const uint32_t expected_stride = width / pixels_per_byte + (width % pixels_per_byte != 0);
++  /* SDK 像素存储没有额外行对齐；先限制乘积，再读取真实容量内的字节。 */
++  if (stride != expected_stride || stride > MOFEI_LILYGO_FRAMEBUFFER_BYTES ||
++      height > MOFEI_LILYGO_FRAMEBUFFER_BYTES / stride) {
++    return false;
++  }
++  const uint32_t bytes = stride * height;
++  if (bytes > capacity || bits > UINT32_MAX - (bytes - 1u)) {
++    return false;
++  }
++  *layout = (MofeiDirectFramebufferLayout){bits, bytes, width, height, format};
++  return true;
++}
++
 +/* Display-bypass: start the periodic framebuffer push timer and wire the
 + * SSD1677 to read directly from the guest's MofeiDisplay framebuffer.
 + *
@@ -4998,33 +5038,21 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +  if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_LILYGO_FRAMEBUFFER_BYTES) {
 +    static uint8_t lilygo_framebuffer[MOFEI_LILYGO_FRAMEBUFFER_BYTES];
 +    static uint32_t lilygo_publish_count;
-+    uint32_t framebuffer_addr = 0;
++    uint32_t exported_bits = 0;
 +    uint32_t framebuffer_object = 0;
-+    uint32_t object_framebuffer_addr = 0;
 +    if (mofei_sim_addrs.murphySimulatorFramebuffer_addr) {
-+      framebuffer_addr = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
++      exported_bits = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
 +    }
 +    if (mofei_sim_addrs.murphySimulatorFramebufferObject_addr) {
 +      framebuffer_object = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr);
-+      if (framebuffer_object != 0) {
-+        /* Framebuffer ABI on Xtensa: Size(8), stride(4), format(1)+padding(3), bits(4). */
-+        object_framebuffer_addr = mofei_read_guest_data_u32(env, framebuffer_object + 16u);
-+      }
-+    }
-+    if (framebuffer_addr == 0) {
-+      framebuffer_addr = object_framebuffer_addr;
-+    }
-+    if (framebuffer_addr == 0 && mofei_sim_addrs.gfxSimulatorFrameBuffer_addr) {
-+      framebuffer_addr = mofei_sim_addrs.gfxSimulatorFrameBuffer_addr;
 +    }
 +
-+    const bool is_gray16_direct = mofei_sim_board_is_lilygo_t5s3_pro() || mofei_sim_board_is_m5papers3();
-+    const bool is_read_pico_direct = mofei_sim_board_is_read_pico();
-+    const uint32_t guest_fb_bytes = is_read_pico_direct ? (86u * 1216u) : direct_fb_bytes;
-+    const bool storage_valid =
-+        !is_gray16_direct || framebuffer_addr != mofei_sim_addrs.murphySimulatorFramebufferStorage_addr;
-+    const bool read_ok = framebuffer_addr != 0 && storage_valid &&
-+                         mofei_read_guest_memory(framebuffer_addr, lilygo_framebuffer, guest_fb_bytes);
++    MofeiDirectFramebufferLayout layout = {0};
++    const bool layout_valid = mofei_read_direct_framebuffer_layout(env, framebuffer_object, exported_bits, &layout);
++    const bool read_ok = layout_valid && mofei_read_guest_memory(layout.bits, lilygo_framebuffer, layout.bytes);
++    const bool is_gray16_direct = layout.format == 1u;
++    const bool is_read_pico_direct = layout.format == 0 && layout.width == 684u && layout.height == 1216u;
++    const uint32_t publish_bytes = is_read_pico_direct ? MOFEI_READ_PICO_FRAMEBUFFER_BYTES : layout.bytes;
 +    if (read_ok && is_read_pico_direct) {
 +      /* Guest Framebuffer rows for 684x1216 Mono1 are byte-aligned to 86 bytes
 +       * (684 bits + 4 padding bits). Pack each pair of 86-byte rows into 171
@@ -5048,7 +5076,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +    uint32_t non_white_bytes = 0;
 +    if (read_ok) {
 +      const uint8_t white_byte = is_gray16_direct ? 0x00u : 0xFFu;
-+      for (uint32_t i = 0; i < direct_fb_bytes; ++i) {
++      for (uint32_t i = 0; i < publish_bytes; ++i) {
 +        non_white_bytes += lilygo_framebuffer[i] != white_byte;
 +      }
 +    }
@@ -5060,13 +5088,13 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +              mofei_sim_addrs.murphySimulatorFramebuffer_addr
 +                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr)
 +                  : 0,
-+              framebuffer_object, object_framebuffer_addr, framebuffer_addr, read_ok ? 1u : 0u, non_white_bytes,
-+              direct_fb_bytes, read_ok ? lilygo_framebuffer[0] : 0, read_ok ? lilygo_framebuffer[1] : 0,
++              framebuffer_object, layout.bits, layout.bits, read_ok ? 1u : 0u, non_white_bytes, publish_bytes,
++              read_ok ? lilygo_framebuffer[0] : 0, read_ok ? lilygo_framebuffer[1] : 0,
 +              read_ok ? lilygo_framebuffer[2] : 0, read_ok ? lilygo_framebuffer[3] : 0);
 +    }
 +    lilygo_publish_count++;
 +    if (read_ok) {
-+      ssd1677_publish_direct_framebuffer(lilygo_framebuffer, direct_fb_bytes);
++      ssd1677_publish_direct_framebuffer(lilygo_framebuffer, publish_bytes);
 +    }
 +    return;
 +  }
