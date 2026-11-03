@@ -2,6 +2,7 @@
 """Record a locally built runtime identity; no guest/publication approval."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -36,7 +37,7 @@ def source(root):
 
 def record(output, qemu, native, simulator, image):
     files = []
-    for name in ('qemu-system-xtensa.js', 'qemu-system-xtensa.wasm', 'qemu-system-xtensa.worker.js'):
+    for name in ('qemu-system-xtensa.js', 'qemu-system-xtensa.wasm', 'qemu-system-xtensa.worker.js', 'esp32s3_rev0_rom.bin'):
         path = output / name
         if path.is_symlink() or not path.is_file() or path.stat().st_size < 1:
             raise ValueError(f'missing regular runtime artifact: {name}')
@@ -45,9 +46,13 @@ def record(output, qemu, native, simulator, image):
             raise ValueError('invalid WebAssembly module header')
         files.append({'path': name, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()})
     image_id = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', image], text=True).strip()
+    allocator = os.environ.get('QEMU_WASM_MALLOC', '')
+    if allocator not in {'emmalloc', 'dlmalloc', 'mimalloc'}:
+        raise ValueError('QEMU_WASM_MALLOC provenance is missing or invalid')
     data = {'schemaVersion': 1, 'kind': 'local-runtime-build', 'qemu': source(qemu),
             'nativeOverlay': source(native), 'simulator': source(simulator),
-            'toolchainImageId': image_id, 'artifacts': files,
+            'toolchainImageId': image_id, 'wasmAllocator': allocator,
+            'runtimeBuildRevision': os.environ.get('QEMU_WASM_RUNTIME_REVISION', ''), 'artifacts': files,
             'guestBootQualified': False, 'publicationApproved': False}
     (output / 'runtime-source.json').write_text(json.dumps(data, indent=2) + '\n')
 

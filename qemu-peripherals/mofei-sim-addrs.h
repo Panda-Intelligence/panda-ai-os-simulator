@@ -312,6 +312,7 @@ typedef struct MofeiSimAddrs {
   /* Pre-computed: callN target addresses that get special handling */
   uint32_t xQueueGenericCreate_addr;
   uint32_t xQueueCreateMutex_addr;
+  uint32_t xQueueCreateMutexStatic_addr;
   uint32_t xQueueCreateWithCaps_addr;
   uint32_t xSemaphoreCreateGenericWithCaps_addr;
   uint32_t vPortYield_addr;
@@ -338,6 +339,10 @@ typedef struct MofeiSimAddrs {
   uint32_t xQueueGiveMutexRecursive_addr;
   uint32_t xQueueReceive_addr;
   uint32_t xQueueTakeMutexRecursive_addr;
+  uint32_t xQueueGetMutexHolder_addr;
+  uint32_t xTaskGetCurrentTaskHandle_addr;
+  uint32_t xTaskGetStackStart_addr;
+  uint32_t pcTaskGetName_addr;
   uint32_t esp_intr_alloc_addr;
   uint32_t esp_intr_alloc_intrstatus_addr;
   uint32_t esp_intr_enable_addr;

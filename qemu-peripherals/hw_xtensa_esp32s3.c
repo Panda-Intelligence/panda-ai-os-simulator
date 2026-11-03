@@ -401,6 +401,24 @@ static void mofei_add_retw_normal_precheck(MofeiSimAddrs* a, uint32_t retw_pc, c
   }
 }
 
+/* Read host register arrays only; never dereference the candidate guest queue handle. */
+static void mofei_log_tick_registers(const CPUXtensaState* env) {
+  const unsigned callinc = env->regs[0] >> 30;
+  const unsigned registers = env->config->nareg;
+  const unsigned windows = registers / 4;
+  const bool caller_valid = callinc != 0 && windows > callinc;
+  const unsigned caller_wb = caller_valid ? (env->sregs[WINDOW_BASE] + windows - callinc) % windows : 0;
+  const unsigned first = caller_wb * 4;
+  fprintf(stderr,
+          "[TICK-REGS] a2=0x%08x a3=0x%08x a4=0x%08x a5=0x%08x callinc=%u caller_valid=%u caller_wb=%u "
+          "caller_a0=0x%08x caller_sp=0x%08x caller_a2=0x%08x caller_a3=0x%08x caller_a4=0x%08x\n",
+          env->regs[2], env->regs[3], env->regs[4], env->regs[5], callinc, caller_valid ? 1u : 0u, caller_wb,
+          caller_valid ? env->phys_regs[first] : 0, caller_valid ? env->phys_regs[first + 1] : 0,
+          caller_valid ? env->phys_regs[(first + 2) % registers] : 0,
+          caller_valid ? env->phys_regs[(first + 3) % registers] : 0,
+          caller_valid ? env->phys_regs[(first + 4) % registers] : 0);
+}
+
 static void mofei_cpu_tick_timer_cb(void* opaque) {
   CPUState* cpu0 = first_cpu;
   if (!cpu0) {
@@ -433,6 +451,7 @@ static void mofei_cpu_tick_timer_cb(void* opaque) {
     fprintf(stderr, "[TICK] #%u: pc=0x%08x a0=0x%08x sp=0x%08x halted=%d CCOUNT=0x%08x PS=0x%08x WB=%u WS=0x%x\n",
             mofei_cpu_tick_count, env->pc, env->regs[0], env->regs[1], cpu0->halted, env->sregs[CCOUNT], env->sregs[PS],
             env->sregs[WINDOW_BASE], env->sregs[WINDOW_START]);
+    mofei_log_tick_registers(env);
     if (debug_tick != NULL && debug_tick[0] != '\0' && strcmp(debug_tick, "0") != 0) {
       fprintf(stderr, "[TICK-CONTEXT] serial_console=0x%08x serial_gnss=0x%08x console_pending=%u\n", serial_console,
               serial_gnss, console_pending);
@@ -672,6 +691,27 @@ static void esp32s3_cpu_reset(void* opaque, int n, int level) {
   }
 }
 
+static void mofei_prepare_kernel_call_frame(CPUXtensaState* env) {
+  const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
+  const unsigned callinc = 2;
+  const uint32_t marked_return = (callinc << 30) | (env->kernel_entry & 0x3fffffffu);
+
+  /* bootloader 通过窗口化函数调用进入 ENTRY；直接赋 PC 也必须提供可溢出的调用者帧。 */
+  memset(env->regs, 0, sizeof(env->regs));
+  memset(env->phys_regs, 0, sizeof(env->phys_regs));
+  env->sregs[WINDOW_BASE] = 0;
+  env->windowbase_next = 0;
+  env->sregs[WINDOW_START] = 1;
+  env->sregs[PS] = PS_WOE | (callinc << PS_CALLINC_SHIFT);
+  env->regs[1] = stack_top;
+  env->regs[callinc * 4] = marked_return;
+  xtensa_sync_phys_from_window(env);
+
+  const uint32_t caller_base[] = {marked_return, stack_top, 0, 0};
+  address_space_write(&address_space_memory, stack_top - sizeof(caller_base), MEMTXATTRS_UNSPECIFIED, caller_base,
+                      sizeof(caller_base));
+}
+
 static void esp32s3_soc_reset(DeviceState* dev) {
   Esp32s3SocState* s = ESP32S3_SOC(dev);
   if (s->requested_reset == 0) {
@@ -688,10 +728,7 @@ static void esp32s3_soc_reset(DeviceState* dev) {
     remove_cpu_watchpoints(&s->cpu[0]);
     if (s->cpu[0].env.kernel_entry) {
       reset_mmu(&s->cpu[0].env);
-      s->cpu[0].env.sregs[WINDOW_START] = 1;
-      s->cpu[0].env.sregs[WINDOW_BASE] = 0;
-      s->cpu[0].env.sregs[PS] &= ~PS_EXCM;
-      s->cpu[0].env.sregs[PS] |= PS_WOE;
+      mofei_prepare_kernel_call_frame(&s->cpu[0].env);
       s->cpu[0].env.sregs[VECBASE] = 0x40000000;
       s->cpu[0].env.pc = s->cpu[0].env.kernel_entry;
       CPU(&s->cpu[0])->exception_index = -1;
@@ -1446,6 +1483,9 @@ static void mofei_cpu_resume_timer_cb(void* opaque) {
 }
 
 static void esp32s3_machine_init(MachineState* machine) {
+  // 地址表在解析任何启动符号前重置，后续拦截初始化必须保留同步地址。
+  memset(&mofei_sim_addrs, 0, sizeof(mofei_sim_addrs));
+
   /* Read Mofei sim config from environment variables */
   const char* env_ms = getenv("MOFEI_CPU1_DONE_MS");
   if (env_ms) {
@@ -1591,7 +1631,6 @@ static void esp32s3_machine_init(MachineState* machine) {
        * intercept firmware functions without hardcoding PC addresses. */
       {
         MofeiSimAddrs* a = &mofei_sim_addrs;
-        memset(a, 0, sizeof(*a));
 
         struct {
           const char* name;
@@ -1768,8 +1807,13 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"xQueueGiveMutexRecursive", &a->xQueueGiveMutexRecursive_addr},
             {"xQueueReceive", &a->xQueueReceive_addr},
             {"xQueueTakeMutexRecursive", &a->xQueueTakeMutexRecursive_addr},
+            {"xQueueGetMutexHolder", &a->xQueueGetMutexHolder_addr},
+            {"xTaskGetCurrentTaskHandle", &a->xTaskGetCurrentTaskHandle_addr},
+            {"xTaskGetStackStart", &a->xTaskGetStackStart_addr},
+            {"pcTaskGetName", &a->pcTaskGetName_addr},
             {"xQueueGenericCreate", &a->xQueueGenericCreate_addr},
             {"xQueueCreateMutex", &a->xQueueCreateMutex_addr},
+            {"xQueueCreateMutexStatic", &a->xQueueCreateMutexStatic_addr},
             {"xQueueCreateWithCaps", &a->xQueueCreateWithCaps_addr},
             {"xSemaphoreCreateGenericWithCaps", &a->xSemaphoreCreateGenericWithCaps_addr},
             {"vPortYield", &a->vPortYield_addr},
@@ -2939,10 +2983,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             /* FreeRTOS queue/semaphore operations — returns pdPASS/pdTRUE.
              * (Creation functions handled by translate.c TCG helpers.) */
             "xQueueGenericReset",
-            "xQueueGenericSend",
-            "xQueueSemaphoreTake",
-            "xQueueTakeMutexRecursive",
-            "xQueueGiveMutexRecursive",
             "xQueueReceive",
             "xQueuePeek",
             "xQueueGenericSendFromISR",
@@ -2952,7 +2992,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             "xQueueGenericCreateStatic",
             "xQueueCreateCountingSemaphore",
             "xQueueCreateCountingSemaphoreStatic",
-            "xQueueCreateMutexStatic",
             /* FreeRTOS event groups — returns non-NULL handle or bits */
             "xEventGroupCreate",
             "xEventGroupSetBits",
@@ -3113,7 +3152,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             "xPortEnterCriticalTimeout",
             "vPortExitCritical",
             "xPortInIsrContext",
-            "xTaskGetCurrentTaskHandle",
             /* Clock / RTC */
             "rtc_clk_cpu_freq_to_xtal",
             "rtc_clk_cpu_freq_to_pll_mhz",
@@ -3170,13 +3208,11 @@ static void esp32s3_machine_init(MachineState* machine) {
             "abort",
             "esp_system_abort",
             /* Init framework functions (all return ESP_OK) */
-            "esp_system_init_fn",
             /* ESP-IDF system init functions */
             "__esp_system_init_fn_init_efuse_check",
             "__esp_system_init_fn_init_show_cpu_freq",
             "__esp_system_init_fn_init_show_app_info",
             "__esp_system_init_fn_init_efuse_show_app_info",
-            "__esp_system_init_fn_init_psram_new",
             "__esp_system_init_fn_add_psram_to_heap",
             "__esp_system_init_fn_init_libc",
             "__esp_system_init_fn_init_newlib_time",
@@ -3217,20 +3253,12 @@ static void esp32s3_machine_init(MachineState* machine) {
             /* FreeRTOS: RETW-patch queue/task functions so they
              * return immediately without doing real work.  The
              * scheduler is bypassed via vTaskStartScheduler below. */
-            "xQueueGenericCreate",
             "xQueueGenericReset",
-            "xQueueCreateMutex",
             /* ESP-IDF WithCaps wrapper 會先配置 queue backing storage，再呼叫
              * static FreeRTOS API。模擬器改由 opaque queue handle 持有生命週期，
              * 因此在 wrapper 邊界攔截，並讓成對 delete 保持不配置記憶體。 */
-            "xQueueCreateWithCaps",
-            "xSemaphoreCreateGenericWithCaps",
             "vQueueDeleteWithCaps",
             "vSemaphoreDeleteWithCaps",
-            "xQueueGenericSend",
-            "xQueueSemaphoreTake",
-            "xQueueTakeMutexRecursive",
-            "xQueueGiveMutexRecursive",
             "xQueueReceive",
             "xQueuePeek",
             "xQueueGenericSendFromISR",
@@ -3243,7 +3271,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             "xQueueGenericCreateStatic",
             "xQueueCreateCountingSemaphore",
             "xQueueCreateCountingSemaphoreStatic",
-            "xQueueCreateMutexStatic",
             "pvPortMalloc",
             "vPortFree",
             "heap_caps_malloc",
@@ -3575,24 +3602,23 @@ static void esp32s3_machine_init(MachineState* machine) {
           }
         }
 
-        /* Apply RETW patches: overwrite entry+3 with the appropriate
-         * return sequence.
-         * - Plain RETW (3 bytes: 90 00 00) for functions returning void/0.
-         * - NOP.N + RETW.N (4 bytes: 3D F0 1D F0) for functions that
-         *   preserve a caller-provided return candidate or receive a
-         *   TCG-level success override.
-         * The Xtensa 'entry' instruction is 3 bytes; the second
-         * instruction starts at offset +3. */
+        /* 保留 entry 和原有硬件跳过列表。ESP_SYSTEM_INIT_FN 返回 esp_err_t，
+         * 必须显式写入 ESP_OK；单独 RETW 会把调用者的函数地址当成错误码返回。
+         * 其他补丁继续保留原有返回约定，不能扩展到真实执行的初始化函数。 */
         {
           uint16_t phnum = *(uint16_t*)(elf_data + 44);
           uint32_t phoff = *(uint32_t*)(elf_data + 28);
-          static const uint8_t retw3[] = {0x90, 0x00, 0x00};          /* retw (wide, 3 bytes) */
-          static const uint8_t nop_retw[] = {0x3D, 0xF0, 0x1D, 0xF0}; /* nop.n; retw.n (4 bytes) */
+          static const uint8_t retw3[] = {0x90, 0x00, 0x00};           /* retw (wide, 3 bytes) */
+          static const uint8_t nop_retw[] = {0x3D, 0xF0, 0x1D, 0xF0};  /* nop.n; retw.n (4 bytes) */
+          static const uint8_t zero_retw[] = {0x0C, 0x02, 0x1D, 0xF0}; /* movi.n a2, 0; retw.n */
           for (int pi = 0; pi < n_retw; pi++) {
+            const bool return_zero =
+                strncmp(retw_dyn[pi].name, "__esp_system_init_fn_", sizeof("__esp_system_init_fn_") - 1) == 0;
+            const bool narrow_retw = return_zero || retw_dyn[pi].return_success;
             uint32_t patch_addr = retw_dyn[pi].addr + 3;
-            uint32_t retw_pc = retw_dyn[pi].return_success ? (retw_dyn[pi].addr + 5) : patch_addr;
-            const uint8_t* patch_bytes = retw_dyn[pi].return_success ? nop_retw : retw3;
-            int patch_len = retw_dyn[pi].return_success ? 4 : 3;
+            uint32_t retw_pc = narrow_retw ? (retw_dyn[pi].addr + 5) : patch_addr;
+            const uint8_t* patch_bytes = return_zero ? zero_retw : (retw_dyn[pi].return_success ? nop_retw : retw3);
+            int patch_len = narrow_retw ? 4 : 3;
             for (int i = 0; i < phnum && phoff + (i + 1) * 32 <= elf_len; i++) {
               uint32_t* ph = (uint32_t*)(elf_data + phoff + i * 32);
               if (ph[0] != 1) continue;
@@ -3604,8 +3630,9 @@ static void esp32s3_machine_init(MachineState* machine) {
                 if (file_off + patch_len <= elf_len) {
                   memcpy(elf_data + file_off, patch_bytes, patch_len);
                   mofei_add_retw_patch(&mofei_sim_addrs, retw_pc, retw_dyn[pi].name);
-                  fprintf(stderr, "[QEMU-DBG] RETW%s %s @ 0x%08x\n", retw_dyn[pi].return_success ? "+SUCCESS" : "",
-                          retw_dyn[pi].name, retw_pc);
+                  fprintf(stderr, "[QEMU-DBG] RETW%s %s @ 0x%08x\n",
+                          return_zero ? "+ESP_OK" : (retw_dyn[pi].return_success ? "+SUCCESS" : ""), retw_dyn[pi].name,
+                          retw_pc);
                 }
                 break;
               }
@@ -3820,20 +3847,6 @@ static void esp32s3_machine_init(MachineState* machine) {
         }
       }
       g_free(tmpfile);
-      /* Verify init function table loaded correctly */
-      {
-        uint32_t init_start = 0x3c5a8260;
-        uint32_t init_end = 0x3c5a8328;
-        fprintf(stderr, "[QEMU-DBG] Init fn table @ 0x%08x-0x%08x:\n", init_start, init_end);
-        for (uint32_t a = init_start; a < init_end; a += 8) {
-          uint32_t fn_ptr = 0, flags = 0;
-          address_space_read(&address_space_memory, a, MEMTXATTRS_UNSPECIFIED, &fn_ptr, 4);
-          address_space_read(&address_space_memory, a + 4, MEMTXATTRS_UNSPECIFIED, &flags, 4);
-          if (fn_ptr != 0) {
-            fprintf(stderr, "  [0x%08x] fn=0x%08x flags=0x%x\n", a, fn_ptr, flags);
-          }
-        }
-      }
       if (image_size < 0) {
         error_report("Error: could not load ELF file '%s'", load_elf_filename);
         exit(1);
@@ -3928,9 +3941,7 @@ static void esp32s3_machine_init(MachineState* machine) {
 
     ss->cpu[0].env.kernel_entry = ss->kernel_entry;
     ss->cpu[0].env.pc = ss->kernel_entry;
-    ss->cpu[0].env.sregs[WINDOW_START] = 1;
-    ss->cpu[0].env.regs[1] = MOFEI_SIM_FAKE_APP_STACK_TOP;
-    ss->cpu[0].env.sregs[PS] = PS_WOE;
+    mofei_prepare_kernel_call_frame(&ss->cpu[0].env);
     ss->suppress_reset_count = 3;
 
     /* Initialize ROM data pointers that the bootloader normally sets up.

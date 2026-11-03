@@ -79,7 +79,7 @@ export function createPosConsoleClient(host: Pick<PosDevHost, "subscribeSerialLo
         if (signal?.aborted) throw new Error("pos_runtime_cancelled");
         const before = generation;
         try {
-          await host.sendSerialLine(sent ? `CMD:POS_APP:${requestId}:status` : `CMD:POS_APP:${requestId}:${operation}${argument ? ":" + argument : ""}`);
+          await host.sendSerialLine(sent && operation !== "capabilities" ? `CMD:POS_APP:${requestId}:status` : `CMD:POS_APP:${requestId}:${operation}${argument ? ":" + argument : ""}`);
           sent = true;
         } catch (error) {
           if (Date.now() + 1000 >= deadline) throw error;
@@ -111,6 +111,7 @@ export function createPosConsoleClient(host: Pick<PosDevHost, "subscribeSerialLo
           if (result.error === "request_not_found") { sent = false; latest = undefined; continue; }
           throw new Error(result.error ?? `pos_runtime_${operation}_failed`);
         }
+        if (result.operation !== operation) continue;
         if (result.terminal || result.state === "completed" || result.state === "failed") {
           if (result.state === "failed") throw new Error(result.error ?? `pos_runtime_${operation}_failed`);
           return result;
@@ -179,7 +180,12 @@ export async function applyPosDevBuild(build: PosDevBuild, host: PosDevHost, req
   const response = await request(build.packageUrl, { cache: "no-store", signal });
   if (!response.ok) throw new Error(`pos_package_http_${response.status}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) throw new Error("pos_package_size_invalid");
+  return applyPosDevPackage(build, bytes, host, signal, previous);
+}
+
+// Studio 已持有签名包字节，复用相同的摘要、SD 暂存与真实固件准入链路。
+export async function applyPosDevPackage(build: PosDevBuild, bytes: Uint8Array, host: PosDevHost, signal?: AbortSignal, previous?: PreparedPosDevBuild): Promise<PreparedPosDevBuild> {
+  if (!bytes.byteLength || bytes.byteLength > 2 * 1024 * 1024) throw new Error("pos_package_size_invalid");
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   if (build.packageDigest !== "sha256:" + digest) throw new Error("pos_package_digest_mismatch");
   const firmware = await host.chooseFirmware(build.board);
@@ -213,9 +219,9 @@ async function activatePosDevBuild(prepared: PreparedPosDevBuild, host: PosDevHo
   const capabilities = await command("capabilities");
   if (!capabilities.capabilities?.install || !capabilities.capabilities?.open) throw new Error("pos_runtime_admission_unavailable");
   const installed = await command("install", path);
-  if (installed.appId !== build.appId || installed.version !== build.version) throw new Error("pos_installed_identity_mismatch");
+  if (installed.appId !== build.appId || installed.version !== build.version || installed.packageDigest !== build.packageDigest) throw new Error("pos_installed_identity_mismatch");
   const opened = await command("open", build.appId);
-  if (opened.appId !== build.appId) throw new Error("pos_opened_identity_mismatch");
+  if (opened.appId !== build.appId || opened.version !== build.version || opened.packageDigest !== build.packageDigest) throw new Error("pos_opened_identity_mismatch");
   return opened;
 }
 

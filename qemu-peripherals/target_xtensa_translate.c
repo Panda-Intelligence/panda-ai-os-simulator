@@ -735,7 +735,66 @@ static void mofei_gen_normal_retw_jump(DisasContext* dc);
 static bool mofei_pc_is_retw_patch(uint32_t pc);
 static bool mofei_pc_is_retw_normal_precheck(uint32_t pc);
 
+/* All three call forms dispatch the same ownership state. Unknown handles
+ * branch around the skip and retain the original guest function body. */
+static void mofei_emit_queue_dispatch(DisasContext* dc, TCGv_i32 target, int callinc, bool entered) {
+  TCGLabel* real_function = gen_new_label();
+  TCGv_i32 handled = tcg_temp_new_i32();
+  mofei_gen_sync_logical_window_to_env();
+  gen_helper_mofei_queue_intercept(handled, tcg_env, target, tcg_constant_i32(entered ? 4 : callinc));
+  mofei_gen_reload_logical_window_from_env();
+  tcg_gen_brcondi_i32(TCG_COND_EQ, handled, 0, real_function);
+  if (entered) {
+    const int saved_is_jmp = dc->base.is_jmp;
+    mofei_gen_normal_retw_jump(dc);
+    /* Only the handled branch exits. Keep translating the real-body branch. */
+    dc->base.is_jmp = saved_is_jmp;
+  } else {
+    tcg_gen_movi_i32(cpu_pc, dc->base.pc_next);
+    if (dc->icount) tcg_gen_mov_i32(cpu_SR[ICOUNT], dc->next_icount);
+    tcg_gen_exit_tb(NULL, 0);
+  }
+  gen_set_label(real_function);
+}
+
+static void mofei_try_queue_dispatch(DisasContext* dc, TCGv_i32 target, int callinc, bool entered) {
+  uint32_t functions[] = {mofei_sim_addrs.xQueueGenericCreate_addr,
+                          mofei_sim_addrs.xQueueCreateMutex_addr,
+                          mofei_sim_addrs.xQueueCreateMutexStatic_addr,
+                          mofei_sim_addrs.xQueueCreateWithCaps_addr,
+                          mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr,
+                          mofei_sim_addrs.xQueueGenericSend_addr,
+                          mofei_sim_addrs.xQueueSemaphoreTake_addr,
+                          mofei_sim_addrs.xQueueTakeMutexRecursive_addr,
+                          mofei_sim_addrs.xQueueGiveMutexRecursive_addr,
+                          mofei_sim_addrs.xQueueGetMutexHolder_addr,
+                          mofei_sim_addrs.xTaskGetCurrentTaskHandle_addr,
+                          mofei_sim_addrs.xTaskGetStackStart_addr,
+                          mofei_sim_addrs.pcTaskGetName_addr};
+  if (entered) {
+    for (size_t index = 0; index < sizeof(functions) / sizeof(functions[0]); ++index) {
+      if (functions[index] && mofei_pc_match(dc->pc, functions[index] + 3)) {
+        mofei_emit_queue_dispatch(dc, tcg_constant_i32(functions[index]), callinc, true);
+        return;
+      }
+    }
+  } else {
+    TCGLabel* dispatch = gen_new_label();
+    TCGLabel* other_function = gen_new_label();
+    TCGv_i32 masked = tcg_temp_new_i32();
+    tcg_gen_andi_i32(masked, target, 0x3FFFFFFFu);
+    for (size_t index = 0; index < sizeof(functions) / sizeof(functions[0]); ++index) {
+      if (functions[index]) tcg_gen_brcondi_i32(TCG_COND_EQ, masked, functions[index] & 0x3FFFFFFFu, dispatch);
+    }
+    tcg_gen_br(other_function);
+    gen_set_label(dispatch);
+    mofei_emit_queue_dispatch(dc, target, callinc, false);
+    gen_set_label(other_function);
+  }
+}
+
 static void disas_xtensa_insn(CPUXtensaState* env, DisasContext* dc) {
+  mofei_try_queue_dispatch(dc, NULL, 0, true);
   if (mofei_pc_match(dc->pc, mofei_sim_addrs.renderActivitySync_addr)) {
     gen_helper_mofei_trace_activity(tcg_env, tcg_constant_i32(dc->pc), tcg_constant_i32(3));
   }
@@ -2200,15 +2259,6 @@ static void mofei_skip_unentered_call_return_time_us(DisasContext* dc, int calli
   gen_jumpi(dc, dc->base.pc_next, 0);
 }
 
-static void mofei_skip_unentered_call_return_queue_handle(DisasContext* dc, int callinc) {
-  /* Queue/mutex creation returns a fake handle through the caller-visible
-   * return register without entering FreeRTOS or running a patched RETW. */
-  TCGv_i32 handle = tcg_temp_new_i32();
-  gen_helper_mofei_next_queue_handle(handle);
-  tcg_gen_mov_i32(cpu_R[(callinc << 2) + 2], handle);
-  gen_jumpi(dc, dc->base.pc_next, 0);
-}
-
 static bool mofei_skip_unentered_call_alloc_kind(DisasContext* dc, int callinc, uint32_t target) {
   for (int i = 0; i < mofei_sim_addrs.alloc_patch_count; i++) {
     const uint32_t retw_pc = mofei_sim_addrs.alloc_patch_addrs[i].addr;
@@ -2323,17 +2373,6 @@ static void mofei_emit_unentered_callx_stub_task_create(DisasContext* dc, int ca
   tcg_gen_exit_tb(NULL, 0);
 }
 
-static void mofei_emit_unentered_callx_stub_return_queue_handle(DisasContext* dc, int callinc) {
-  TCGv_i32 handle = tcg_temp_new_i32();
-  gen_helper_mofei_next_queue_handle(handle);
-  tcg_gen_mov_i32(cpu_R[(callinc << 2) + 2], handle);
-  tcg_gen_movi_i32(cpu_pc, dc->base.pc_next);
-  if (dc->icount) {
-    tcg_gen_mov_i32(cpu_SR[ICOUNT], dc->next_icount);
-  }
-  tcg_gen_exit_tb(NULL, 0);
-}
-
 static void mofei_emit_unentered_callx_stub_button_read(DisasContext* dc, int callinc, TCGv_i32 button_id_ptr,
                                                         TCGv_i32 released_ptr) {
   tcg_gen_deposit_i32(cpu_SR[PS], cpu_SR[PS], tcg_constant_i32(callinc), PS_CALLINC_SHIFT, PS_CALLINC_LEN);
@@ -2399,6 +2438,7 @@ static void mofei_emit_unentered_callx_stub_atomic_fetch_add_4(DisasContext* dc,
 
 static void translate_callw(DisasContext* dc, const OpcodeArg arg[], const uint32_t par[]) {
   uint32_t target = arg[0].imm;
+  mofei_try_queue_dispatch(dc, tcg_constant_i32(target), par[0], false);
 
   if (mofei_pc_match(target, mofei_sim_wrap_malloc_addr)) {
     tcg_gen_deposit_i32(cpu_SR[PS], cpu_SR[PS], tcg_constant_i32(par[0]), PS_CALLINC_SHIFT, PS_CALLINC_LEN);
@@ -2430,14 +2470,6 @@ static void translate_callw(DisasContext* dc, const OpcodeArg arg[], const uint3
   }
 
   if (mofei_skip_unentered_call_atomic_compare_exchange_4(dc, par[0], target)) {
-    return;
-  }
-
-  /* Lua uses setjmp for protected calls.  The ESP32-S3 ROM implementation
-   * enters Xtensa window-overflow paths that the simulator does not model
-   * reliably, so emulate the initial setjmp return at the call boundary. */
-  if (mofei_pc_match(target, mofei_sim_addrs.setjmp_addr)) {
-    mofei_skip_unentered_call_return_i32(dc, par[0], 0);
     return;
   }
 
@@ -2473,13 +2505,6 @@ static void translate_callw(DisasContext* dc, const OpcodeArg arg[], const uint3
   }
   if (mofei_pc_match(target, mofei_sim_addrs.digitalRead_addr)) {
     mofei_skip_unentered_call_return_i32(dc, par[0], 1);
-    return;
-  }
-  if (mofei_pc_match(target, mofei_sim_addrs.xQueueGenericCreate_addr) ||
-      mofei_pc_match(target, mofei_sim_addrs.xQueueCreateMutex_addr) ||
-      mofei_pc_match(target, mofei_sim_addrs.xQueueCreateWithCaps_addr) ||
-      mofei_pc_match(target, mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr)) {
-    mofei_skip_unentered_call_return_queue_handle(dc, par[0]);
     return;
   }
   if (mofei_pc_match(target, mofei_sim_addrs.cxa_guard_acquire_addr)) {
@@ -2576,6 +2601,7 @@ static void translate_callx0(DisasContext* dc, const OpcodeArg arg[], const uint
 }
 
 static void translate_callxw(DisasContext* dc, const OpcodeArg arg[], const uint32_t par[]) {
+  mofei_try_queue_dispatch(dc, arg[0].in, par[0], false);
   if (mofei_sim_addrs.alloc_patch_count > 0) {
     TCGv_i32 masked_target = tcg_temp_new_i32();
     tcg_gen_andi_i32(masked_target, arg[0].in, 0x3FFFFFFFu);
@@ -2591,48 +2617,6 @@ static void translate_callxw(DisasContext* dc, const OpcodeArg arg[], const uint
                                                  mofei_sim_addrs.alloc_patch_addrs[i].caps_arg);
       gen_set_label(not_alloc_stub);
     }
-  }
-
-  if (mofei_sim_addrs.setjmp_addr) {
-    TCGLabel* not_setjmp_stub = gen_new_label();
-    TCGv_i32 masked_target = tcg_temp_new_i32();
-
-    tcg_gen_andi_i32(masked_target, arg[0].in, 0x3FFFFFFFu);
-    tcg_gen_brcondi_i32(TCG_COND_NE, masked_target, mofei_sim_addrs.setjmp_addr & 0x3FFFFFFFu, not_setjmp_stub);
-    mofei_emit_unentered_callx_stub_return_i32(dc, par[0], 0);
-
-    gen_set_label(not_setjmp_stub);
-  }
-
-  if (mofei_sim_addrs.xQueueGenericCreate_addr || mofei_sim_addrs.xQueueCreateMutex_addr ||
-      mofei_sim_addrs.xQueueCreateWithCaps_addr || mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr) {
-    TCGLabel* not_queue_create_stub = gen_new_label();
-    TCGLabel* queue_create_stub = gen_new_label();
-    TCGv_i32 masked_target = tcg_temp_new_i32();
-
-    tcg_gen_andi_i32(masked_target, arg[0].in, 0x3FFFFFFFu);
-    if (mofei_sim_addrs.xQueueGenericCreate_addr) {
-      mofei_branch_to_unentered_callx_stub(dc, masked_target, mofei_sim_addrs.xQueueGenericCreate_addr,
-                                           queue_create_stub);
-    }
-    if (mofei_sim_addrs.xQueueCreateMutex_addr) {
-      mofei_branch_to_unentered_callx_stub(dc, masked_target, mofei_sim_addrs.xQueueCreateMutex_addr,
-                                           queue_create_stub);
-    }
-    if (mofei_sim_addrs.xQueueCreateWithCaps_addr) {
-      mofei_branch_to_unentered_callx_stub(dc, masked_target, mofei_sim_addrs.xQueueCreateWithCaps_addr,
-                                           queue_create_stub);
-    }
-    if (mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr) {
-      mofei_branch_to_unentered_callx_stub(dc, masked_target, mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr,
-                                           queue_create_stub);
-    }
-    tcg_gen_br(not_queue_create_stub);
-
-    gen_set_label(queue_create_stub);
-    mofei_emit_unentered_callx_stub_return_queue_handle(dc, par[0]);
-
-    gen_set_label(not_queue_create_stub);
   }
 
   if (mofei_sim_addrs.xTaskCreatePinnedToCore_addr) {
@@ -3425,17 +3409,6 @@ static bool mofei_try_translate_retw_intercept(DisasContext* dc, bool before_und
     }
   }
 
-  /* Queue creation RETW patches */
-  if (!is_patched) {
-    if (mofei_pc_match(pc, mofei_sim_addrs.xQueueGenericCreate_addr + 3) ||
-        mofei_pc_match(pc, mofei_sim_addrs.xQueueCreateMutex_addr + 3) ||
-        mofei_pc_match(pc, mofei_sim_addrs.xQueueCreateWithCaps_addr + 3) ||
-        mofei_pc_match(pc, mofei_sim_addrs.xSemaphoreCreateGenericWithCaps_addr + 3)) {
-      gen_helper_mofei_bump_queue_create(tcg_env);
-      is_patched = true;
-    }
-  }
-
   /* 两级 scheduler 入口都要重定向到 simulator main。PERF 通常经过
    * vTaskStartScheduler，而 SIZE release 可能直接返回到 xPortStartScheduler；
    * 后者若只走普通 RETW，会回到 start_cpu0 的空转路径且永远没有首帧。 */
@@ -3472,22 +3445,6 @@ static bool mofei_try_translate_retw_intercept(DisasContext* dc, bool before_und
     gen_helper_mofei_retw_queue_receive(tcg_env);
     is_patched = true;
   }
-  if (!is_patched) {
-    uint32_t queue_fns[] = {
-        mofei_sim_addrs.xQueueGenericSend_addr,
-        mofei_sim_addrs.xQueueSemaphoreTake_addr,
-        mofei_sim_addrs.xQueueGiveMutexRecursive_addr,
-        mofei_sim_addrs.xQueueTakeMutexRecursive_addr,
-    };
-    for (int i = 0; i < (int)(sizeof(queue_fns) / sizeof(queue_fns[0])); i++) {
-      if (queue_fns[i] && pc == queue_fns[i] + 5) {
-        gen_helper_mofei_retw_success(tcg_env);
-        is_patched = true;
-        break;
-      }
-    }
-  }
-
   if (!is_patched && (mofei_pc_match(pc, mofei_sim_addrs.esp_timer_get_time_addr + 3) ||
                       mofei_pc_match(pc, mofei_sim_addrs.systimer_hal_get_counter_value_addr + 3))) {
     gen_helper_mofei_retw_time_us(tcg_env);

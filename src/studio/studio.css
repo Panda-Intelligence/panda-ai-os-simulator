@@ -1,0 +1,13 @@
+html, body, #root { margin: 0; width: 100%; height: 100%; background: #fff; color: #000; font: 12px system-ui, sans-serif; }
+* { box-sizing: border-box; }
+.studio-frame { height: 100%; display: flex; justify-content: center; align-items: center; padding: 20px 35px; container-type: size; }
+.panel-shell { position: relative; display: flex; height: min(100%, calc(100cqw * 832 / 506)); width: auto; max-height: 100%; max-width: 100%; aspect-ratio: 506 / 832; padding: 16px 12px 24px; border: 1px solid #000; border-radius: 12px; background: #111; }
+.panel-shell--compact { height: min(100%, calc(100cqw * 448 / 266)); aspect-ratio: 266 / 448; }
+.panel-screen-frame { display: flex; flex: 1; min-width: 0; min-height: 0; background: white; overflow: hidden; }
+.panel-canvas { width: 100%; height: 100%; display: block; touch-action: none; image-rendering: pixelated; background: white; }
+.panel-device-mark { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 9px; color: white; }
+.panel-physical-key { position: absolute; right: -12px; top: calc(25% + var(--panel-key-index) * 55px); width: 12px; height: 40px; padding: 0; background: #fff; border: 1px solid black; border-radius: 2px; cursor: pointer; touch-action: none; }
+.panel-physical-key--anchored { min-height: 28px; }
+.panel-physical-key__label { position: absolute; top: 0; right: 14px; color: #fff; font-size: 9px; writing-mode: vertical-rl; }
+.panel-physical-key[data-pressed], .panel-physical-key:active { background: #999; }
+.panel-physical-key:focus-visible { outline: 2px solid black; outline-offset: 3px; }

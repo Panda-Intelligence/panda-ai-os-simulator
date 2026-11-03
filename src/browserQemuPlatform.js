@@ -8,6 +8,13 @@ export function romClockLoaderArgs(rom) {
   return ["-device", "loader,addr=0x3fcef758,data=240,data-len=4"];
 }
 
+// 功能模拟器显式采用 QEMU 的 8ns/guest 指令模型，不表示实体芯片的周期或性能。
+export function functionalClockArgs(profile) {
+  if (profile === undefined || profile === null) return [];
+  if (profile !== "studio-functional-icount-v1") throw new Error("browser_clock_profile_unsupported");
+  return ["-icount", "shift=3,align=off,sleep=on"];
+}
+
 // Existing UC8253C uses its native 8-byte chardev framing, not SSD1677's Wasm
 // callback. Keep a distinct binary stream: never decode pixel bytes as text.
 export function createUc8253cStream(onFrame) {

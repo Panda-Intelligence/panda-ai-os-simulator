@@ -54,6 +54,33 @@ test("console send acknowledgement alone cannot be reported as successful instal
   assert.equal(host.listenerCount(), 0);
 });
 
+test("delayed capabilities replies repeat the read-only query without polling a nonexistent job", async () => {
+  let attempts = 0;
+  const host = consoleHost(async (line, emit) => {
+    const [, , requestId, operation] = line.split(":");
+    assert.equal(operation, "capabilities");
+    if (++attempts === 1) return;
+    emit({ schemaVersion: 1, requestId, operation, state: "completed", terminal: true, ok: true, capabilities: { install: true, open: true } });
+  });
+  const result = await createPosConsoleClient(host, 2500)("capabilities");
+  assert.equal(result.capabilities.install, true);
+  assert.equal(host.calls.length, 2);
+  assert.equal(host.calls[0].split(":")[2], host.calls[1].split(":")[2]);
+  assert.equal(host.calls.some(line => line.endsWith(":status")), false);
+  assert.equal(host.listenerCount(), 0);
+});
+
+test("a completed response for another operation cannot acknowledge this command", async () => {
+  const host = consoleHost(async (line, emit) => {
+    const [, , requestId, operation] = line.split(":");
+    emit({ schemaVersion: 1, requestId, operation: operation === "install" ? "open" : "install", state: "completed", terminal: true, ok: true });
+  });
+  const result = await createPosConsoleClient(host, 2000)("install", "/PandaDev/" + "a".repeat(64) + ".pap");
+  assert.equal(result.operation, "install");
+  assert.equal(host.calls.length, 2);
+  assert.match(host.calls[1], /:status$/);
+});
+
 test("lost queued acknowledgement polls status without replaying the install command", async () => {
   const host = consoleHost(async (line, emit) => {
     const [, , requestId, operation] = line.split(":");
@@ -173,7 +200,7 @@ test("browser stages exact package bytes, then requires real capability/install/
     const [, , requestId, operation] = line.split(":");
     steps.push(operation);
     emit({ schemaVersion:1, requestId, operation, state:"completed", terminal:true, ok:true,
-      capabilities:{install:true,open:true}, appId:"ai.pandacat.app.test", version:"1.0.0" });
+      capabilities:{install:true,open:true}, appId:"ai.pandacat.app.test", version:"1.0.0", packageDigest:"sha256:"+digest });
   });
   Object.assign(host, {
     async chooseFirmware(board) { assert.equal(board,"mofei"); return "firmware.bin"; },
@@ -197,7 +224,7 @@ for (const failure of ["stage", "open"]) test(`failed ${failure} restores prior 
     if (operation === "open" && ++opened === 2 && failure === "open") {
       emit({schemaVersion:1,requestId,operation,state:"failed",terminal:true,ok:false,error:"launch_failed"}); return;
     }
-    emit({schemaVersion:1,requestId,operation,state:"completed",terminal:true,ok:true,capabilities:{install:true,open:true},appId:"ai.pandacat.app.test",version:"1.0.0"});
+    emit({schemaVersion:1,requestId,operation,state:"completed",terminal:true,ok:true,capabilities:{install:true,open:true},appId:"ai.pandacat.app.test",version:"1.0.0",packageDigest:written.length ? info(written.at(-1).bytes,1).packageDigest : undefined});
   });
   Object.assign(host,{
     async chooseFirmware() {return "firmware.bin";},

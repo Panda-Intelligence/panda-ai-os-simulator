@@ -24,6 +24,7 @@ firmware.
 | `uc8253c.c` | UC8253C 416x240 calibration e-ink panel FSM for `s37uc` |
 | `chsc6440.c` | CHSC6440 touch register machine for `s37uc` |
 | `esp32s3-soc-machine.patch` | Conceptual diff for `hw/xtensa/esp32s3.c` |
+| `xtensa-local-memory-atomctl.patch` | 本地数据 RAM 的原子访问约定，供原生与 WASM 构建共用；保留地址权限与非本地缓存策略检查 |
 | `*-meson.fragment` | Meson build fragments |
 | `*-Kconfig.fragment` | Kconfig entries |
 | `xtensa-Kconfig.fragment` | SoC-level selects |

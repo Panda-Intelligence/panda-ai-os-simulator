@@ -1,4 +1,4 @@
-import { romClockLoaderArgs, installUc8253cDevice, uc8253cRgbaToWire } from "./browserQemuPlatform.js";
+import { romClockLoaderArgs, functionalClockArgs, installUc8253cDevice, uc8253cRgbaToWire } from "./browserQemuPlatform.js";
 import { prepareSimulatedLocationImage } from "./simulatorLocation.ts";
 import { readSdImage, validateSdImageBytes, writeSdImage } from "../public/simulator-runtime/sd-card-store.js";
 import createFatFs, * as FatFs from "js-fatfs";
@@ -446,6 +446,8 @@ function startQemuMain(instance, firmwarePath, flashImagePath, sdImagePath, cloc
     else if (channel === 8) log(new TextDecoder().decode(bytes));
   });
   args.push(...clockArgs);
+  args.push(...functionalClockArgs(runtimeManifest?.clockProfile));
+  log(`[browser-qemu] clock profile=${runtimeManifest?.clockProfile ?? "default"} argv=${JSON.stringify(functionalClockArgs(runtimeManifest?.clockProfile))}`);
   args.push("-kernel", firmwarePath);
   if (flashImagePath) {
     args.push("-drive", `file=${flashImagePath},if=mtd,format=raw`);

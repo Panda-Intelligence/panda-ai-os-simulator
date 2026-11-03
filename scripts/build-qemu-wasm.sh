@@ -30,6 +30,7 @@ QEMU_WASM_PROFILE_DIGEST="${QEMU_WASM_PROFILE_DIGEST:-}"
 QEMU_WASM_PROFILE_REVISION="${QEMU_WASM_PROFILE_REVISION:-}"
 QEMU_WASM_OTA_NAMESPACE="${QEMU_WASM_OTA_NAMESPACE:-${QEMU_WASM_PROFILE}}"
 QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC:-emmalloc}"
+QEMU_WASM_KEEP_BUILD="${QEMU_WASM_KEEP_BUILD:-0}"
 if [ "${BOARD}" = "default" ]; then
   FIRMWARE_SUFFIX=""
 else
@@ -85,6 +86,7 @@ Environment:
   QEMU_WASM_PROFILE_PLAN
                          Resolved release profile JSON used for provenance identity
   QEMU_WASM_MALLOC      Emscripten allocator (emmalloc, dlmalloc, or mimalloc; default: emmalloc)
+  QEMU_WASM_KEEP_BUILD  Keep the owned stopped container and build objects for incremental retries (0 or 1)
   NATIVE_QEMU_DIR        Native espressif/qemu checkout used as ESP32-S3 source overlay
   --force                Rebuild qemu-wasm Docker images and runtime artifacts even when cached
   --firmware-only        Refresh firmware[.<board>].bin, firmware[.<board>]-kernel.img,
@@ -157,13 +159,14 @@ copy_if_present() {
   local source="$1"
   local target="$2"
   [[ -f "${source}" ]] || return 0
+  if [[ -f "${target}" ]] && cmp -s "${source}" "${target}"; then return 0; fi
   mkdir -p "$(dirname "${target}")"
   cp -f "${source}" "${target}"
 }
 
 find_firmware_nm_tool() {
   local tool
-  for tool in xtensa-esp32s3-elf-nm xtensa-esp32-elf-nm; do
+  for tool in xtensa-esp32s3-elf-nm xtensa-esp32-elf-nm xtensa-esp-elf-nm; do
     if command -v "${tool}" >/dev/null 2>&1; then
       command -v "${tool}"
       return 0
@@ -172,7 +175,7 @@ find_firmware_nm_tool() {
 
   if [[ -d "${HOME}/.espressif/tools" ]]; then
     local esp_candidate
-    esp_candidate="$(find "${HOME}/.espressif/tools" -type f \( -name xtensa-esp32s3-elf-nm -o -name xtensa-esp32-elf-nm \) 2>/dev/null | sort -V | tail -n 1)"
+    esp_candidate="$(find "${HOME}/.espressif/tools" -type f \( -name xtensa-esp32s3-elf-nm -o -name xtensa-esp32-elf-nm -o -name xtensa-esp-elf-nm \) 2>/dev/null | sort -V | tail -n 1)"
     if [[ -n "${esp_candidate}" ]]; then
       printf '%s\n' "${esp_candidate}"
       return 0
@@ -184,7 +187,7 @@ find_firmware_nm_tool() {
 
 find_firmware_strip_tool() {
   local tool
-  for tool in xtensa-esp32s3-elf-strip xtensa-esp32-elf-strip; do
+  for tool in xtensa-esp32s3-elf-strip xtensa-esp32-elf-strip xtensa-esp-elf-strip; do
     if command -v "${tool}" >/dev/null 2>&1; then
       command -v "${tool}"
       return 0
@@ -193,7 +196,7 @@ find_firmware_strip_tool() {
 
   if [[ -d "${HOME}/.espressif/tools" ]]; then
     local esp_candidate
-    esp_candidate="$(find "${HOME}/.espressif/tools" -type f \( -name xtensa-esp32s3-elf-strip -o -name xtensa-esp32-elf-strip \) 2>/dev/null | sort -V | tail -n 1)"
+    esp_candidate="$(find "${HOME}/.espressif/tools" -type f \( -name xtensa-esp32s3-elf-strip -o -name xtensa-esp32-elf-strip -o -name xtensa-esp-elf-strip \) 2>/dev/null | sort -V | tail -n 1)"
     if [[ -n "${esp_candidate}" ]]; then
       printf '%s\n' "${esp_candidate}"
       return 0
@@ -216,8 +219,18 @@ generate_firmware_kernel() {
 
   step "generating browser qemu kernel image from ${firmware_elf}"
   mkdir -p "$(dirname "${target}")"
-  # 直接输出 stripped ELF，避免复制完整调试文件及其 macOS provenance 元数据。
-  "${strip_tool}" --strip-all -o "${target}" "${firmware_elf}"
+  # QEMU 启动同步仍会从 ELF 查找静态变量；只移除调试段，保留真实链接符号。
+  "${strip_tool}" --strip-debug -o "${target}" "${firmware_elf}"
+  local nm_tool
+  nm_tool="$(find_firmware_nm_tool)" || die "xtensa firmware nm tool missing"
+  "${nm_tool}" --defined-only "${target}" | python3 -c '
+import sys
+names = {line.split()[-1] for line in sys.stdin if line.split()}
+required = {"s_cpu_up", "s_cpu_inited", "s_system_inited"}
+missing = required - names
+if missing:
+    raise SystemExit("kernel startup symbols missing: " + ", ".join(sorted(missing)))
+'
 }
 
 generate_firmware_symbols() {
@@ -554,6 +567,11 @@ ensure_checkout() {
   fi
 
   step "reusing ${QEMU_WASM_SRC_DIR}"
+  if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
+    [[ "$(git -C "${QEMU_WASM_SRC_DIR}" rev-parse HEAD)" == "${QEMU_WASM_REF}" ]] || die "incremental cache requires the exact pinned QEMU_WASM_REF SHA"
+    step "preserving owned pinned checkout for incremental build"
+    return
+  fi
   if [[ "${QEMU_WASM_OFFLINE}" == "1" ]]; then
     step "offline mode enabled; resetting cached qemu-wasm checkout without fetching"
     git -C "${QEMU_WASM_SRC_DIR}" reset --hard HEAD
@@ -998,6 +1016,16 @@ overlay_espressif_trace_events() {
     "# esp32_frc_timer.c"
 }
 
+patch_qemu_wasm_local_memory_atomics() {
+  require_tool patch
+  local atomic_patch="${SIM_ROOT}/qemu-peripherals/xtensa-local-memory-atomctl.patch"
+  if patch --dry-run --forward -p1 -d "${QEMU_WASM_SRC_DIR}" < "${atomic_patch}" >/dev/null 2>&1; then
+    patch --forward -p1 -d "${QEMU_WASM_SRC_DIR}" < "${atomic_patch}"
+  elif ! patch --dry-run --reverse -p1 -d "${QEMU_WASM_SRC_DIR}" < "${atomic_patch}" >/dev/null 2>&1; then
+    die "Xtensa local-memory atomic patch does not match the pinned source"
+  fi
+}
+
 patch_qemu_wasm_helper_arity_compat() {
   step "patching qemu-wasm TCG helper arity compatibility"
 
@@ -1434,11 +1462,26 @@ EOF
 
 start_container() {
   require_tool docker
+  [[ "${QEMU_WASM_KEEP_BUILD}" == "0" || "${QEMU_WASM_KEEP_BUILD}" == "1" ]] || die "QEMU_WASM_KEEP_BUILD must be 0 or 1"
+  local cache_identity
+  cache_identity="$(docker image inspect --format '{{.Id}}' "${QEMU_WASM_IMAGE}")|${QEMU_WASM_SRC_DIR}|${SCRIPT_DIR}|${QEMU_WASM_REF}|${QEMU_WASM_MALLOC}"
   if docker ps -a --format '{{.Names}}' | grep -qx "${QEMU_WASM_CONTAINER}"; then
+    if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
+      [[ "$(docker inspect --format '{{index .Config.Labels "panda.qemu-wasm-cache"}}' "${QEMU_WASM_CONTAINER}")" == "${cache_identity}" ]] || die "incremental container identity mismatch"
+      [[ "$(docker inspect --format '{{.State.Running}}' "${QEMU_WASM_CONTAINER}")" == "false" ]] || die "incremental container is already in use"
+      docker start "${QEMU_WASM_CONTAINER}" >/dev/null
+      CONTAINER_ID="$(docker inspect --format '{{.Id}}' "${QEMU_WASM_CONTAINER}")"
+      CONTAINER_STARTED=1
+      step "reusing owned stopped build container ${QEMU_WASM_CONTAINER}"
+      return
+    fi
     docker rm -f "${QEMU_WASM_CONTAINER}" >/dev/null
   fi
   step "starting Docker container ${QEMU_WASM_CONTAINER}"
-  docker run --rm -d --name "${QEMU_WASM_CONTAINER}" \
+  local -a remove_args=()
+  if [[ "${QEMU_WASM_KEEP_BUILD}" != "1" ]]; then remove_args=(--rm); fi
+  docker run ${remove_args[@]+"${remove_args[@]}"} -d --name "${QEMU_WASM_CONTAINER}" \
+    --label "panda.qemu-wasm-cache=${cache_identity}" \
     -v "${QEMU_WASM_SRC_DIR}:/qemu" \
     -v "${SCRIPT_DIR}:${QEMU_WASM_SCRIPT_MOUNT}:ro" \
     "${QEMU_WASM_IMAGE}" >/dev/null
@@ -1449,7 +1492,12 @@ start_container() {
 stop_container() {
   [[ "${CONTAINER_STARTED}" -eq 1 ]] || return 0
   if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx "${QEMU_WASM_CONTAINER}"; then
-    docker rm -f "${QEMU_WASM_CONTAINER}" >/dev/null || true
+    if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
+      docker stop "${QEMU_WASM_CONTAINER}" >/dev/null || true
+      step "preserved stopped build container ${QEMU_WASM_CONTAINER}"
+    else
+      docker rm -f "${QEMU_WASM_CONTAINER}" >/dev/null || true
+    fi
   fi
 }
 
@@ -1461,7 +1509,9 @@ configure_and_make() {
   esac
   extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} -sSTACK_OVERFLOW_CHECK=2 --js-library=/build/node_modules/xterm-pty/emscripten-pty.js --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
   step "configuring qemu-system-xtensa for wasm32"
-  docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -lc "rm -rf ${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa* ${QEMU_WASM_BUILD_DIR}/config-host.mak ${QEMU_WASM_BUILD_DIR}/build.ninja"
+  if [[ "${QEMU_WASM_KEEP_BUILD}" != "1" ]]; then
+    docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -lc "rm -rf ${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa* ${QEMU_WASM_BUILD_DIR}/config-host.mak ${QEMU_WASM_BUILD_DIR}/build.ninja"
+  fi
   docker exec \
     -e "EXTRA_CFLAGS=${extra_cflags}" \
     "${QEMU_WASM_CONTAINER}" \
@@ -1551,7 +1601,7 @@ copy_artifacts() {
   copy_if_present "${QEMU_WASM_SRC_DIR}/pc-bios/esp32s3_rev0_rom.bin" "${RUNTIME_ROM_BIN}"
 
   if [[ "${RUNTIME_ONLY}" -eq 1 ]]; then
-    python3 "${SCRIPT_DIR}/runtime-source-manifest.py" "${OUTPUT_DIR}" "${QEMU_WASM_SRC_DIR}" "${NATIVE_QEMU_DIR}" "${SIM_ROOT}" "${QEMU_WASM_IMAGE}"
+    QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC}" python3 "${SCRIPT_DIR}/runtime-source-manifest.py" "${OUTPUT_DIR}" "${QEMU_WASM_SRC_DIR}" "${NATIVE_QEMU_DIR}" "${SIM_ROOT}" "${QEMU_WASM_IMAGE}"
   else
     refresh_firmware_artifacts
   fi
@@ -1654,6 +1704,7 @@ overlay_mofei_peripherals
 python3 "${SCRIPT_DIR}/patch-qemu-wasm-stack.py" "${QEMU_WASM_SRC_DIR}"
 overlay_espressif_crypto_helpers
 patch_qemu_wasm_browser_crypto_compat
+patch_qemu_wasm_local_memory_atomics
 overlay_espressif_trace_events
 patch_qemu_wasm_helper_arity_compat
 patch_qemu_wasm_kconfig_compat

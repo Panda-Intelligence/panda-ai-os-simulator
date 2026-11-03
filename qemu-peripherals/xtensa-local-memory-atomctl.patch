@@ -1,0 +1,18 @@
+--- a/target/xtensa/op_helper.c
++++ b/target/xtensa/op_helper.c
+@@ -97,6 +97,15 @@
+         HELPER(exception_cause_vaddr)(env, pc, rc, vaddr);
+     }
+
++    /* 本地数据 RAM 不受 ATOMCTL 缓存策略限制；地址权限已在上面验证。 */
++    for (unsigned i = 0; i < env->config->dataram.num; ++i) {
++        const struct XtensaMemoryRegion *region = &env->config->dataram.location[i];
++        if (region->size >= sizeof(uint32_t) && paddr >= region->addr &&
++            paddr - region->addr <= region->size - sizeof(uint32_t)) {
++            return;
++        }
++    }
++
+     /*
+      * When data cache is not configured use ATOMCTL bypass field.
+      * See ISA, 4.3.12.4 The Atomic Operation Control Register (ATOMCTL)

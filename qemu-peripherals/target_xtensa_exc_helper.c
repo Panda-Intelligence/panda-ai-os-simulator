@@ -899,6 +899,18 @@ static bool mofei_handle_fetch_exception_artifact(CPUXtensaState* env, uint32_t 
   return true;
 }
 
+/* Capture the first fault before candidate selection can reuse stale exception PCs. */
+static void mofei_log_illegal_registers(const CPUXtensaState* env, uint32_t pc) {
+  fprintf(stderr, "[EXC-ILLEGAL-STATE] fault_pc=%08x A0=%08x SP=%08x PS=%08x WB=%u WS=%08x EPC1=%08x DEPC=%08x\n", pc,
+          env->regs[0], env->regs[1], env->sregs[PS], env->sregs[WINDOW_BASE], env->sregs[WINDOW_START],
+          env->sregs[EPC1], env->sregs[DEPC]);
+  fprintf(stderr,
+          "[EXC-ILLEGAL-REGS] A2=%08x A3=%08x A4=%08x A5=%08x A6=%08x A7=%08x A8=%08x A9=%08x "
+          "A10=%08x A11=%08x A12=%08x A13=%08x A14=%08x A15=%08x\n",
+          env->regs[2], env->regs[3], env->regs[4], env->regs[5], env->regs[6], env->regs[7], env->regs[8],
+          env->regs[9], env->regs[10], env->regs[11], env->regs[12], env->regs[13], env->regs[14], env->regs[15]);
+}
+
 static bool mofei_handle_illegal_instruction_artifact(CPUXtensaState* env, uint32_t pc, uint32_t cause) {
   CPUState* cs = env_cpu(env);
   uint8_t bytes[6] = {0};
@@ -911,6 +923,7 @@ static bool mofei_handle_illegal_instruction_artifact(CPUXtensaState* env, uint3
   }
 
   mofei_read_pc_bytes(cs, pc, bytes, sizeof(bytes));
+  if (resume_log_count < 8) mofei_log_illegal_registers(env, pc);
 
   /* Do not redirect illegal-instruction traps to loop().  If the PC has been
    * corrupted (for example into the middle of a firmware instruction), jumping
@@ -987,17 +1000,17 @@ void HELPER(exception_cause)(CPUXtensaState* env, uint32_t pc, uint32_t cause) {
     return;
   }
 
-  /* Log only serious exceptions (cause 0 = illegal instruction,
-   * cause 15 =_instr/da-fetch, cause 29 = register window).
+  /* Log only serious exceptions and the real syscall spill entry (cause 1).
+   * cause 0 = illegal instruction, cause 15 = fetch, cause 29 = register window.
    * Skip frequent benign exceptions to reduce noise. */
   static int exc_log_count = 0;
-  if ((cause == 0 || cause == 15 || cause == 29) && exc_log_count < 20) {
+  if ((cause == 0 || cause == SYSCALL_CAUSE || cause == 15 || cause == 29) && exc_log_count < 20) {
     fprintf(stderr, "[EXC] cause=%u pc=%08x PS=%08x A0=%08x\n", cause, pc, env->sregs[PS], env->regs[0]);
     exc_log_count++;
   }
 
   static int exc_detail_log_count = 0;
-  if ((pc == 0 || cause == 0 || cause == 15) && exc_detail_log_count < 20) {
+  if ((pc == 0 || cause == 0 || cause == SYSCALL_CAUSE || cause == 15) && exc_detail_log_count < 20) {
     fprintf(stderr, "[EXC-DETAIL] WINDOWBASE=%d WINDOWSTART=0x%x SP=0x%08x\n", env->sregs[WINDOW_BASE],
             env->sregs[WINDOW_START], env->regs[1]);
     fprintf(stderr, "[EXC-DETAIL] regs[0-7]=%08x %08x %08x %08x %08x %08x %08x %08x\n", env->regs[0], env->regs[1],
@@ -1019,15 +1032,13 @@ void HELPER(exception_cause)(CPUXtensaState* env, uint32_t pc, uint32_t cause) {
     vector = EXC_DOUBLE;
   } else {
     env->sregs[EPC1] = pc;
-    env->sregs[EXCCAUSE] = cause;
-    env->sregs[PS] |= PS_EXCM;
-    vector = EXC_USER;
+    vector = (env->sregs[PS] & PS_UM) ? EXC_USER : EXC_KERNEL;
   }
 
-  CPUState* cs = env_cpu(env);
-  cs->exception_index = EXCP_INTERRUPT;
-  env->pc = env->sregs[VECBASE] + vector;
-  cpu_loop_exit(cs);
+  /* Use QEMU's configured/relocated exception vectors, not the enum as a PC offset. */
+  env->sregs[EXCCAUSE] = cause;
+  env->sregs[PS] |= PS_EXCM;
+  HELPER(exception)(env, vector);
 }
 
 void HELPER(exception_cause_vaddr)(CPUXtensaState* env, uint32_t pc, uint32_t cause, uint32_t vaddr) {
@@ -1230,6 +1241,16 @@ static bool mofei_handle_window_exception(CPUXtensaState* env, int exception_ind
   }
 
   if (overflow) {
+    if (log_count < 16) {
+      uint32_t previous_sp = 0;
+      const bool previous_read =
+          env->regs[1] >= 12 && mofei_read_guest_memory(env->regs[1] - 12, (uint8_t*)&previous_sp, sizeof(previous_sp));
+      fprintf(stderr,
+              "[MOFEI-WINDOW-BEGIN] exc=%d wb=%u owb=%u pc=%08x epc1=%08x sp=%08x next_sp=%08x previous_sp=%08x "
+              "previous_read=%u\n",
+              exception_index, env->sregs[WINDOW_BASE], (env->sregs[PS] & PS_OWB) >> PS_OWB_SHIFT, env->pc,
+              env->sregs[EPC1], env->regs[1], env->regs[save_count + 1], previous_sp, previous_read ? 1u : 0u);
+    }
     mofei_store_window_overflow(env, save_count);
   } else {
     mofei_load_window_underflow(env, save_count);
@@ -2713,29 +2734,112 @@ uint32_t HELPER(mofei_esp_get_max_alloc_psram)(CPUXtensaState* env) {
   return mofei_esp_psram_query_common(env, false, true);
 }
 
-static uint32_t mofei_queue_ptr = 0x3FFE0000;
-static uint32_t mofei_queue_count = 0;
-#define MAX_QUEUE_ALLOCS 4000
+/* Serialized simulator queue metadata; opaque guest handles are never dereferenced.
+ * This models only the mutex ownership required by IDF pthread, not a scheduler. */
+#define MOFEI_FAKE_QUEUE_BASE 0x3FFE0000u
+#define MOFEI_FAKE_QUEUE_STRIDE 64u
+#define MAX_QUEUE_ALLOCS 4000u
+#define MOFEI_QUEUE_MUTEX 1u
+#define MOFEI_QUEUE_RECURSIVE_MUTEX 4u
+#define MOFEI_QUEUE_ENTERED 4u
+static uint32_t mofei_queue_count;
+static uint32_t mofei_serialized_task_token = 0x3FFDF000u;
+typedef struct MofeiFakeQueue {
+  uint32_t kind;
+  uint32_t owner;
+  uint32_t depth;
+} MofeiFakeQueue;
+static MofeiFakeQueue mofei_fake_queues[MAX_QUEUE_ALLOCS];
 
-static uint32_t mofei_next_queue_handle(void) {
-  /* Return a valid queue handle (non-NULL) so that mutex/queue operations
-   * succeed. Use bump-allocated memory so each handle is unique. */
-  uint32_t handle = mofei_queue_ptr;
-  mofei_queue_ptr += 64; /* Each "queue" gets 64 bytes */
-  mofei_queue_count++;
-  if (mofei_queue_count <= 20 || (mofei_queue_count % 500) == 0) {
-    fprintf(stderr, "[QUEUE] #%u create=0x%08x (success)\n", mofei_queue_count, handle);
-  }
+static MofeiFakeQueue* mofei_fake_queue(uint32_t handle) {
+  if (handle < MOFEI_FAKE_QUEUE_BASE) return NULL;
+  uint32_t offset = handle - MOFEI_FAKE_QUEUE_BASE;
+  uint32_t index = offset / MOFEI_FAKE_QUEUE_STRIDE;
+  return offset % MOFEI_FAKE_QUEUE_STRIDE == 0 && index < mofei_queue_count ? &mofei_fake_queues[index] : NULL;
+}
+
+static uint32_t mofei_next_queue_handle(uint32_t kind) {
+  if (mofei_queue_count == MAX_QUEUE_ALLOCS) return 0;
+  uint32_t index = mofei_queue_count++;
+  mofei_fake_queues[index] = (MofeiFakeQueue){.kind = kind};
+  uint32_t handle = MOFEI_FAKE_QUEUE_BASE + index * MOFEI_FAKE_QUEUE_STRIDE;
+  if (mofei_queue_count <= 20 || mofei_queue_count % 500 == 0)
+    fprintf(stderr, "[QUEUE] #%u create=0x%08x kind=%u\n", mofei_queue_count, handle, kind);
   return handle;
 }
 
-uint32_t HELPER(mofei_next_queue_handle)(void) { return mofei_next_queue_handle(); }
+static bool mofei_queue_is_mutex(const MofeiFakeQueue* queue) {
+  return queue->kind == MOFEI_QUEUE_MUTEX || queue->kind == MOFEI_QUEUE_RECURSIVE_MUTEX;
+}
 
-void HELPER(mofei_bump_queue_create)(CPUXtensaState* env) {
-  /* RETW fallback for queue-create paths that entered the patched callee.
-   * Write to env->regs[2] so the value survives xtensa_sync_phys_from_window
-   * inside the subsequent gen_helper_retw. */
-  env->regs[2] = mofei_next_queue_handle();
+static uint32_t mofei_fake_mutex_take(MofeiFakeQueue* queue, bool recursive) {
+  if (!mofei_queue_is_mutex(queue)) return 1; /* Preserve the existing opaque semaphore seam. */
+  if (queue->depth == 0) {
+    queue->owner = mofei_serialized_task_token;
+    queue->depth = 1;
+    return 1;
+  }
+  if (recursive && queue->kind == MOFEI_QUEUE_RECURSIVE_MUTEX && queue->owner == mofei_serialized_task_token &&
+      queue->depth != UINT32_MAX) {
+    ++queue->depth;
+    return 1;
+  }
+  return 0; /* Serialized execution cannot block waiting for another owner. */
+}
+
+static uint32_t mofei_fake_mutex_give(MofeiFakeQueue* queue, bool recursive) {
+  if (!mofei_queue_is_mutex(queue)) return 1;
+  if (queue->depth == 0 || queue->owner != mofei_serialized_task_token) return 0;
+  if (recursive && queue->kind != MOFEI_QUEUE_RECURSIVE_MUTEX) return 0;
+  if (--queue->depth == 0) queue->owner = 0;
+  return 1;
+}
+
+/* The caller window is still active for CALL/CALLX; entered ENTRY paths use A2.
+ * A false result leaves every register untouched so real handles execute real IDF. */
+uint32_t HELPER(mofei_queue_intercept)(CPUXtensaState* env, uint32_t target, uint32_t callinc) {
+  uint32_t base = callinc == MOFEI_QUEUE_ENTERED ? 0 : callinc * 4;
+  uint32_t a2 = env->regs[base + 2];
+  uint32_t a3 = env->regs[base + 3];
+  uint32_t a4 = base + 4 < 16 ? env->regs[base + 4] : 0;
+  uint32_t result;
+#define QUEUE_TARGET(name) \
+  (mofei_sim_addrs.name##_addr && (target & 0x3FFFFFFFu) == (mofei_sim_addrs.name##_addr & 0x3FFFFFFFu))
+  if (QUEUE_TARGET(xQueueGenericCreate) || QUEUE_TARGET(xSemaphoreCreateGenericWithCaps)) {
+    /* CALL12 has no caller-visible A16. Defer until real ENTRY exposes callee A4. */
+    if (callinc == 3) return 0;
+    result = mofei_next_queue_handle(a4);
+  } else if (QUEUE_TARGET(xQueueCreateMutex) || QUEUE_TARGET(xQueueCreateMutexStatic)) {
+    result = mofei_next_queue_handle(a2);
+  } else if (QUEUE_TARGET(xQueueCreateWithCaps)) {
+    result = mofei_next_queue_handle(0); /* A4 is capabilities, never queue kind. */
+  } else if (QUEUE_TARGET(xTaskGetCurrentTaskHandle)) {
+    result = mofei_serialized_task_token;
+  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName)) {
+    if (a2 != 0 && a2 != mofei_serialized_task_token) return 0;
+    /* NULL names truthfully mean unknown. The stack is the existing mapped app context, not a TCB. */
+    result = QUEUE_TARGET(xTaskGetStackStart) ? MOFEI_SIM_FAKE_APP_STACK_BASE : 0;
+  } else {
+    MofeiFakeQueue* queue = mofei_fake_queue(a2);
+    if (queue == NULL) return 0;
+    if (QUEUE_TARGET(xQueueGetMutexHolder)) {
+      result = mofei_queue_is_mutex(queue) ? queue->owner : 0;
+    } else if (QUEUE_TARGET(xQueueSemaphoreTake)) {
+      result = mofei_fake_mutex_take(queue, false);
+    } else if (QUEUE_TARGET(xQueueTakeMutexRecursive)) {
+      result = mofei_fake_mutex_take(queue, true);
+    } else if (QUEUE_TARGET(xQueueGiveMutexRecursive)) {
+      result = mofei_fake_mutex_give(queue, true);
+    } else if (QUEUE_TARGET(xQueueGenericSend)) {
+      if (mofei_queue_is_mutex(queue) && a3 != 0) return 0; /* Only semaphore give has NULL item. */
+      result = mofei_fake_mutex_give(queue, false);
+    } else {
+      return 0;
+    }
+  }
+#undef QUEUE_TARGET
+  env->regs[base + 2] = result;
+  return 1;
 }
 
 static uint32_t mofei_murphy_or_app_main_entry(void) {
@@ -2777,7 +2881,8 @@ static void mofei_prepare_boot_firmware_frame(CPUXtensaState* env) {
   env->windowbase_next = 0;
   env->sregs[WINDOW_START] = 1;
   env->sregs[PS] &= ~(PS_CALLINC | PS_EXCM);
-  env->sregs[PS] |= PS_WOE | (callinc << PS_CALLINC_SHIFT);
+  /* 与 IDF 初始任务上下文一致，syscall 0 必须进入用户异常的窗口保存路径。 */
+  env->sregs[PS] |= PS_UM | PS_WOE | (callinc << PS_CALLINC_SHIFT);
 
   env->regs[1] = stack_top;
   env->regs[callinc * 4] = marked_ret;
@@ -2842,7 +2947,7 @@ uint32_t HELPER(mofei_enter_murphy_run_loop)(CPUXtensaState* env, uint32_t calli
   env->windowbase_next = 0;
   env->sregs[WINDOW_START] = 1;
   env->sregs[PS] &= ~(PS_CALLINC | PS_EXCM);
-  env->sregs[PS] |= PS_WOE;
+  env->sregs[PS] |= PS_UM | PS_WOE;
   env->regs[0] = 0x4037D000u;
   env->regs[1] = MOFEI_SIM_FAKE_APP_STACK_TOP - 80u;
   env->regs[2] = shell;
@@ -3038,7 +3143,7 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
   env->windowbase_next = 0;
   env->sregs[WINDOW_START] = 1;
   env->sregs[PS] &= ~(PS_CALLINC | PS_EXCM);
-  env->sregs[PS] |= PS_WOE | (callinc << PS_CALLINC_SHIFT);
+  env->sregs[PS] |= PS_UM | PS_WOE | (callinc << PS_CALLINC_SHIFT);
 
   env->regs[1] = stack_top;
   env->regs[callinc * 4] = marked_ret;

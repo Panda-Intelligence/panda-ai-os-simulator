@@ -43,6 +43,7 @@ export type BrowserSimulatorRuntimeManifest = {
   qemuSdImage?: BrowserSimulatorRuntimeSdImage | null;
   qemuSdRawBytes?: number | null;
   qemuWorkerScript?: string | null;
+  clockProfile?: "studio-functional-icount-v1";
   artifactManifest?: string | null;
   source?: BrowserSimulatorRuntimeSource | null;
   digests?: Record<string, string> | null;
@@ -786,6 +787,9 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
   }
 
   const runtimeRecord = runtime as Record<string, unknown>;
+  if (runtimeRecord.clockProfile !== undefined && runtimeRecord.clockProfile !== "studio-functional-icount-v1") {
+    return { ...DEFAULT_RUNTIME_MANIFEST, reason: "browser_clock_profile_unsupported" };
+  }
   const kind = runtimeRecord.kind === "wasm-worker" ? "wasm-worker" : "unavailable";
   const status = parseRuntimeStatus(runtimeRecord.status);
   const workerScript = typeof runtimeRecord.workerScript === "string" && runtimeRecord.workerScript.trim()
@@ -866,6 +870,7 @@ export function parseBrowserSimulatorRuntimeManifest(payload: unknown): BrowserS
   return {
     kind,
     status,
+    ...(runtimeRecord.clockProfile === "studio-functional-icount-v1" ? { clockProfile: "studio-functional-icount-v1" as const } : {}),
     workerScript,
     firmwareArtifact,
     firmwareArtifacts,

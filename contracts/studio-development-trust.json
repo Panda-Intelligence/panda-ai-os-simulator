@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "scope": "studio-simulator-only",
+  "warning": "PUBLIC DEVELOPMENT KEY. Never trust this root on physical devices, production firmware, or a store.",
+  "rootPublicKeyHex": "04ef77107e5d35e5c903cc32be512371433881dfc167df7e4b5d59c9b3a4e8754e7d7075b49a0b938ed8135b6330c3a6abe76bfbf1ad20714dc7dce1eaf11b5a3d",
+  "rootPrivateKeyJwk": {
+    "kty": "EC",
+    "x": "73cQfl015ckDzDK-USNxQziB38Fn335LXVnJs6TodU4",
+    "y": "fXB1tJoLk47YE1tjMMOmq-dr-_GtIHFNx9zh6vEbWj0",
+    "crv": "P-256",
+    "d": "QOoaiM1ScHzbY7MalR4qx5I06as8HlKR-hHJDPrOono"
+  }
+}

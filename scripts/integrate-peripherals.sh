@@ -160,6 +160,7 @@ REQUIRED_SOURCE_FILES=(
   "${SRC_DIR}/xtensa-Kconfig.fragment"
   "${SRC_DIR}/esp32s3-soc-machine.patch"
   "${SRC_DIR}/xtensa-reset-vector.patch"
+  "${SRC_DIR}/xtensa-local-memory-atomctl.patch"
 )
 
 check_required_files() {
@@ -314,6 +315,16 @@ path.write_text(text)
 PY
 }
 
+apply_xtensa_local_memory_atomics() {
+  local atomic_patch="${SRC_DIR}/xtensa-local-memory-atomctl.patch"
+  if patch --dry-run --forward -p1 -d "${QEMU_DIR}" < "${atomic_patch}" >/dev/null 2>&1; then
+    patch --forward -p1 -d "${QEMU_DIR}" < "${atomic_patch}"
+  elif ! patch --dry-run --reverse -p1 -d "${QEMU_DIR}" < "${atomic_patch}" >/dev/null 2>&1; then
+    echo "[integrate] ERROR: local-memory atomic patch does not match the pinned source" >&2
+    return 1
+  fi
+}
+
 sync_simulator_qemu_sources() {
   echo "[integrate] syncing canonical ESP32-S3 machine source → hw/xtensa/"
   cp -f "${SRC_DIR}/hw_xtensa_esp32s3.c" "${SOC_MACHINE_DST}"
@@ -340,6 +351,7 @@ sync_simulator_qemu_sources() {
   fi
 
   sync_qemu_xtensa_cpu_state_compat
+  apply_xtensa_local_memory_atomics
 }
 
 patch_targets_are_clean() {
@@ -354,6 +366,7 @@ patch_targets_are_clean() {
     target/xtensa/cpu.h \
     target/xtensa/exc_helper.c \
     target/xtensa/helper.h \
+    target/xtensa/op_helper.c \
     target/xtensa/translate.c)"
   if [[ -n "${dirty}" ]]; then
     echo "[integrate] ERROR: refusing --soc because QEMU patch target files are dirty:" >&2
@@ -368,6 +381,7 @@ if [[ ${CHECK} -eq 1 ]]; then
   check_required_files
   check_qemu_targets
   check_xtensa_reset_patch
+  check_patch_against_clean_head "${SRC_DIR}/xtensa-local-memory-atomctl.patch" target/xtensa/op_helper.c
   check_soc_patch
   check_xtensa_window_vectors
   echo "[integrate] check complete (no files were modified)"
