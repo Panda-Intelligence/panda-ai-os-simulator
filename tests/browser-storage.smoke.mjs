@@ -33,10 +33,10 @@ try{
       const db=await open();let puts=0;
       return {close:()=>db.close(),transaction:(...args)=>{
         const tx=db.transaction(...args);
-        return new Proxy(tx,{get(target,prop){
+      return new Proxy(tx,{get(target,prop){
           if(prop==="objectStore")return name=>{
             const store=target.objectStore(name);
-            return new Proxy(store,{get(s,p){if(p==="put")return (...a)=>{if(++puts===2)throw new Error("injected transaction failure");return s.put(...a);};const v=Reflect.get(s,p,s);return typeof v==="function"?v.bind(s):v;}});
+            return new Proxy(store,{get(s,p){if(p==="put")return (...a)=>{if(++puts===1)throw new Error("injected transaction failure");return s.put(...a);};const v=Reflect.get(s,p,s);return typeof v==="function"?v.bind(s):v;}});
           }; const value=Reflect.get(target,prop,target);return typeof value==="function"?value.bind(target):value;
         },set(target,prop,value){return Reflect.set(target,prop,value,target);}});
       }};

@@ -473,11 +473,7 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
 
   private readonly handleWorkerError = (event: ErrorEvent) => {
     const message = `browser_wasm_worker_fatal: ${event.message || "worker terminated unexpectedly"}`;
-    for (const [requestId, resolve] of this.pendingRequests) {
-      resolve({ type: "result", requestId, ok: false, error: message });
-    }
-    this.pendingRequests.clear();
-    this.terminateWorker();
+    this.terminateWorker(message);
     this.emit({ type: "simulatorError", payload: message });
   };
 
@@ -490,7 +486,11 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
     resolve(result);
   }
 
-  private terminateWorker() {
+  private terminateWorker(reason = "browser_wasm_worker_stopped") {
+    for (const [requestId, resolve] of this.pendingRequests) {
+      resolve({ type: "result", requestId, ok: false, error: reason });
+    }
+    this.pendingRequests.clear();
     if (!this.worker) {
       return;
     }
@@ -498,7 +498,6 @@ class WorkerBrowserSimulatorRuntimeAdapter implements BrowserSimulatorRuntimeAda
     this.worker.removeEventListener("error", this.handleWorkerError);
     this.worker.terminate();
     this.worker = null;
-    this.pendingRequests.clear();
   }
 
   private statusOrThrow(command: string, result: BrowserSimulatorRuntimeResultEvent): string {

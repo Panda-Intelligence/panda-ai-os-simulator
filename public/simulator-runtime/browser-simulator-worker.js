@@ -614,21 +614,40 @@ async function decodeSdImageArtifact(url, bytes) {
   if (typeof DecompressionStream !== "function") {
     throw new Error("browser_sd_card_gzip_unsupported");
   }
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
   const limit=runtimeManifest?.qemuSdRawBytes || 256*1024*1024;
-  const reader=stream.getReader();const chunks=[];let total=0;
-  try {
-    while(true) {
-      const {value,done}=await reader.read();if(done)break;
-      total+=value.byteLength;
-      if(total>limit){await reader.cancel();throw new Error("browser_sd_card_decoded_size_exceeded");}
-      chunks.push(value);
-    }
-  } finally {reader.releaseLock();}
-  if(runtimeManifest?.qemuSdRawBytes && total!==runtimeManifest.qemuSdRawBytes)throw new Error("browser_sd_card_decoded_size_mismatch");
-  const result=new Uint8Array(total);let offset=0;
-  for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
-  return result;
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let reader;
+    try {
+      const input = attempt === 0
+        ? new Blob([bytes]).stream()
+        : new ReadableStream({
+          start(controller) {
+            const chunkBytes = 1024 * 1024;
+            for (let offset = 0; offset < bytes.byteLength; offset += chunkBytes) {
+              controller.enqueue(bytes.subarray(offset, Math.min(offset + chunkBytes, bytes.byteLength)));
+            }
+            controller.close();
+          },
+        });
+      const stream = input.pipeThrough(new DecompressionStream("gzip"));
+      reader=stream.getReader();const chunks=[];let total=0;
+      while(true) {
+        const {value,done}=await reader.read();if(done)break;
+        total+=value.byteLength;
+        if(total>limit){await reader.cancel();throw new Error("browser_sd_card_decoded_size_exceeded");}
+        chunks.push(value);
+      }
+      if(runtimeManifest?.qemuSdRawBytes && total!==runtimeManifest.qemuSdRawBytes)throw new Error("browser_sd_card_decoded_size_mismatch");
+      const result=new Uint8Array(total);let offset=0;
+      for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
+      return result;
+    } catch (error) {
+      lastError=error;
+      if (error?.name !== "TypeError" || error.message !== "network error" || attempt !== 0) throw error;
+    } finally {if (reader) reader.releaseLock();}
+  }
+  throw lastError;
 }
 
 function isGzipArtifact(url, bytes) {

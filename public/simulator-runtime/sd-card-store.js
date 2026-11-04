@@ -88,20 +88,23 @@ export async function readSdImage(openDb,storeName,key){
       try{
         if(!current || (legacy && Number(legacy.savedAt)>Number(current.savedAt))){result=legacyValue(legacy);return;}
         if(!validMeta(current))throw new Error("browser_sd_chunk_metadata_invalid");
-        const bytes=new Uint8Array(current.byteLength);let pending=current.chunkCount;
-        for(let index=0;index<current.chunkCount;index++){
+        const bytes=new Uint8Array(current.byteLength);
+        const readChunk=(index)=>{
           const req=store.get(chunkKey(key,current.generation,index));
+          req.onerror=()=>fail(req.error||new Error("browser_sd_chunk_read_failed"));
           req.onsuccess=()=>{
             const part=req.result,expected=Math.min(CHUNK_BYTES,current.byteLength-index*CHUNK_BYTES);
             if(!(part instanceof ArrayBuffer)||part.byteLength!==expected){fail(new Error("browser_sd_chunk_missing_or_invalid"));return;}
             bytes.set(new Uint8Array(part),index*CHUNK_BYTES);
-            if(--pending===0)result={templateFingerprint:current.templateFingerprint,byteLength:current.byteLength,bytes};
+            if(index+1===current.chunkCount) result={templateFingerprint:current.templateFingerprint,byteLength:current.byteLength,bytes};
+            else readChunk(index+1);
           };
-        }
+        };
+        readChunk(0);
       }catch(error){fail(error);}
     };
-    const modern=store.get(metaKey(key));modern.onsuccess=()=>{current=modern.result;received();};
-    const older=store.get(key);older.onsuccess=()=>{legacy=older.result;received();};
+    const modern=store.get(metaKey(key));modern.onerror=()=>fail(modern.error||new Error("browser_sd_metadata_read_failed"));modern.onsuccess=()=>{current=modern.result;received();};
+    const older=store.get(key);older.onerror=()=>fail(older.error||new Error("browser_sd_legacy_read_failed"));older.onsuccess=()=>{legacy=older.result;received();};
   });
 }
 
@@ -113,22 +116,35 @@ export async function writeSdImage(openDb,storeName,key,value){
   const generation=crypto.randomUUID();
   const chunks=[];
   for(let offset=0;offset<value.bytes.length;offset+=CHUNK_BYTES)chunks.push(value.bytes.slice(offset,offset+CHUNK_BYTES).buffer);
-  const db=await openDb();
-  return new Promise((resolve,reject)=>{
-    const tx=db.transaction(storeName,"readwrite"),store=tx.objectStore(storeName);let failure=null;
-    tx.oncomplete=()=>{db.close();resolve();};
-    tx.onerror=tx.onabort=()=>{db.close();reject(failure||tx.error||new Error("browser_sd_write_aborted"));};
-    const request=store.get(metaKey(key));
-    request.onsuccess=()=>{
-      try{
-        const prior=request.result;
-        if(prior && !validMeta(prior))throw new Error("browser_sd_chunk_metadata_invalid");
-        for(let index=0;index<chunks.length;index++)store.put(chunks[index],chunkKey(key,generation,index));
-        if(prior)for(let index=0;index<prior.chunkCount;index++)store.delete(chunkKey(key,prior.generation,index));
-        store.put({format:"chunks-v2",generation,chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,
-          byteLength:value.byteLength,templateFingerprint:value.templateFingerprint,savedAt:value.savedAt??Date.now()},metaKey(key));
-        // 保留旧 key，让旧版本仍可导出最后可读快照；迁移不静默删除它。
-      }catch(error){failure=error;try{tx.abort();}catch{db.close();reject(error);}}
-    };
-  });
+  const runTransaction=async(mode,action)=>{
+    const db=await openDb();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(storeName,mode),store=tx.objectStore(storeName);let failure=null,settled=false;
+      const finish=(fn,value)=>{if(settled)return;settled=true;db.close();fn(value);};
+      tx.oncomplete=()=>finish(resolve,undefined);
+      tx.onerror=tx.onabort=()=>finish(reject,failure||tx.error||new Error("browser_sd_write_aborted"));
+      try{action(store,tx);}catch(error){failure=error;try{tx.abort();}catch{finish(reject,error);}}
+    });
+  };
+  const readMeta=async()=>{
+    const db=await openDb();
+    return new Promise((resolve,reject)=>{
+      const tx=db.transaction(storeName,"readonly"),request=tx.objectStore(storeName).get(metaKey(key));
+      let value;
+      request.onsuccess=()=>{value=request.result;};
+      request.onerror=()=>{try{tx.abort();}catch{};db.close();reject(request.error||new Error("browser_sd_metadata_read_failed"));};
+      tx.oncomplete=()=>{db.close();resolve(value);};
+      tx.onerror=tx.onabort=()=>{db.close();reject(tx.error||new Error("browser_sd_metadata_read_failed"));};
+    });
+  };
+  const prior=await readMeta();
+  if(prior && !validMeta(prior))throw new Error("browser_sd_chunk_metadata_invalid");
+  // 每个大 chunk 独立提交；新 generation 的 meta 最后提交，旧快照始终可读。
+  for(let index=0;index<chunks.length;index++)await runTransaction("readwrite",store=>store.put(chunks[index],chunkKey(key,generation,index)));
+  await runTransaction("readwrite",store=>store.put({format:"chunks-v2",generation,chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,
+    byteLength:value.byteLength,templateFingerprint:value.templateFingerprint,savedAt:value.savedAt??Date.now()},metaKey(key)));
+  // 清理旧 generation 不影响新快照可读性；单个清理失败时保留旧孤儿块，下一次写入仍可重试。
+  if(prior)for(let index=0;index<prior.chunkCount;index++){
+    try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,prior.generation,index)));}catch{}
+  }
 }
