@@ -63,11 +63,22 @@ function asUint8Array(value){
   return null;
 }
 
+const GENERATION=/^[a-z0-9-]{8,80}$/i;
+const DIGEST=/^[0-9a-f]{64}$/;
 function validMeta(value){
-  return value && value.format==="chunks-v2" && typeof value.generation==="string" &&
-    /^[a-z0-9-]{8,80}$/i.test(value.generation) && Number.isSafeInteger(value.byteLength) &&
-    value.byteLength>0 && value.byteLength<=MAX_BYTES && value.chunkBytes===CHUNK_BYTES &&
-    value.chunkCount===Math.ceil(value.byteLength/CHUNK_BYTES);
+  if(!value || !Number.isSafeInteger(value.byteLength) || value.byteLength<1 || value.byteLength>MAX_BYTES ||
+     value.chunkBytes!==CHUNK_BYTES || value.chunkCount!==Math.ceil(value.byteLength/CHUNK_BYTES))return false;
+  if(value.format==="chunks-v2")return typeof value.generation==="string" && GENERATION.test(value.generation);
+  // v3: every chunk names its own generation and SHA-256, so a save rewrites only changed chunks.
+  return value.format==="chunks-v3" && Array.isArray(value.chunkGenerations) && Array.isArray(value.chunkDigests) &&
+    value.chunkGenerations.length===value.chunkCount && value.chunkDigests.length===value.chunkCount &&
+    value.chunkGenerations.every(g=>typeof g==="string" && GENERATION.test(g)) &&
+    value.chunkDigests.every(d=>typeof d==="string" && DIGEST.test(d));
+}
+function chunkGeneration(meta,index){return meta.format==="chunks-v3"?meta.chunkGenerations[index]:meta.generation;}
+async function chunkDigest(buffer){
+  const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",buffer));
+  return Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
 }
 function legacyValue(value){
   if(!value)return null;
@@ -90,7 +101,7 @@ export async function readSdImage(openDb,storeName,key){
         if(!validMeta(current))throw new Error("browser_sd_chunk_metadata_invalid");
         const bytes=new Uint8Array(current.byteLength);
         const readChunk=(index)=>{
-          const req=store.get(chunkKey(key,current.generation,index));
+          const req=store.get(chunkKey(key,chunkGeneration(current,index),index));
           req.onerror=()=>fail(req.error||new Error("browser_sd_chunk_read_failed"));
           req.onsuccess=()=>{
             const part=req.result,expected=Math.min(CHUNK_BYTES,current.byteLength-index*CHUNK_BYTES);
@@ -139,12 +150,20 @@ export async function writeSdImage(openDb,storeName,key,value){
   };
   const prior=await readMeta();
   if(prior && !validMeta(prior))throw new Error("browser_sd_chunk_metadata_invalid");
-  // 每个大 chunk 独立提交；新 generation 的 meta 最后提交，旧快照始终可读。
-  for(let index=0;index<chunks.length;index++)await runTransaction("readwrite",store=>store.put(chunks[index],chunkKey(key,generation,index)));
-  await runTransaction("readwrite",store=>store.put({format:"chunks-v2",generation,chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,
+  // Only a v3 record of the same geometry carries digests; anything else is rewritten in full once.
+  const digests=await Promise.all(chunks.map(chunkDigest));
+  const reusable=prior && prior.format==="chunks-v3" && prior.chunkCount===chunks.length && prior.byteLength===value.byteLength;
+  const chunkGenerations=chunks.map((_,index)=>reusable && prior.chunkDigests[index]===digests[index]?prior.chunkGenerations[index]:generation);
+  // 每个变化的大 chunk 独立提交；新 meta 最后提交，旧快照始终可读。未变化的 chunk 不重写。
+  for(let index=0;index<chunks.length;index++){
+    if(chunkGenerations[index]===generation)await runTransaction("readwrite",store=>store.put(chunks[index],chunkKey(key,generation,index)));
+  }
+  await runTransaction("readwrite",store=>store.put({format:"chunks-v3",chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,chunkGenerations,chunkDigests:digests,
     byteLength:value.byteLength,templateFingerprint:value.templateFingerprint,savedAt:value.savedAt??Date.now()},metaKey(key)));
-  // 清理旧 generation 不影响新快照可读性；单个清理失败时保留旧孤儿块，下一次写入仍可重试。
+  // 清理被替换的旧 chunk 不影响新快照可读性；单个清理失败时保留旧孤儿块，下一次写入仍可重试。
   if(prior)for(let index=0;index<prior.chunkCount;index++){
-    try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,prior.generation,index)));}catch{}
+    const old=chunkGeneration(prior,index);
+    if(chunkGenerations[index]===old)continue;
+    try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,old,index)));}catch{}
   }
 }

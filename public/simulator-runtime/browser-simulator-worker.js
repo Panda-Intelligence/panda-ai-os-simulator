@@ -530,11 +530,11 @@ async function fetchSdImage(sdImageUrl) {
     return null;
   }
 
-  const templateBytes = await fetchSdTemplateBytes(artifactUrls);
+  const templateBytes = await sdStage("template_fetch", () => fetchSdTemplateBytes(artifactUrls));
   const expectedByteLength = runtimeManifest?.qemuSdRawBytes ?? templateBytes.byteLength;
   validateSdImageBytes(templateBytes, expectedByteLength);
   const templateFingerprint = fingerprintBytes(templateBytes);
-  const storedRecord = await readStoredSdCardForTemplate(lastBoardId, artifactUrls);
+  const storedRecord = await sdStage("stored_read", () => readStoredSdCardForTemplate(lastBoardId, artifactUrls));
   const stored = storedRecord?.value;
   if (stored) {
     // A changed template must not make the old complete backup unexportable.
@@ -737,6 +737,12 @@ async function persistActiveSdCard(reason) {
     if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
       return;
     }
+    // The guest rarely writes the SD card; rewriting an unchanged 128 MiB image every interval
+    // churns IndexedDB storage until the browser refuses writes. Skip identical images.
+    if (editableSdCard?.persisted && editableSdCard.storageKey === activeSdCard.storageKey
+        && sameBytes(editableSdCard.bytes, bytes)) {
+      return;
+    }
     await writeStoredSdCard(activeSdCard.storageKey, {
       bytes,
       byteLength: bytes.byteLength,
@@ -756,8 +762,7 @@ async function persistActiveSdCard(reason) {
       log(`[browser-qemu] persisted browser SD image reason=${reason} bytes=${bytes.byteLength}`);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    emitError(`[browser-qemu] failed to persist browser SD image: ${message}`);
+    emitError(`[browser-qemu] failed to persist browser SD image: ${describeStorageError(error)}`);
   }
 }
 
@@ -791,9 +796,9 @@ async function withEditableSdCard(command, mutate, fn) {
   if (!sdCard) {
     throw new Error("browser_sd_card_image_missing");
   }
-  const value = await withFatFileSystem(sdCard.bytes, fn);
+  const value = await sdStage("fat_edit", () => withFatFileSystem(sdCard.bytes, fn));
   if (mutate) {
-    await persistEditableSdCard(sdCard, command.type);
+    await sdStage("persist", () => persistEditableSdCard(sdCard, command.type));
   }
   return value;
 }
@@ -1213,6 +1218,38 @@ function parentSdPath(path) {
 
 function joinSdPath(parent, name) {
   return parent === "/" ? `/${name}` : `${parent}/${name}`;
+}
+
+function sameBytes(left, right) {
+  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array) || left.byteLength !== right.byteLength) return false;
+  if (left.byteOffset % 4 === 0 && right.byteOffset % 4 === 0 && left.byteLength % 4 === 0) {
+    const a = new Uint32Array(left.buffer, left.byteOffset, left.byteLength / 4);
+    const b = new Uint32Array(right.buffer, right.byteOffset, right.byteLength / 4);
+    for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false;
+    return true;
+  }
+  for (let index = 0; index < left.byteLength; index++) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+/** Browser storage failures are often DOMExceptions with an empty message; keep their name and cause. */
+function describeStorageError(error) {
+  if (!error || typeof error !== "object") return String(error);
+  const name = "name" in error ? String(error.name) : "Error";
+  const message = "message" in error && error.message ? String(error.message) : "(no message)";
+  const cause = "cause" in error && error.cause ? ` cause=${describeStorageError(error.cause)}` : "";
+  return `${name}: ${message}${cause}`;
+}
+
+/** Prefixes SD failures with the preparation stage so a generic browser error stays diagnosable. */
+async function sdStage(stage, run) {
+  try {
+    return await run();
+  } catch (error) {
+    const wrapped = new Error(`browser_sd_${stage}_failed: ${describeStorageError(error)}`);
+    wrapped.cause = error;
+    throw wrapped;
+  }
 }
 
 function sdErrorMessage(error) {

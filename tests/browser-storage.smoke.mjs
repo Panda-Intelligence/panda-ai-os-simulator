@@ -58,7 +58,7 @@ try{
     const preserved=await new Promise((resolve,reject)=>{const tx=db2.transaction(storeName);const request=tx.objectStore(storeName).get("legacy");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
     db2.close();ensure(new Uint8Array(preserved.bytes)[0]===1,"old readable snapshot retained");
     const db3=await open();
-    await new Promise((resolve,reject)=>{const tx=db3.transaction(storeName,"readwrite"),store=tx.objectStore(storeName),req=store.get(["panda-sd-meta-v2",key]);req.onsuccess=()=>store.delete(["panda-sd-chunk-v2",key,req.result.generation,0]);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
+    await new Promise((resolve,reject)=>{const tx=db3.transaction(storeName,"readwrite"),store=tx.objectStore(storeName),req=store.get(["panda-sd-meta-v2",key]);req.onsuccess=()=>store.delete(["panda-sd-chunk-v2",key,req.result.chunkGenerations?.[0]??req.result.generation,0]);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
     db3.close();let corruptRejected=false;
     try{await readSdImage(open,storeName,key);}catch{corruptRejected=true;}
     ensure(corruptRejected,"missing chunk must not become an empty image");
