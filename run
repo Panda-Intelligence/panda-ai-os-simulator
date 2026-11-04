@@ -70,9 +70,9 @@ parse_launcher_args() {
     esac
     shift
   done
-  SIMULATOR_ARGS=("${remaining[@]}")
+  SIMULATOR_ARGS=(${remaining[@]+"${remaining[@]}"})
 }
-parse_launcher_args "${SIMULATOR_ARGS[@]}"
+parse_launcher_args ${SIMULATOR_ARGS[@]+"${SIMULATOR_ARGS[@]}"}
 export MOFEI_SIM_SD_ROOT MOFEI_SIM_HEAP_MODE PANDA_SIMULATOR_QEMU
 
 # ── Prerequisite checks ──
@@ -149,7 +149,7 @@ case_artifact_screenshot_path() {
 
 simulator_args_have_board() {
   local arg
-  for arg in "${SIMULATOR_ARGS[@]}"; do
+  for arg in ${SIMULATOR_ARGS[@]+"${SIMULATOR_ARGS[@]}"}; do
     case "${arg}" in
       --board|--board=*) return 0 ;;
     esac
@@ -166,14 +166,14 @@ run_headless() {
   fi
   cargo run --locked --manifest-path "${HEADLESS_CARGO}" --release --bin mofei-sim-headless -- \
     --firmware "${PANDA_SIMULATOR_FIRMWARE}" \
-    "${board_args[@]}" \
+    ${board_args[@]+"${board_args[@]}"} \
     --heap-mode "${MOFEI_SIM_HEAP_MODE}" \
     --qemu "${PANDA_SIMULATOR_QEMU}" \
     --duration "${DURATION}" \
     --out "${OUT_PATH}" \
     --sd-root "${MOFEI_SIM_SD_ROOT}" \
     --serial \
-    "${SIMULATOR_ARGS[@]}"
+    ${SIMULATOR_ARGS[@]+"${SIMULATOR_ARGS[@]}"}
 
   if [[ -f "${OUT_PATH}" ]]; then
     ok "Screenshot saved: ${OUT_PATH}"
