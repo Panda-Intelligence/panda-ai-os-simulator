@@ -1457,9 +1457,14 @@ build_image() {
     fi
   fi
 
+  # The Emscripten base image may be amd64 even on an arm64 host; take bun from the same
+  # platform or the copied binary cannot execute inside the image (exit 127).
+  local base_platform
+  base_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${QEMU_WASM_BASE_IMAGE}")"
   cat <<EOF | docker build -t "${QEMU_WASM_IMAGE}" -
+FROM --platform=${base_platform} oven/bun:1.3.11 AS bun
 FROM ${QEMU_WASM_BASE_IMAGE}
-COPY --from=oven/bun:1.3.11 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /build
 RUN bun add xterm-pty@v0.10.1
 ENV EMCC_CFLAGS="--js-library=/build/node_modules/xterm-pty/emscripten-pty.js"

@@ -63,7 +63,7 @@ try {
   await page.getByRole("button",{name:/^Stop$/}).click();
   await page.waitForFunction(() => document.querySelector(".pds-pill")?.textContent?.trim() === "stop_sim: stopped", null, {timeout:60000});
   const stored = await readStorage();
-  assert.equal(stored.meta.format,"chunks-v2");
+  assert.equal(stored.meta.format,"chunks-v3");
   assert.equal(stored.meta.byteLength,134217728);
   assert.equal(stored.meta.chunkBytes,4*1024*1024);
   assert.equal(stored.meta.chunkCount,32);
