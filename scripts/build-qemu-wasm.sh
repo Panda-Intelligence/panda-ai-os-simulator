@@ -630,7 +630,6 @@ replacement = """elif host_os == '\''emscripten'\''
     emulator_link_args += ['\''-O'\'' + get_option('\''optimization'\'')]
   endif
   emulator_link_args += [
-    '\''--js-library=/build/node_modules/xterm-pty/emscripten-pty.js'\'',
     '\''--js-library=/murphy-scripts/qemu-wasm-mofei-bridge.js'\'',
     '\''-sMODULARIZE=1'\'',
     '\''-sEXPORT_ES6=1'\'',
@@ -643,6 +642,9 @@ endif
 replacement = replacement.replace("--js-library=/murphy-scripts/qemu-wasm-mofei-bridge.js", bridge_arg)
 if bridge_arg not in text:
     text = text.replace(needle, replacement)
+# PTY 库由 configure 的内容寻址参数统一提供；正常重建也须清除旧缓存中的第二条库路径。
+legacy_pty_arg = chr(39) + "--js-library=/build/node_modules/xterm-pty/emscripten-pty.js" + chr(39) + ","
+text = "\n".join(line for line in text.split("\n") if line.strip() != legacy_pty_arg)
 '
   QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC}" patch_python_if_present "${meson_build}" '
 import os
