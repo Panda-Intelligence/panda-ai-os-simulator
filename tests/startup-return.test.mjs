@@ -35,6 +35,8 @@ enum {WINDOW_BASE,WINDOW_START,PS};
 #define MEMTXATTRS_UNSPECIFIED 0
 typedef struct { uint32_t regs[16],phys_regs[64],sregs[3],windowbase_next,kernel_entry; } CPUXtensaState;
 static uint32_t memory[256],rom_printf_state[4],address_space_memory;
+static unsigned task_resets;
+static void mofei_sim_reset_serialized_task(void) { ++task_resets; }
 static uint8_t console_uart=0x69;
 static uint32_t* at(uint32_t addr) {
  assert(addr>=MOFEI_SIM_FAKE_APP_STACK_TOP-sizeof(memory) && addr<MOFEI_SIM_FAKE_APP_STACK_TOP);
@@ -56,6 +58,7 @@ int main(void) {
  for(unsigned i=0;i<4;i++)rom_printf_state[i]=0x6c616833;
  CPUXtensaState env={.kernel_entry=0x40375970};
  mofei_prepare_kernel_call_frame(&env);
+ assert(task_resets==1);
  assert(env.sregs[WINDOW_BASE]==0 && env.sregs[WINDOW_START]==1 && env.windowbase_next==0);
  assert(env.sregs[PS]==0x60000 && env.regs[1]==MOFEI_SIM_FAKE_APP_STACK_TOP);
  assert(env.regs[8]==0x80375970 && !memcmp(env.regs,env.phys_regs,sizeof(env.regs)));
@@ -78,6 +81,7 @@ int main(void) {
  console_uart=0x69;
  env.sregs[PS]=0xffffffff;env.sregs[WINDOW_BASE]=12;env.sregs[WINDOW_START]=0x1550;
  mofei_prepare_kernel_call_frame(&env);
+ assert(task_resets==2);
  assert(env.sregs[PS]==0x60000 && env.sregs[WINDOW_BASE]==0 && env.sregs[WINDOW_START]==1);
  assert(rom_printf_state[0]==0 && rom_printf_state[1]==0 && rom_printf_state[2]==0 && rom_printf_state[3]==0x40043ce8);
  assert(console_uart==0);

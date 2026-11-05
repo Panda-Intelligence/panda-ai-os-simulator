@@ -741,6 +741,7 @@ static void esp32s3_cpu_reset(void* opaque, int n, int level) {
 }
 
 static void mofei_prepare_kernel_call_frame(CPUXtensaState* env) {
+  mofei_sim_reset_serialized_task();
   const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
   const unsigned callinc = 2;
   const uint32_t marked_return = (callinc << 30) | (env->kernel_entry & 0x3fffffffu);
@@ -1399,6 +1400,15 @@ static uint32_t mofei_resolve_elf_symbol(const uint8_t* elf_data, gsize elf_len,
     }
   }
   return 0;
+}
+
+static void mofei_resolve_main_tls_metadata(const uint8_t* elf_data, gsize elf_len) {
+  MofeiSimAddrs* a = &mofei_sim_addrs;
+  a->tls_data_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_data_start");
+  a->tls_data_end_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_data_end");
+  a->tls_bss_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_bss_start");
+  a->tls_bss_end_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_bss_end");
+  a->tls_section_alignment = mofei_resolve_elf_symbol(elf_data, elf_len, "_tls_section_alignment");
 }
 
 static uint32_t mofei_resolve_elf_function_end(const uint8_t* elf_data, gsize elf_len, const char* sym_name) {
@@ -2125,6 +2135,7 @@ static void esp32s3_machine_init(MachineState* machine) {
         a->strdup_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "strdup");
         a->cxa_guard_acquire_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "__cxa_guard_acquire");
         a->cxa_guard_release_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "__cxa_guard_release");
+        mofei_resolve_main_tls_metadata(elf_data, elf_len);
         a->heap_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_heap_start");
         if (!a->heap_start_addr) {
           a->heap_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_heap_low_start");

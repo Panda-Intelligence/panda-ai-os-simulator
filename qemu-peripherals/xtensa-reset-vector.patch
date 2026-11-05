@@ -1329,7 +1329,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
  }
 
  /*!
-@@ -158,116 +1124,4318 @@
+@@ -158,116 +1124,4371 @@
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */
@@ -3157,15 +3157,70 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 + * executes normally. This prevents infinite redirect loops if
 + * app_main's code path re-enters vTaskStartScheduler. */
 +static int mofei_redirected_to_app_main;
++static int mofei_loop_task_entered;
++static uint32_t mofei_main_tls_base;
++static uint32_t mofei_main_tls_threadptr;
++
++void mofei_sim_reset_serialized_task(void) {
++  mofei_main_tls_base = 0;
++  mofei_main_tls_threadptr = 0;
++  mofei_redirected_to_app_main = 0;
++  mofei_loop_task_entered = 0;
++}
++
++static uint32_t mofei_main_stack_top(void) {
++  return mofei_main_tls_base ? mofei_main_tls_base : MOFEI_SIM_FAKE_APP_STACK_TOP;
++}
++
++static bool mofei_initialize_main_tls(CPUXtensaState* env) {
++  if (mofei_main_tls_base) {
++    env->uregs[THREADPTR] = mofei_main_tls_threadptr;
++    return true;
++  }
++  const MofeiSimAddrs* a = &mofei_sim_addrs;
++  const uint32_t align = a->tls_section_alignment;
++  if (!a->tls_data_start_addr || a->tls_data_end_addr < a->tls_data_start_addr ||
++      a->tls_bss_start_addr != a->tls_data_end_addr || a->tls_bss_end_addr < a->tls_bss_start_addr || !align ||
++      (align & (align - 1u)) || align > MOFEI_SIM_FAKE_TASK_STACK_BYTES - 16u) {
++    return false;
++  }
++  const uint32_t data_size = a->tls_data_end_addr - a->tls_data_start_addr;
++  const uint32_t total_size = a->tls_bss_end_addr - a->tls_data_start_addr;
++  if (total_size > MOFEI_SIM_FAKE_TASK_STACK_BYTES - 80u) return false;
++  const uint32_t area_size = (total_size + 15u) & ~15u;
++  const uint32_t tls_base = MOFEI_SIM_FAKE_APP_STACK_TOP - area_size;
++  /* 与 IDF uxInitialiseStackTLS 一致：TCB_SIZE=8 仅为 Xtensa ABI 地址偏置。
++   * TLS 在既有 main 栈内；所有后续帧从 tls_base 向下生长，不能覆盖模板。 */
++  const uint32_t bias = (8u + align - 1u) & ~(align - 1u);
++  if (bias > MOFEI_SIM_FAKE_TASK_STACK_BYTES - area_size) return false;
++  uint8_t* initial = g_malloc0(area_size ? area_size : 1u);
++  if (data_size && !mofei_read_guest_memory(a->tls_data_start_addr, initial, data_size)) {
++    g_free(initial);
++    return false;
++  }
++  const MemTxResult result =
++      address_space_write(&address_space_memory, tls_base, MEMTXATTRS_UNSPECIFIED, initial, area_size);
++  g_free(initial);
++  if (result != MEMTX_OK) return false;
++  mofei_main_tls_base = tls_base;
++  mofei_main_tls_threadptr = tls_base - bias;
++  env->uregs[THREADPTR] = mofei_main_tls_threadptr;
++  fprintf(stderr, "[TLS] serialized main data=%u bss=%u area=%u align=%u base=0x%08x threadptr=0x%08x\n", data_size,
++          total_size - data_size, area_size, align, tls_base, mofei_main_tls_threadptr);
++  return true;
++}
 +
 +static void mofei_prepare_boot_firmware_frame(CPUXtensaState* env) {
++  if (!mofei_initialize_main_tls(env)) {
++    cpu_abort(env_cpu(env), "Invalid or unreadable firmware TLS metadata");
++  }
 +  if (mofei_sim_addrs.murphySimulatorHooksEnabled_addr) {
 +    cpu_stb_data(env, mofei_sim_addrs.murphySimulatorHooksEnabled_addr, 1);
 +    fprintf(stderr, "[BOOT-FRAME] Murphy OS simulator hooks enabled at 0x%08x\n",
 +            mofei_sim_addrs.murphySimulatorHooksEnabled_addr);
 +  }
 +
-+  const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
++  const uint32_t stack_top = mofei_main_stack_top();
 +  const uint32_t safe_ret = 0x4037D000u;
 +  const unsigned callinc = 2;
 +  const uint32_t marked_ret = (callinc << 30) | (safe_ret & 0x3fffffffu);
@@ -3245,7 +3300,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +  env->sregs[PS] &= ~(PS_CALLINC | PS_EXCM);
 +  env->sregs[PS] |= PS_UM | PS_WOE;
 +  env->regs[0] = 0x4037D000u;
-+  env->regs[1] = MOFEI_SIM_FAKE_APP_STACK_TOP - 80u;
++  env->regs[1] = mofei_main_stack_top() - 80u;
 +  env->regs[2] = shell;
 +  env->regs[3] = context ? context : shell;
 +  xtensa_sync_phys_from_window(env);
@@ -3302,7 +3357,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +    return env->pc;
 +  }
 +
-+  const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
++  const uint32_t stack_top = mofei_main_stack_top();
 +  const uint32_t frame_size = 80u;
 +  const uint32_t frame_sp = stack_top - frame_size;
 +  const uint32_t safe_ret = 0x4037D000u;
@@ -3497,8 +3552,6 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 + * This helper intercepts xTaskCreateUniversal's RETW: we redirect
 + * execution to loopTask so that setup() and loop() actually run.
 + * The address is hardcoded for now (resolved from ELF nm output). */
-+static int mofei_loop_task_entered;
-+
 +void HELPER(mofei_maybe_jump_to_loop_task)(CPUXtensaState* env) {
 +  if (mofei_loop_task_entered) {
 +    return;

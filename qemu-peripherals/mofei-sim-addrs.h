@@ -666,9 +666,16 @@ typedef struct MofeiSimAddrs {
   uint32_t s_system_inited_1_addr;
   uint32_t s_system_full_inited_addr;
   uint32_t heap_start_addr; /* linker _heap_start for simulator-safe internal heap base */
+  /* IDF TLS 模板边界与绝对对齐值；不是 guest TCB 或固定变量偏移。 */
+  uint32_t tls_data_start_addr;
+  uint32_t tls_data_end_addr;
+  uint32_t tls_bss_start_addr;
+  uint32_t tls_bss_end_addr;
+  uint32_t tls_section_alignment;
   bool resolved;            /* true after successful symbol resolution */
 } MofeiSimAddrs;
 
 extern MofeiSimAddrs mofei_sim_addrs;
+void mofei_sim_reset_serialized_task(void);
 
 #endif /* MOFEI_SIM_ADDRS_H */
