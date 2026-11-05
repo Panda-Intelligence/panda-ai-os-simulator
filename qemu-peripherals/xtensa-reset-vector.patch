@@ -118,7 +118,7 @@ index 748e110..1552713 100644
 diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 --- a/target/xtensa/exc_helper.c
 +++ b/target/xtensa/exc_helper.c
-@@ -26,130 +26,1086 @@
+@@ -26,130 +26,1096 @@
   */
 
  #include "qemu/osdep.h"
@@ -438,6 +438,16 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +      {mofei_sim_addrs.murphyVtableDictionaryScene_addr, "Dictionary"},
 +      {mofei_sim_addrs.murphyVtableSudokuScene_addr, "Sudoku"},
 +      {mofei_sim_addrs.murphyVtableVirtualPetScene_addr, "VirtualPet"},
++      {mofei_sim_addrs.murphyVtableSokobanScene_addr, "Sokoban"},
++      {mofei_sim_addrs.murphyVtableDailyMazeScene_addr, "DailyMaze"},
++      {mofei_sim_addrs.murphyVtableArcadeChallengesScene_addr, "ArcadeChallenges"},
++      {mofei_sim_addrs.murphyVtableWordPuzzleScene_addr, "WordPuzzle"},
++      {mofei_sim_addrs.murphyVtablePaperBoyMinesweeperScene_addr, "PaperBoyMinesweeper"},
++      {mofei_sim_addrs.murphyVtablePaperboyGbScene_addr, "PaperboyGbScene"},
++      {mofei_sim_addrs.murphyVtablePaperboyNesScene_addr, "PaperboyNesScene"},
++      {mofei_sim_addrs.murphyVtableElectronicSandScene_addr, "ElectronicSand"},
++      {mofei_sim_addrs.murphyVtableWallpaperPickerScene_addr, "SleepWallpaper"},
++      {mofei_sim_addrs.murphyVtableSleepAppearancePreviewScene_addr, "SleepAppearancePreview"},
 +  };
 +  for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); ++i) {
 +    if (mofei_vptr_matches(vptr, entries[i].table)) {
@@ -1319,7 +1329,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
  }
 
  /*!
-@@ -158,116 +1114,4316 @@
+@@ -158,116 +1124,4316 @@
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */

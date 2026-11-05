@@ -330,6 +330,16 @@ static const char* mofei_murphy_activity_for_vptr(uint32_t vptr) {
       {mofei_sim_addrs.murphyVtableDictionaryScene_addr, "Dictionary"},
       {mofei_sim_addrs.murphyVtableSudokuScene_addr, "Sudoku"},
       {mofei_sim_addrs.murphyVtableVirtualPetScene_addr, "VirtualPet"},
+      {mofei_sim_addrs.murphyVtableSokobanScene_addr, "Sokoban"},
+      {mofei_sim_addrs.murphyVtableDailyMazeScene_addr, "DailyMaze"},
+      {mofei_sim_addrs.murphyVtableArcadeChallengesScene_addr, "ArcadeChallenges"},
+      {mofei_sim_addrs.murphyVtableWordPuzzleScene_addr, "WordPuzzle"},
+      {mofei_sim_addrs.murphyVtablePaperBoyMinesweeperScene_addr, "PaperBoyMinesweeper"},
+      {mofei_sim_addrs.murphyVtablePaperboyGbScene_addr, "PaperboyGbScene"},
+      {mofei_sim_addrs.murphyVtablePaperboyNesScene_addr, "PaperboyNesScene"},
+      {mofei_sim_addrs.murphyVtableElectronicSandScene_addr, "ElectronicSand"},
+      {mofei_sim_addrs.murphyVtableWallpaperPickerScene_addr, "SleepWallpaper"},
+      {mofei_sim_addrs.murphyVtableSleepAppearancePreviewScene_addr, "SleepAppearancePreview"},
   };
   for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); ++i) {
     if (mofei_vptr_matches(vptr, entries[i].table)) {

@@ -610,6 +610,14 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableDictionaryScene_addr;             /* vtable for murphy::app::ReaderDictionaryResultScene */
   uint32_t murphyVtableSudokuScene_addr;                 /* vtable for murphy::app::SudokuScene */
   uint32_t murphyVtableVirtualPetScene_addr;             /* vtable for murphy::app::VirtualPetScene */
+  uint32_t murphyVtableSokobanScene_addr;
+  uint32_t murphyVtableDailyMazeScene_addr;
+  uint32_t murphyVtableArcadeChallengesScene_addr;
+  uint32_t murphyVtablePaperBoyMinesweeperScene_addr;
+  uint32_t murphyVtablePaperboyGbScene_addr;
+  uint32_t murphyVtablePaperboyNesScene_addr;
+  uint32_t murphyVtableElectronicSandScene_addr;
+  uint32_t murphyVtableSleepAppearancePreviewScene_addr;
   uint32_t murphyVtableWordPuzzleScene_addr;             /* WordPuzzleScene 的 vtable */
   uint32_t murphyVtablePandaCloudAccountScene_addr;      /* PandaCloudAccountScene 的 vtable */
   uint32_t murphyVtableGnssScene_addr;                   /* GnssScene 的 vtable */
