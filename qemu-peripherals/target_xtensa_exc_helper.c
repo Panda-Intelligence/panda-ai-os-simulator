@@ -1511,6 +1511,7 @@ typedef struct MofeiButtonSample {
 #define MOFEI_BUTTON_QUEUE_CAP 16
 #define MOFEI_PANDA_DEBUG_MAILBOX_BYTES 4096
 
+static GMutex g_input_queue_mutex;
 static MofeiTouchSample g_touch_queue[MOFEI_TOUCH_QUEUE_CAP];
 static unsigned g_touch_queue_head;
 static unsigned g_touch_queue_count;
@@ -1524,6 +1525,7 @@ void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t to
   mofei_sim_board_touch_dimensions(&max_w, &max_h);
   if (max_w > 0 && x >= max_w) x = max_w - 1u;
   if (max_h > 0 && y >= max_h) y = max_h - 1u;
+  g_mutex_lock(&g_input_queue_mutex);
   if (g_touch_queue_count == MOFEI_TOUCH_QUEUE_CAP) {
     g_touch_queue_head = (g_touch_queue_head + 1) % MOFEI_TOUCH_QUEUE_CAP;
     g_touch_queue_count--;
@@ -1531,14 +1533,18 @@ void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t to
   unsigned tail = (g_touch_queue_head + g_touch_queue_count) % MOFEI_TOUCH_QUEUE_CAP;
   g_touch_queue[tail] = (MofeiTouchSample){x, y, action, touch_id};
   g_touch_queue_count++;
-  fprintf(stderr, "[MOFEI-SIM] touch_queue raw=%u,%u action=%u touch_id=%u depth=%u\n", x, y, action, touch_id,
-          g_touch_queue_count);
+  const unsigned depth = g_touch_queue_count;
+  g_mutex_unlock(&g_input_queue_mutex);
+  fprintf(stderr,
+          "[MOFEI-SIM] touch_queue raw=%u,%u action=%u touch_id=%u depth=%u\n",
+          x, y, action, touch_id, depth);
 }
 
 static void mofeiSimulatorButtonQueue(uint8_t button_id, bool released) {
   if (button_id > 6) {
     return;
   }
+  g_mutex_lock(&g_input_queue_mutex);
   if (g_button_queue_count == MOFEI_BUTTON_QUEUE_CAP) {
     g_button_queue_head = (g_button_queue_head + 1) % MOFEI_BUTTON_QUEUE_CAP;
     g_button_queue_count--;
@@ -1546,8 +1552,10 @@ static void mofeiSimulatorButtonQueue(uint8_t button_id, bool released) {
   unsigned tail = (g_button_queue_head + g_button_queue_count) % MOFEI_BUTTON_QUEUE_CAP;
   g_button_queue[tail] = (MofeiButtonSample){button_id, released};
   g_button_queue_count++;
-  fprintf(stderr, "[MOFEI-SIM] button_queue id=%u released=%d depth=%u\n", button_id, released ? 1 : 0,
-          g_button_queue_count);
+  const unsigned depth = g_button_queue_count;
+  g_mutex_unlock(&g_input_queue_mutex);
+  fprintf(stderr, "[MOFEI-SIM] button_queue id=%u released=%d depth=%u\n",
+          button_id, released ? 1 : 0, depth);
 }
 
 static bool mofeiSimulatorButtonEventWrite(hwaddr addr, uint8_t mask) {
@@ -4463,11 +4471,18 @@ uint32_t HELPER(mofei_touch_read)(CPUXtensaState* env, uint32_t x_ptr, uint32_t 
   uint32_t raw_addr;
   unsigned callinc;
   uint32_t clean_addr = mofei_skip_fn_common(env, &raw_addr, &callinc);
+  MofeiTouchSample sample;
+  unsigned depth = 0;
+  g_mutex_lock(&g_input_queue_mutex);
   const bool ok = g_touch_queue_count > 0;
   if (ok) {
-    MofeiTouchSample sample = g_touch_queue[g_touch_queue_head];
+    sample = g_touch_queue[g_touch_queue_head];
     g_touch_queue_head = (g_touch_queue_head + 1) % MOFEI_TOUCH_QUEUE_CAP;
     g_touch_queue_count--;
+    depth = g_touch_queue_count;
+  }
+  g_mutex_unlock(&g_input_queue_mutex);
+  if (ok) {
     if (x_ptr != 0) {
       cpu_stw_data(env, x_ptr, sample.x);
     }
@@ -4480,9 +4495,11 @@ uint32_t HELPER(mofei_touch_read)(CPUXtensaState* env, uint32_t x_ptr, uint32_t 
     if (touch_id_ptr != 0) {
       cpu_stb_data(env, touch_id_ptr, sample.touch_id);
     }
-    fprintf(stderr, "[MOFEI-SIM] touch_read raw=%u,%u action=%u touch_id=%u depth=%u ptrs=%08x,%08x,%08x,%08x\n",
-            sample.x, sample.y, sample.action, sample.touch_id, g_touch_queue_count, x_ptr, y_ptr, action_ptr,
-            touch_id_ptr);
+    fprintf(stderr,
+            "[MOFEI-SIM] touch_read raw=%u,%u action=%u touch_id=%u depth=%u "
+            "ptrs=%08x,%08x,%08x,%08x\n",
+            sample.x, sample.y, sample.action, sample.touch_id, depth, x_ptr,
+            y_ptr, action_ptr, touch_id_ptr);
   }
   /* The firmware touch hook is intercepted at the callee ENTRY PC and jumps
    * directly back to the caller, so ENTRY/RETW never run. Match the other
@@ -4496,19 +4513,29 @@ uint32_t HELPER(mofei_button_read)(CPUXtensaState* env, uint32_t button_id_ptr, 
   uint32_t raw_addr;
   unsigned callinc;
   uint32_t clean_addr = mofei_skip_fn_common(env, &raw_addr, &callinc);
+  MofeiButtonSample sample;
+  unsigned depth = 0;
+  g_mutex_lock(&g_input_queue_mutex);
   const bool ok = g_button_queue_count > 0;
   if (ok) {
-    MofeiButtonSample sample = g_button_queue[g_button_queue_head];
+    sample = g_button_queue[g_button_queue_head];
     g_button_queue_head = (g_button_queue_head + 1) % MOFEI_BUTTON_QUEUE_CAP;
     g_button_queue_count--;
+    depth = g_button_queue_count;
+  }
+  g_mutex_unlock(&g_input_queue_mutex);
+  if (ok) {
     if (button_id_ptr != 0) {
       cpu_stb_data(env, button_id_ptr, sample.button_id);
     }
     if (released_ptr != 0) {
       cpu_stb_data(env, released_ptr, sample.released ? 1 : 0);
     }
-    fprintf(stderr, "[MOFEI-SIM] button_read id=%u released=%d depth=%u ptrs=%08x,%08x\n", sample.button_id,
-            sample.released ? 1 : 0, g_button_queue_count, button_id_ptr, released_ptr);
+    fprintf(
+        stderr,
+        "[MOFEI-SIM] button_read id=%u released=%d depth=%u ptrs=%08x,%08x\n",
+        sample.button_id, sample.released ? 1 : 0, depth, button_id_ptr,
+        released_ptr);
   }
   env->regs[callinc * 4 + 2] = ok ? 1 : 0;
   if (ok) {
