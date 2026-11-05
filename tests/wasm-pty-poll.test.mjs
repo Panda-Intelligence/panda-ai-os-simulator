@@ -47,6 +47,7 @@ function runtime(mode = "green") {
     assert.ok(nodes.has(name), name);vm.runInContext(`globalThis.${name}=${nodes.get(name)};`, state);
   }
   if (nodes.has("PTY_selectTimeout")) vm.runInContext(`globalThis.PTY_selectTimeout=${nodes.get("PTY_selectTimeout")};`, state);
+  if (nodes.has("PTY_clearSelectFds")) vm.runInContext(`globalThis.PTY_clearSelectFds=${nodes.get("PTY_clearSelectFds")};`, state);
   for (const name of ["xterm_pty_old_poll", "xterm_pty_old_newselect"]) vm.runInContext(nodes.get(name), state);
   state.PTY_handleSleep = callback => { let value;callback(result => { value = result; });return value; };
   state.PTY_waitForReadable = state.PTY_waitForReadableWithCallback;
@@ -163,6 +164,31 @@ test("select owns its timeval even without readfds and across the pthread proxy"
   r.state.PTY_waitForReadable = (callback, timeout) => { captured = timeout;callback(2); };
   assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 64), 0);assert.equal(captured, 19);
   assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 0), 0);assert.equal(captured, -1);
+});
+
+test("complete finite select timeout clears every supplied fd set", async () => {
+  for (const kind of ["read", "except"]) {
+    const r = runtime();assert.equal(r.select(5, [0], kind), -1006);
+    const original = r.state.FS.getStream;
+    r.state.FS.getStream = fd => fd === 7 ? { stream_ops: { poll: () => 0 } } : original(fd);
+    r.state.HEAP32[16 >> 2] = 1;r.state.HEAP32[32 >> 2] = 1 << 7;r.state.HEAP32[48 >> 2] = 1;
+    r.state.PTY_handleSleep = startAsync => new Promise(resolve => startAsync(resolve));
+    const result = await r.state.___syscall__newselect(8, 16, 32, 48, 64);
+    assert.equal(result, 0);
+    for (const ptr of [16, 32, 48]) { assert.equal(r.state.HEAP32[ptr >> 2], 0);assert.equal(r.state.HEAP32[(ptr + 4) >> 2], 0); }
+    assert.equal(r.subscriptionCount(), 0);assert.deepEqual(r.timers, [5]);
+  }
+});
+
+test("complete select preserves ready results and interruption semantics", async () => {
+  const ready = runtime();assert.equal(ready.select(5, [0, 7]), 1);
+  ready.state.HEAP32[16 >> 2] = (1 << 7) | 1;
+  ready.state.PTY_handleSleep = startAsync => new Promise(resolve => startAsync(resolve));
+  assert.equal(await ready.state.___syscall__newselect(8, 16, 0, 0, 64), 1);assert.equal(ready.state.HEAP32[16 >> 2], 1 << 7);assert.deepEqual(ready.timers, []);
+  const interrupted = runtime();assert.equal(interrupted.select(1000), -1006);
+  interrupted.state.PTY_handleSleep = startAsync => new Promise(resolve => startAsync(resolve));
+  const pending = interrupted.state.___syscall__newselect(1, 16, 0, 0, 64);
+  interrupted.state.PTY.signal("SIGINT");assert.equal(await pending, -27);assert.equal(interrupted.state.HEAP32[16 >> 2], 1);assert.equal(interrupted.subscriptionCount(), 0);
 });
 
 test("wait proxy carries each caller timeout instead of the shared root timeout", async () => {

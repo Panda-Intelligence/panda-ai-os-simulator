@@ -72,11 +72,15 @@
  
      $PTY_wrapPoll__deps: ['$PTY_waitForReadable', '$PTY_handleSleep'],
 -    $PTY_wrapPoll: (impl) => PTY_handleSleep((wakeUp) => {
-+    $PTY_wrapPoll: (impl, timeout) => PTY_handleSleep((wakeUp) => {
++    $PTY_wrapPoll: (impl, timeout, onTimeout) => PTY_handleSleep((wakeUp) => {
          let result = impl();
          // Did this call return our variant of EAGAIN?
          // If so, that means it called into the PTY and the buffer was empty.
-@@ -200,22 +204,27 @@
+@@ -197,25 +201,42 @@
+                         wakeUp(-{{{ cDefs.EINTR }}});
+                         break;
+                     case 2: /* timeout */
++                        if (onTimeout) onTimeout();
                          wakeUp(0);
                          break;
                  }
@@ -93,10 +97,21 @@
 +           + {{{ makeGetValue('timeout', C_STRUCTS.timeval.tv_usec, 'i32') }}} / 1000)
 +        : -1,
 +
-+    __syscall__newselect__deps: ['$xterm_pty_old_newselect', '$PTY_wrapPoll', '$PTY_selectTimeout'],
++    $PTY_clearSelectFds: (readfds, writefds, exceptfds) => {
++        // 与受支持的 64 位 fd 集一致；真实超时完成时清除所有输出集。
++        for (const fds of [readfds, writefds, exceptfds]) {
++            if (fds) {
++                {{{ makeSetValue('fds', 0, '0', 'i32') }}};
++                {{{ makeSetValue('fds', 4, '0', 'i32') }}};
++            }
++        }
++    },
++
++    __syscall__newselect__deps: ['$xterm_pty_old_newselect', '$PTY_wrapPoll', '$PTY_selectTimeout', '$PTY_clearSelectFds'],
      __syscall__newselect: (nfds, readfds, writefds, exceptfds, timeout) => (
 -        PTY_wrapPoll(() => xterm_pty_old_newselect(nfds, readfds, writefds, exceptfds, timeout))
-+        PTY_wrapPoll(() => xterm_pty_old_newselect(nfds, readfds, writefds, exceptfds, timeout), PTY_selectTimeout(timeout))
++        PTY_wrapPoll(() => xterm_pty_old_newselect(nfds, readfds, writefds, exceptfds, timeout), PTY_selectTimeout(timeout),
++            () => PTY_clearSelectFds(readfds, writefds, exceptfds))
      ),
  #if !PROXY_TO_PTHREAD
      __syscall__newselect__async: true,
@@ -108,7 +123,7 @@
  #if !PROXY_TO_PTHREAD
      __syscall_poll__async: true,
  #endif
-@@ -276,6 +285,7 @@
+@@ -276,6 +297,7 @@
      read: (stream, buffer, offset, length) => {
          let readBytes = PTY.read(length);
          if (length && !readBytes.length) {

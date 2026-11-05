@@ -4013,7 +4013,7 @@ function createWasm() {
           return result;
       };
   var PTY_handleSleep = PTY_handleSleepWithAtomic;
-  var PTY_wrapPoll = (impl, timeout) => PTY_handleSleep((wakeUp) => {
+  var PTY_wrapPoll = (impl, timeout, onTimeout) => PTY_handleSleep((wakeUp) => {
           let result = impl();
           // Did this call return our variant of EAGAIN?
           // If so, that means it called into the PTY and the buffer was empty.
@@ -4028,6 +4028,7 @@ function createWasm() {
                           wakeUp(-27);
                           break;
                       case 2: /* timeout */
+                          if (onTimeout) onTimeout();
                           wakeUp(0);
                           break;
                   }
@@ -4041,8 +4042,19 @@ function createWasm() {
           ? (HEAP32[((timeout)>>2)] * 1000
              + HEAP32[(((timeout)+(8))>>2)] / 1000)
           : -1;
+  
+  var PTY_clearSelectFds = (readfds, writefds, exceptfds) => {
+          // 与受支持的 64 位 fd 集一致；真实超时完成时清除所有输出集。
+          for (const fds of [readfds, writefds, exceptfds]) {
+              if (fds) {
+                  HEAP32[((fds)>>2)] = 0;
+                  HEAP32[(((fds)+(4))>>2)] = 0;
+              }
+          }
+      };
   var ___syscall__newselect = (nfds, readfds, writefds, exceptfds, timeout) => (
-          PTY_wrapPoll(() => xterm_pty_old_newselect(nfds, readfds, writefds, exceptfds, timeout), PTY_selectTimeout(timeout))
+          PTY_wrapPoll(() => xterm_pty_old_newselect(nfds, readfds, writefds, exceptfds, timeout), PTY_selectTimeout(timeout),
+              () => PTY_clearSelectFds(readfds, writefds, exceptfds))
       );
 
   

@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-05T17:16:01.086Z",
+  "generatedAt": "2026-11-05T17:37:31.713Z",
   "toolchainImageId": "sha256:203f421e68b8180a3986da47bd665af89a20acaca3478f7da280bfb2c56e90c4",
   "emscriptenVersion": "3.1.50",
   "xtermPtyVersion": "0.10.1",
-  "sourcePatchSha256": "ace6f4da7990a7d46aa1a0ed036e3f3e4f91fe0cad36c5b816acebecf4edbd60",
+  "sourcePatchSha256": "7e89f37315ec57f33d6fbdda31cdd69fd89a7cbeda8da692efc36171d1dd93d5",
   "emissions": [
     {
       "mode": "red",
@@ -26,7 +26,7 @@
     },
     {
       "mode": "green",
-      "jsSha256": "406dbd8e3f94f694ac058e8f74eccbce39b9b724d84f7b9c1ff57b509d735800",
+      "jsSha256": "8d176377946f73061ea49736a3068fcae191524364125ba510d6336fd8e7885f",
       "cSha256": "3e5e7172a892d025b3c76df0a0f68ab0c0249de3ced4f26ebe12e0b35ea08162",
       "compilerExit": 0,
       "libraryInputs": "canonical source patch applied before emcc",
@@ -49,7 +49,7 @@
       "key": "pty",
       "staged": "xterm-pty/emscripten-pty.js",
       "beforeSha256": "5c06b753f211e784e4ec64069a7113040eaa02a28d171d7ee249641f28f8fe20",
-      "afterSha256": "c55d62e47a6311146797841f0107b678adba512bdd1e361019d51c2d53f44c21"
+      "afterSha256": "9148e542536a8ef5fbee5543a58ef50aed863e3d9add62d4d1b32b3cb0d5004b"
     },
     {
       "key": "syscall",
