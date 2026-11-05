@@ -9,6 +9,7 @@
  */
 
 #include "qemu/osdep.h"
+#include <glib/gstdio.h>
 #ifndef __EMSCRIPTEN__
 #include <dlfcn.h>
 #include <execinfo.h>
@@ -1548,6 +1549,19 @@ static void mofei_cpu_resume_timer_cb(void* opaque) {
     cpu_resume(cpu0);
     fprintf(stderr, "[QEMU] CPU0 resumed via safety timer\n");
   }
+}
+
+/* 每次加载持有独立临时路径；调用方在所有 ELF 消费者完成后删除。 */
+static gchar* esp32s3_write_patched_elf(const gchar* data, gsize len, GError** error) {
+  gchar* filename = NULL;
+  const gint fd = g_file_open_tmp("panda-patched-XXXXXX", &filename, error);
+  if (fd < 0) return NULL;
+  if (!g_close(fd, error) || !g_file_set_contents(filename, data, len, error)) {
+    g_unlink(filename);
+    g_free(filename);
+    return NULL;
+  }
+  return filename;
 }
 
 static void esp32s3_machine_init(MachineState* machine) {
@@ -3841,9 +3855,15 @@ static void esp32s3_machine_init(MachineState* machine) {
         manual_image_entry = entry32;
       }
 
-      gchar* tmpfile = g_build_filename(g_get_tmp_dir(), "panda-patched.elf", NULL);
-      g_file_set_contents(tmpfile, elf_data, elf_len, NULL);
+      GError* tmp_error = NULL;
+      gchar* tmpfile = esp32s3_write_patched_elf(elf_data, elf_len, &tmp_error);
       g_free(elf_data);
+      if (tmpfile == NULL) {
+        error_report("Error: could not write patched ELF for '%s': %s (domain=%s code=%d)", load_elf_filename,
+                     tmp_error->message, g_quark_to_string(tmp_error->domain), tmp_error->code);
+        g_clear_error(&tmp_error);
+        exit(1);
+      }
 
       image_size = load_elf(tmpfile, NULL, translate_phys_addr, &ss->cpu[0], &image_entry, &image_lowaddr, NULL, NULL,
                             0, EM_XTENSA, 0, 0);
@@ -3925,6 +3945,7 @@ static void esp32s3_machine_init(MachineState* machine) {
           }
         }
       }
+      g_unlink(tmpfile);
       g_free(tmpfile);
       if (image_size < 0) {
         error_report("Error: could not load ELF file '%s'", load_elf_filename);
