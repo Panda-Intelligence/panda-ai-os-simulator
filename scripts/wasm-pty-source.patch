@@ -67,28 +67,57 @@
          } else {
              wakeUp(result);
          }
-@@ -182,7 +186,7 @@
+@@ -182,40 +186,60 @@
  #endif
  
      $PTY_wrapPoll__deps: ['$PTY_waitForReadable', '$PTY_handleSleep'],
 -    $PTY_wrapPoll: (impl) => PTY_handleSleep((wakeUp) => {
+-        let result = impl();
+-        // Did this call return our variant of EAGAIN?
+-        // If so, that means it called into the PTY and the buffer was empty.
+-        if (result === -{{{ 1000 + cDefs.EAGAIN }}}) {
+-            // Wait for the PTY to become readable and try again.
+-            PTY_waitForReadable(type => {
+-                switch (type) {
+-                    case 0: /* ready */
+-                        wakeUp(impl());
+-                        break;
+-                    case 1: /* interrupted */
+-                        wakeUp(-{{{ cDefs.EINTR }}});
+-                        break;
+-                    case 2: /* timeout */
+-                        wakeUp(0);
+-                        break;
 +    $PTY_wrapPoll: (impl, timeout, onTimeout) => PTY_handleSleep((wakeUp) => {
-         let result = impl();
-         // Did this call return our variant of EAGAIN?
-         // If so, that means it called into the PTY and the buffer was empty.
-@@ -197,25 +201,42 @@
-                         wakeUp(-{{{ cDefs.EINTR }}});
-                         break;
-                     case 2: /* timeout */
-+                        if (onTimeout) onTimeout();
-                         wakeUp(0);
-                         break;
++        const deadline = timeout < 0 ? Infinity : performance.now() + timeout;
++        const resume = (interrupted) => {
++            if (interrupted) return wakeUp(-{{{ cDefs.EINTR }}});
++            for (;;) {
++                const result = impl();
++                if (result !== -{{{ 1000 + cDefs.EAGAIN }}}) return wakeUp(result);
++                const remaining = deadline - performance.now();
++                if (remaining <= 0) {
++                    if (onTimeout) onTimeout();
++                    return wakeUp(0);
                  }
 -            });
-+            }, timeout);
-         } else {
-             wakeUp(result);
-         }
+-        } else {
+-            wakeUp(result);
+-        }
++                // 非 TTY 就绪不会通知 PTY；为每次宿主等待设置有界切片，
++                // 包括 pthread Atomics.wait，同时保持调用方的绝对截止时间。
++                let synchronous = true, resolved = false, waitResult;
++                PTY_waitForReadable(type => {
++                    if (synchronous) { resolved = true;waitResult = type; }
++                    else resume(type === 1 /* interrupted */);
++                }, Math.min(10, remaining));
++                synchronous = false;
++                if (!resolved) return;
++                if (waitResult === 1 /* interrupted */) return wakeUp(-{{{ cDefs.EINTR }}});
++                // 原子等待会同步完成，使用迭代避免递归增长调用栈。
++            }
++        };
++        resume(false);
      }),
  
 -    __syscall__newselect__deps: ['$xterm_pty_old_newselect', '$PTY_wrapPoll'],
@@ -123,7 +152,7 @@
  #if !PROXY_TO_PTHREAD
      __syscall_poll__async: true,
  #endif
-@@ -276,6 +297,7 @@
+@@ -276,6 +300,7 @@
      read: (stream, buffer, offset, length) => {
          let readBytes = PTY.read(length);
          if (length && !readBytes.length) {

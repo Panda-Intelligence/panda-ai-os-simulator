@@ -2,10 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import ts from "typescript";
 import { assertWasmPtySource } from "../scripts/patch-wasm-continuations.mjs";
 import { patchWasmPtySources } from "../scripts/patch-wasm-pty-source.mjs";
@@ -34,7 +35,7 @@ assert.equal(workerFunctions.length, 2);
 function runtime(mode = "green") {
   const heap = new SharedArrayBuffer(1024), timers = [], calls = [], nodes = functions.get(mode);
   const state = { HEAP32: new Int32Array(heap), HEAPU32: new Uint32Array(heap), HEAP16: new Int16Array(heap), HEAPU8: new Uint8Array(heap),
-    Uint8Array, TextDecoder, ENVIRONMENT_IS_PTHREAD: false, SYSCALLS: { DEFAULT_POLLMASK: 5 }, log() {},
+    Uint8Array, TextDecoder, performance, ENVIRONMENT_IS_PTHREAD: false, SYSCALLS: { DEFAULT_POLLMASK: 5 }, log() {},
     setTimeout: (...args) => { timers.push(args[1]);return setTimeout(...args); }, clearTimeout,
     FS: { ErrnoError: class extends Error { constructor(errno) { super();this.name = "ErrnoError";this.errno = errno; } } } };
   vm.createContext(state);vm.runInContext(workerFunctions.join("\n") + "\nglobalThis.PTY=createBrowserQemuPty();", state);
@@ -68,6 +69,135 @@ function runtime(mode = "green") {
       return state.xterm_pty_old_newselect(Math.max(...fds) + 1, kind === "read" ? ptr : 0, kind === "write" ? ptr : 0, kind === "except" ? ptr : 0, timeout === null ? 0 : 64);
     },
     wait(timeout) { return new Promise(resolve => state.PTY_waitForReadableWithCallback(resolve, timeout)); }, push(bytes) { state.PTY.pushInput(bytes); } };
+}
+
+function controlledClock(r) {
+  let now = 0, nextId = 0;
+  const pending = new Map();
+  r.state.performance = { now: () => now };
+  r.state.setTimeout = (callback, delay, ...args) => {
+    const id = ++nextId;
+    pending.set(id, { at: now + delay, callback, args });
+    return id;
+  };
+  r.state.clearTimeout = id => pending.delete(id);
+  return {
+    get now() { return now; },
+    get pending() { return pending.size; },
+    async advance(milliseconds) {
+      now += milliseconds;
+      for (const [id, timer] of [...pending]) {
+        if (timer.at <= now) { pending.delete(id);timer.callback(...timer.args); }
+      }
+      await Promise.resolve();await Promise.resolve();await Promise.resolve();
+    },
+  };
+}
+
+for (const wrapper of ["poll", "select"]) {
+  test(`complete emitted ${wrapper} wakes on late non-TTY readiness without UART input`, async () => {
+    const r = runtime(), clock = controlledClock(r), original = r.state.FS.getStream;
+    let ready = false, checksAfterReady = 0, completed = false, value;
+    r.state.FS.getStream = fd => fd === 7 ? { stream_ops: { poll: () => {
+      if (ready) checksAfterReady++;
+      return ready ? 1 : 0;
+    } } } : original(fd);
+    r.state.PTY_handleSleep = start => new Promise(resolve => start(resolve));
+    if (wrapper === "poll") r.poll(-1, [0, 7]);else r.select(null, [0, 7]);
+    const pending = (wrapper === "poll" ? r.state.___syscall_poll(0, 2, -1)
+      : r.state.___syscall__newselect(8, 16, 0, 0, 0)).then(result => { completed = true;value = result; });
+    assert.equal(r.subscriptionCount(), 2);
+    ready = true;
+    await clock.advance(10);
+    try {
+      assert.equal(completed, true, "A descriptor becoming ready after registration must complete without unrelated TTY input");
+      assert.equal(value, 1);assert.ok(checksAfterReady > 0);
+      if (wrapper === "poll") assert.equal(r.state.HEAP16[6], 1);
+      else assert.equal(r.state.HEAP32[4], 1 << 7);
+      assert.equal(r.subscriptionCount(), 0);assert.equal(clock.pending, 0);assert.equal(r.state.PTY.readable, false);
+    } finally {
+      if (!completed) { r.push([65]);await pending; }
+    }
+  });
+
+  test(`complete emitted ${wrapper} keeps one finite deadline across internal rescans`, async () => {
+    const r = runtime(), clock = controlledClock(r), original = r.state.FS.getStream;
+    r.state.FS.getStream = fd => fd === 7 ? { stream_ops: { poll: () => 0 } } : original(fd);
+    r.state.PTY_handleSleep = start => new Promise(resolve => start(resolve));
+    if (wrapper === "poll") r.poll(25, [0, 7]);else r.select(25, [0, 7]);
+    let completed = false;
+    const pending = (wrapper === "poll" ? r.state.___syscall_poll(0, 2, 25)
+      : r.state.___syscall__newselect(8, 16, 0, 0, 64)).then(value => { completed = true;return value; });
+    r.state.Date = { now: () => -1000000 };
+    await clock.advance(10);assert.equal(completed, false);
+    r.state.Date = { now: () => 1000000 };
+    await clock.advance(10);assert.equal(completed, false);
+    await clock.advance(5);assert.equal(completed, true);assert.equal(await pending, 0);
+    assert.equal(clock.now, 25);assert.equal(clock.pending, 0);assert.equal(r.subscriptionCount(), 0);
+    if (wrapper === "select") assert.equal(r.state.HEAP32[4], 0);
+  });
+
+  test(`complete emitted ${wrapper} iterates synchronous wait slices without growing the JS stack`, () => {
+    const r = runtime(), original = r.state.FS.getStream;
+    let now = 0, waits = 0;
+    r.state.performance = { now: () => now };
+    r.state.FS.getStream = fd => fd === 7 ? { stream_ops: { poll: () => waits >= 5000 ? 1 : 0 } } : original(fd);
+    r.state.PTY_handleSleep = r.state.PTY_handleSleepWithAtomic;
+    r.state.PTY_waitForReadable = (callback, timeout) => {
+      assert.ok(timeout > 0 && timeout <= 10);
+      waits++;now += timeout;callback(2);
+    };
+    if (wrapper === "poll") r.poll(-1, [0, 7]);else r.select(null, [0, 7]);
+    const result = wrapper === "poll" ? r.state.___syscall_poll(0, 2, -1)
+      : r.state.___syscall__newselect(8, 16, 0, 0, 0);
+    assert.equal(result, 1);assert.equal(waits, 5000);assert.equal(r.subscriptionCount(), 0);
+  });
+
+  test(`complete emitted ${wrapper} rescans late readiness after a real cross-thread atomic wait`, async () => {
+    const root = runtime(), ready = new Int32Array(new SharedArrayBuffer(4)), nodes = functions.get("green");
+    const names = ["TTY", "PTY_pollTimeout", "PTY_askToWaitAgain", "PTY_waitForReadableWithAtomic", "PTY_handleSleepWithAtomic", "PTY_atomicIndex", "PTY_wrapPoll", "PTY_selectTimeout", "PTY_clearSelectFds", "___syscall_poll", "___syscall__newselect"];
+    const code = names.map(name => `globalThis.${name}=${nodes.get(name)};`).join("\n")
+      + "\n" + ["xterm_pty_old_poll", "xterm_pty_old_newselect"].map(name => nodes.get(name)).join("\n");
+    const child = new Worker(`
+      const { parentPort, workerData } = require('node:worker_threads');
+      const vm = require('node:vm');
+      const heap = workerData.heap, ready = new Int32Array(workerData.ready);
+      const state = { HEAP32: new Int32Array(heap), HEAPU32: new Uint32Array(heap), HEAP16: new Int16Array(heap),
+        performance, ENVIRONMENT_IS_PTHREAD: false, PTY: { readable: false }, SYSCALLS: { DEFAULT_POLLMASK: 5 },
+        FS: { ErrnoError: class extends Error { constructor(errno) { super();this.name='ErrnoError';this.errno=errno; } } }, _malloc: () => 256 };
+      vm.createContext(state);vm.runInContext(workerData.code,state);
+      const tty = { tty: {}, stream_ops: state.TTY.stream_ops };
+      state.FS.getStream = fd => fd === 0 ? tty : fd === 7 ? { stream_ops: { poll: () => Atomics.load(ready,0) ? 1 : 0 } } : undefined;
+      state.SYSCALLS.getStreamFromFD = fd => state.FS.getStream(fd);
+      state.PTY_handleSleep = state.PTY_handleSleepWithAtomic;
+      state.PTY_waitForReadable = state.PTY_waitForReadableWithAtomic;
+      state.PTY_waitForReadableWithAtomicImpl = (atomicIndex,timeout) => parentPort.postMessage({type:'wait',atomicIndex,timeout});
+      if(workerData.wrapper==='poll') { state.HEAP32[0]=0;state.HEAP16[2]=1;state.HEAP32[2]=7;state.HEAP16[6]=1; }
+      else state.HEAP32[4]=1|(1<<7);
+      const result=workerData.wrapper==='poll' ? state.___syscall_poll(0,2,-1) : state.___syscall__newselect(8,16,0,0,0);
+      parentPort.postMessage({type:'result',result,readfds:state.HEAP32[4],revents:state.HEAP16[6]});
+      parentPort.close();
+    `, { eval: true, workerData: { heap: root.state.HEAP32.buffer, ready: ready.buffer, code, wrapper } });
+    let waitCount = 0;
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("atomic_poll_rescan_test_timeout")), 1000);
+        child.on("error", error => { clearTimeout(timer);reject(error); });
+        child.on("message", message => {
+          if (message.type === "result") { clearTimeout(timer);resolve(message);return; }
+          try {
+            assert.equal(message.type, "wait");assert.ok(message.timeout > 0 && message.timeout <= 10);waitCount++;
+            root.state.PTY_waitForReadableWithAtomicImpl(message.atomicIndex, message.timeout);
+            assert.equal(root.subscriptionCount(), 2);
+            Atomics.store(ready, 0, 1);
+          } catch (error) { clearTimeout(timer);reject(error); }
+        });
+      });
+      assert.equal(result.result, 1);assert.ok(waitCount > 0);
+      assert.equal(wrapper === "poll" ? result.revents : result.readfds, wrapper === "poll" ? 1 : 1 << 7);
+      assert.equal(root.subscriptionCount(), 0);assert.equal(root.state.PTY.readable, false);
+    } finally { await child.terminate(); }
+  });
 }
 
 test("actual source libraries and compiler emissions have pinned provenance", () => {
@@ -160,23 +290,26 @@ test("select owns its timeval even without readfds and across the pthread proxy"
   assert.equal(r.state.PTY_selectTimeout(64), 19);assert.equal(r.state.PTY_selectTimeout(0), -1);
   r.state.ENVIRONMENT_IS_PTHREAD = true;
   r.state.proxyToMainThread = () => { r.state.PTY_pollTimeout = 12345;return -1006; };
-  let captured;
-  r.state.PTY_waitForReadable = (callback, timeout) => { captured = timeout;callback(2); };
-  assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 64), 0);assert.equal(captured, 19);
-  assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 0), 0);assert.equal(captured, -1);
+  let now = 0;const captured = [];
+  r.state.performance = { now: () => now };
+  r.state.PTY_waitForReadable = (callback, timeout) => { captured.push(timeout);now += timeout;callback(2); };
+  assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 64), 0);assert.deepEqual(captured, [10, 9]);
+  r.state.PTY_waitForReadable = (callback, timeout) => { captured.push(timeout);callback(1); };
+  assert.equal(r.state.___syscall__newselect(1, 0, 0, 48, 0), -27);assert.equal(captured.at(-1), 10);
 });
 
 test("complete finite select timeout clears every supplied fd set", async () => {
   for (const kind of ["read", "except"]) {
-    const r = runtime();assert.equal(r.select(5, [0], kind), -1006);
+    const r = runtime(), clock = controlledClock(r);assert.equal(r.select(5, [0], kind), -1006);
     const original = r.state.FS.getStream;
     r.state.FS.getStream = fd => fd === 7 ? { stream_ops: { poll: () => 0 } } : original(fd);
     r.state.HEAP32[16 >> 2] = 1;r.state.HEAP32[32 >> 2] = 1 << 7;r.state.HEAP32[48 >> 2] = 1;
     r.state.PTY_handleSleep = startAsync => new Promise(resolve => startAsync(resolve));
-    const result = await r.state.___syscall__newselect(8, 16, 32, 48, 64);
-    assert.equal(result, 0);
+    const pending = r.state.___syscall__newselect(8, 16, 32, 48, 64);
+    await clock.advance(5);
+    assert.equal(await pending, 0);
     for (const ptr of [16, 32, 48]) { assert.equal(r.state.HEAP32[ptr >> 2], 0);assert.equal(r.state.HEAP32[(ptr + 4) >> 2], 0); }
-    assert.equal(r.subscriptionCount(), 0);assert.deepEqual(r.timers, [5]);
+    assert.equal(r.subscriptionCount(), 0);assert.equal(clock.now, 5);assert.equal(clock.pending, 0);
   }
 });
 

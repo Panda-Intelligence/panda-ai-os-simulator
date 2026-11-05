@@ -4014,28 +4014,31 @@ function createWasm() {
       };
   var PTY_handleSleep = PTY_handleSleepWithAtomic;
   var PTY_wrapPoll = (impl, timeout, onTimeout) => PTY_handleSleep((wakeUp) => {
-          let result = impl();
-          // Did this call return our variant of EAGAIN?
-          // If so, that means it called into the PTY and the buffer was empty.
-          if (result === -1006) {
-              // Wait for the PTY to become readable and try again.
-              PTY_waitForReadable(type => {
-                  switch (type) {
-                      case 0: /* ready */
-                          wakeUp(impl());
-                          break;
-                      case 1: /* interrupted */
-                          wakeUp(-27);
-                          break;
-                      case 2: /* timeout */
-                          if (onTimeout) onTimeout();
-                          wakeUp(0);
-                          break;
+          const deadline = timeout < 0 ? Infinity : performance.now() + timeout;
+          const resume = (interrupted) => {
+              if (interrupted) return wakeUp(-27);
+              for (;;) {
+                  const result = impl();
+                  if (result !== -1006) return wakeUp(result);
+                  const remaining = deadline - performance.now();
+                  if (remaining <= 0) {
+                      if (onTimeout) onTimeout();
+                      return wakeUp(0);
                   }
-              }, timeout);
-          } else {
-              wakeUp(result);
-          }
+                  // 非 TTY 就绪不会通知 PTY；为每次宿主等待设置有界切片，
+                  // 包括 pthread Atomics.wait，同时保持调用方的绝对截止时间。
+                  let synchronous = true, resolved = false, waitResult;
+                  PTY_waitForReadable(type => {
+                      if (synchronous) { resolved = true;waitResult = type; }
+                      else resume(type === 1 /* interrupted */);
+                  }, Math.min(10, remaining));
+                  synchronous = false;
+                  if (!resolved) return;
+                  if (waitResult === 1 /* interrupted */) return wakeUp(-27);
+                  // 原子等待会同步完成，使用迭代避免递归增长调用栈。
+              }
+          };
+          resume(false);
       });
   
   var PTY_selectTimeout = (timeout) => timeout
