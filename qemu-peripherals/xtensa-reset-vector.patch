@@ -1329,7 +1329,7 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
  }
 
  /*!
-@@ -158,116 +1124,4316 @@
+@@ -158,116 +1124,4318 @@
   * For the level-1 interrupt convert it to either user, kernel or double
   * exception with the 'level-1 interrupt' exception cause.
   */
@@ -3109,9 +3109,11 @@ diff --git a/target/xtensa/exc_helper.c b/target/xtensa/exc_helper.c
 +    result = mofei_next_queue_handle(0); /* A4 is capabilities, never queue kind. */
 +  } else if (QUEUE_TARGET(xTaskGetCurrentTaskHandle)) {
 +    result = mofei_serialized_task_token;
-+  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName)) {
++  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName) ||
++             QUEUE_TARGET(uxTaskGetStackHighWaterMark) || QUEUE_TARGET(uxTaskGetStackHighWaterMark2)) {
 +    if (a2 != 0 && a2 != mofei_serialized_task_token) return 0;
 +    /* NULL names truthfully mean unknown. The stack is the existing mapped app context, not a TCB. */
++    /* opaque task 没有历史填充值观测；high-water 返回不可用值 0，不伪造栈余量。 */
 +    result = QUEUE_TARGET(xTaskGetStackStart) ? MOFEI_SIM_FAKE_APP_STACK_BASE : 0;
 +  } else {
 +    MofeiFakeQueue* queue = mofei_fake_queue(a2);
@@ -7004,7 +7006,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
  }
 
  /*
-@@ -678,384 +601,1331 @@
+@@ -678,384 +601,1333 @@
   * An edge a -> b in the graph means that opcode a must be followed by
   * opcode b.
   */
@@ -7274,7 +7276,9 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
 +                          mofei_sim_addrs.xQueueGetMutexHolder_addr,
 +                          mofei_sim_addrs.xTaskGetCurrentTaskHandle_addr,
 +                          mofei_sim_addrs.xTaskGetStackStart_addr,
-+                          mofei_sim_addrs.pcTaskGetName_addr};
++                          mofei_sim_addrs.pcTaskGetName_addr,
++                          mofei_sim_addrs.uxTaskGetStackHighWaterMark_addr,
++                          mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr};
 +  if (entered) {
 +    for (size_t index = 0; index < sizeof(functions) / sizeof(functions[0]); ++index) {
 +      if (functions[index] && mofei_pc_match(dc->pc, functions[index] + 3)) {
@@ -8697,7 +8701,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
      if (op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
          for (slot = 0; slot < slots; ++slot) {
              if (slot_prop[slot].ops->op_flags & XTENSA_OP_DIVIDE_BY_ZERO) {
-@@ -1063,1176 +1933,1760 @@
+@@ -1063,1176 +1935,1760 @@
              }
          }
      }
@@ -11601,7 +11605,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
  #endif
  }
 
-@@ -2240,432 +3694,337 @@
+@@ -2240,432 +3696,337 @@
   * Note: 64 bit ops are used here solely because SAR values
   * have range 0..63
   */
@@ -12349,7 +12353,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
 
  gen_translate_xsr(acchi)
  gen_translate_xsr(ccompare)
-@@ -6125,499 +7484,366 @@
+@@ -6125,499 +7486,366 @@
      .opcode = core_ops,
  };
 
@@ -13200,7 +13204,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
  }
 
  static const XtensaOpcodeOps fpu2000_ops[] = {
-@@ -6625,206 +7851,247 @@
+@@ -6625,206 +7853,247 @@
          .name = "abs.s",
          .translate = translate_abs_s,
          .coprocessor = 0x1,
@@ -13489,7 +13493,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
          .name = "wur.fsr",
          .translate = translate_wur_fpu2k_fsr,
          .par = (const uint32_t[]){FSR},
-@@ -6837,299 +8104,244 @@
+@@ -6837,299 +8106,244 @@
      .opcode = fpu2000_ops,
  };
 
@@ -14019,7 +14023,7 @@ diff --git a/target/xtensa/translate.c b/target/xtensa/translate.c
  }
 
  static const XtensaOpcodeOps fpu_ops[] = {
-@@ -7137,529 +8349,638 @@
+@@ -7137,529 +8351,638 @@
          .name = "abs.d",
          .translate = translate_abs_d,
          .coprocessor = 0x1,

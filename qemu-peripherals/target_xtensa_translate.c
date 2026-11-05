@@ -770,7 +770,9 @@ static void mofei_try_queue_dispatch(DisasContext* dc, TCGv_i32 target, int call
                           mofei_sim_addrs.xQueueGetMutexHolder_addr,
                           mofei_sim_addrs.xTaskGetCurrentTaskHandle_addr,
                           mofei_sim_addrs.xTaskGetStackStart_addr,
-                          mofei_sim_addrs.pcTaskGetName_addr};
+                          mofei_sim_addrs.pcTaskGetName_addr,
+                          mofei_sim_addrs.uxTaskGetStackHighWaterMark_addr,
+                          mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr};
   if (entered) {
     for (size_t index = 0; index < sizeof(functions) / sizeof(functions[0]); ++index) {
       if (functions[index] && mofei_pc_match(dc->pc, functions[index] + 3)) {

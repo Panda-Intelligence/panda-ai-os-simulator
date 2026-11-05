@@ -481,6 +481,8 @@ typedef struct MofeiSimAddrs {
   uint32_t xTaskGetCurrentTaskHandle_addr;
   uint32_t xTaskGetStackStart_addr;
   uint32_t pcTaskGetName_addr;
+  uint32_t uxTaskGetStackHighWaterMark_addr;
+  uint32_t uxTaskGetStackHighWaterMark2_addr;
   uint32_t esp_intr_alloc_addr;
   uint32_t esp_intr_alloc_intrstatus_addr;
   uint32_t esp_intr_enable_addr;

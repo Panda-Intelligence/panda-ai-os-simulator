@@ -1869,6 +1869,8 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"xTaskGetCurrentTaskHandle", &a->xTaskGetCurrentTaskHandle_addr},
             {"xTaskGetStackStart", &a->xTaskGetStackStart_addr},
             {"pcTaskGetName", &a->pcTaskGetName_addr},
+            {"uxTaskGetStackHighWaterMark", &a->uxTaskGetStackHighWaterMark_addr},
+            {"uxTaskGetStackHighWaterMark2", &a->uxTaskGetStackHighWaterMark2_addr},
             {"xQueueGenericCreate", &a->xQueueGenericCreate_addr},
             {"xQueueCreateMutex", &a->xQueueCreateMutex_addr},
             {"xQueueCreateMutexStatic", &a->xQueueCreateMutexStatic_addr},

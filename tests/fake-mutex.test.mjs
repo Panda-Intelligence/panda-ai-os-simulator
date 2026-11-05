@@ -8,7 +8,7 @@ import {spawnSync} from "node:child_process";
 const root = new URL("../", import.meta.url);
 const source = name => readFileSync(new URL(`qemu-peripherals/${name}`, root), "utf8");
 function fn(source, name) {
-  const match = new RegExp(`(?:static )?(?:uint32_t|int|TaskHandle_t|char \\*|StackType_t \\*) ${name}\\([^;{}]*?\\)\\s*[^{};]*\\{`).exec(source);
+  const match = new RegExp(`(?:static )?(?:uint32_t|UBaseType_t|configSTACK_DEPTH_TYPE|int|TaskHandle_t|char \\*|StackType_t \\*) ${name}\\([^;{}]*?\\)\\s*[^{};]*\\{`).exec(source);
   assert.ok(match, name);
   const start = match.index, open = source.indexOf("{", start);
   let depth = 1, end = open + 1;
@@ -106,9 +106,18 @@ static TCB_t* fixtureTCB(TaskHandle_t task) { ++real_task_reads; assert(task); r
 #define prvGetTCBFromHandle fixtureTCB
 ${fn(tasks,"pcTaskGetName").replace("pcTaskGetName", "realTaskGetName")}
 ${fn(additions,"xTaskGetStackStart").replace("xTaskGetStackStart", "realTaskGetStackStart")}
+#define portSTACK_GROWTH (-1)
+#define tskSTACK_FILL_BYTE 0xa5u
+typedef unsigned UBaseType_t;
+typedef unsigned configSTACK_DEPTH_TYPE;
+${fn(tasks,"prvTaskCheckFreeStackSpace").replace("prvTaskCheckFreeStackSpace", "realTaskCheckFreeStackSpace")}
+${fn(tasks,"uxTaskGetStackHighWaterMark").replace("uxTaskGetStackHighWaterMark", "realTaskHighWaterMark").replace("prvTaskCheckFreeStackSpace", "realTaskCheckFreeStackSpace")}
+${fn(tasks,"uxTaskGetStackHighWaterMark2").replace("uxTaskGetStackHighWaterMark2", "realTaskHighWaterMark2").replace("prvTaskCheckFreeStackSpace", "realTaskCheckFreeStackSpace")}
 static uintptr_t taskQuery(uint32_t target, TaskHandle_t task) {
   CPUXtensaState env={0}; env.regs[2]=(uint32_t)task;
   if(helper_mofei_queue_intercept(&env,target,4)) return env.regs[2];
+  if(target==mofei_sim_addrs.uxTaskGetStackHighWaterMark_addr) return realTaskHighWaterMark(task);
+  if(target==mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr) return realTaskHighWaterMark2(task);
   return target==mofei_sim_addrs.xTaskGetStackStart_addr ? (uintptr_t)realTaskGetStackStart(task) : (uintptr_t)realTaskGetName(task);
 }
 int main(void) {
@@ -136,6 +145,18 @@ int main(void) {
     assert(api(mofei_sim_addrs.xTaskGetStackStart_addr,token,0,0,c)==MOFEI_SIM_FAKE_APP_STACK_BASE);
     assert(api(mofei_sim_addrs.pcTaskGetName_addr,token,0,0,c)==0);
   }
+  for(unsigned variant=0;variant<2;variant++) for(unsigned c=1;c<=4;c++) for(unsigned explicitToken=0;explicitToken<2;explicitToken++) {
+    const uint32_t highWaterTarget=variant?mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr:mofei_sim_addrs.uxTaskGetStackHighWaterMark_addr;
+    CPUXtensaState query={0}; unsigned base=c==4?0:c*4;
+    for(unsigned r=0;r<16;r++) query.regs[r]=0xa5000000u+r;
+    query.regs[base+2]=explicitToken?ownerA:0; CPUXtensaState savedQuery=query;
+    assert(helper_mofei_queue_intercept(&query,highWaterTarget,c));
+    assert(query.regs[base+2]==0);
+    for(unsigned r=0;r<16;r++) if(r!=base+2) assert(query.regs[r]==savedQuery.regs[r]);
+    query=savedQuery;query.regs[base+2]=ownerB;savedQuery=query;
+    assert(!helper_mofei_queue_intercept(&query,highWaterTarget,c));
+    assert(!memcmp(&query,&savedQuery,sizeof(query)));
+  }
   assert(real_task_reads==0);
   uintptr_t actualSP=${stackBase}-256;
   assert(actualSP-taskQuery(mofei_sim_addrs.xTaskGetStackStart_addr,0)==${stackBytes}-256);
@@ -146,7 +167,18 @@ int main(void) {
   StackType_t stack[64]; TCB_t realTask={.pxStack=stack,.pcTaskName="real-task"};
   assert(taskQuery(mofei_sim_addrs.xTaskGetStackStart_addr,(uintptr_t)&realTask)==(uintptr_t)stack);
   assert(!strcmp((char*)taskQuery(mofei_sim_addrs.pcTaskGetName_addr,(uintptr_t)&realTask),"real-task"));
-  assert(real_task_reads==2);
+  enum { expectedFreeStackBytes=11 };
+  memset(stack,0x33,sizeof(stack));memset(stack,tskSTACK_FILL_BYTE,expectedFreeStackBytes);
+  assert(taskQuery(mofei_sim_addrs.uxTaskGetStackHighWaterMark_addr,(uintptr_t)&realTask)==expectedFreeStackBytes);
+  assert(taskQuery(mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr,(uintptr_t)&realTask)==expectedFreeStackBytes);
+  assert(real_task_reads==4);
+  const uint32_t optionalQuery=mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr;
+  mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr=0;
+  CPUXtensaState unavailableVariant={0};unavailableVariant.regs[2]=ownerA;
+  CPUXtensaState savedVariant=unavailableVariant;
+  assert(!helper_mofei_queue_intercept(&unavailableVariant,optionalQuery,4));
+  assert(!memcmp(&unavailableVariant,&savedVariant,sizeof(unavailableVariant)));
+  mofei_sim_addrs.uxTaskGetStackHighWaterMark2_addr=optionalQuery;
   for (unsigned callinc=1;callinc<=4;callinc++) {
     CPUXtensaState e; for (unsigned i=0;i<16;i++) e.regs[i]=0xa000+i;
     CPUXtensaState before=e; unsigned base=callinc==4?0:callinc*4;
@@ -225,7 +257,7 @@ test("fake-only call and entry dispatch preserves real guest bodies",()=>{
   assert.match(translate,/mofei_try_queue_dispatch\(dc, arg\[0\]\.in, par\[0\], false\)/);
   assert.match(translate,/mofei_try_queue_dispatch\(dc, NULL, 0, true\)/);
   assert.match(translate,/TCG_COND_EQ, handled, 0, real_function/);
-  for(const n of ["xQueueGetMutexHolder","xTaskGetCurrentTaskHandle","xQueueGenericSend","xQueueSemaphoreTake","xQueueTakeMutexRecursive","xQueueGiveMutexRecursive","xTaskGetStackStart","pcTaskGetName","xQueueCreateMutexStatic"]) {
+  for(const n of ["xQueueGetMutexHolder","xTaskGetCurrentTaskHandle","xQueueGenericSend","xQueueSemaphoreTake","xQueueTakeMutexRecursive","xQueueGiveMutexRecursive","xTaskGetStackStart","pcTaskGetName","uxTaskGetStackHighWaterMark","uxTaskGetStackHighWaterMark2","xQueueCreateMutexStatic"]) {
     assert.ok(!machine.includes(`            "${n}",`),`${n} must retain its real body`);
     assert.ok(machine.includes(`{"${n}", &a->${n}_addr}`));
   }

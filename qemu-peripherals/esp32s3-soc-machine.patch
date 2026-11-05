@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,981 +9,4273 @@
+@@ -9,981 +9,4275 @@
   */
 
  #include "qemu/osdep.h"
@@ -2404,6 +2404,8 @@
 +            {"xTaskGetCurrentTaskHandle", &a->xTaskGetCurrentTaskHandle_addr},
 +            {"xTaskGetStackStart", &a->xTaskGetStackStart_addr},
 +            {"pcTaskGetName", &a->pcTaskGetName_addr},
++            {"uxTaskGetStackHighWaterMark", &a->uxTaskGetStackHighWaterMark_addr},
++            {"uxTaskGetStackHighWaterMark2", &a->uxTaskGetStackHighWaterMark2_addr},
 +            {"xQueueGenericCreate", &a->xQueueGenericCreate_addr},
 +            {"xQueueCreateMutex", &a->xQueueCreateMutex_addr},
 +            {"xQueueCreateMutexStatic", &a->xQueueCreateMutexStatic_addr},
@@ -5183,7 +5185,7 @@
  }
 
  static const TypeInfo esp32s3_info = {
-@@ -993,10 +4285,6 @@
+@@ -993,10 +4287,6 @@
      .class_init = esp32s3_machine_class_init,
  };
 

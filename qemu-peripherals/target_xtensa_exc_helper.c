@@ -2831,9 +2831,11 @@ uint32_t HELPER(mofei_queue_intercept)(CPUXtensaState* env, uint32_t target, uin
     result = mofei_next_queue_handle(0); /* A4 is capabilities, never queue kind. */
   } else if (QUEUE_TARGET(xTaskGetCurrentTaskHandle)) {
     result = mofei_serialized_task_token;
-  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName)) {
+  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName) ||
+             QUEUE_TARGET(uxTaskGetStackHighWaterMark) || QUEUE_TARGET(uxTaskGetStackHighWaterMark2)) {
     if (a2 != 0 && a2 != mofei_serialized_task_token) return 0;
     /* NULL names truthfully mean unknown. The stack is the existing mapped app context, not a TCB. */
+    /* opaque task 没有历史填充值观测；high-water 返回不可用值 0，不伪造栈余量。 */
     result = QUEUE_TARGET(xTaskGetStackStart) ? MOFEI_SIM_FAKE_APP_STACK_BASE : 0;
   } else {
     MofeiFakeQueue* queue = mofei_fake_queue(a2);
