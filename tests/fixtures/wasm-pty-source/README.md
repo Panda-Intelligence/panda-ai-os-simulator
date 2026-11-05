@@ -20,3 +20,8 @@ node --test tests/wasm-pty-poll.test.mjs
 The compiler's Wasm binaries remain temporary and are not fixtures. These
 contracts establish the three PTY defects independently of the release stall;
 only the same-guest replay and complete Studio checks can establish causality.
+# Reviewed source upgrade fixture
+
+2026-11-06，Codex：`previous-reviewed-pty.js` is the exact xterm-pty postimage produced by reviewed commit
+`5f6f8e364384805b8bcb44682a0895bb46bae048` (SHA-256 `c55d62e47a6311146797841f0107b678adba512bdd1e361019d51c2d53f44c21`).
+It retains the xterm-pty license already stored beside the original source and exercises normal source-patch upgrades.

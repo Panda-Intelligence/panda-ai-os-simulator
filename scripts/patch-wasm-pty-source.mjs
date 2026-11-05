@@ -15,10 +15,11 @@ export function patchWasmPtySources({ ptySource, syscallSource, outputDir, recei
   const states = manifest.files.map(file => {
     const input = inputs[file.key];
     const bytes = readFileSync(input), digest = sha(bytes);
-    if (digest !== file.beforeSha256 && digest !== file.afterSha256) {
+    const previousPatched = digest !== file.afterSha256 && (file.previousPatchedSha256 ?? []).includes(digest);
+    if (digest !== file.beforeSha256 && digest !== file.afterSha256 && !previousPatched) {
       throw new Error(`wasm_pty_source_version_mismatch:${file.key}:${digest}`);
     }
-    return { ...file, input, bytes, alreadyPatched: digest === file.afterSha256 };
+    return { ...file, input, bytes, alreadyPatched: digest === file.afterSha256, previousPatched };
   });
   const stage = mkdtempSync(join(tmpdir(), "panda-pty-source-"));
   try {
@@ -26,7 +27,7 @@ export function patchWasmPtySources({ ptySource, syscallSource, outputDir, recei
       const target = join(stage, file.staged);
       mkdirSync(dirname(target), { recursive: true });
       const backup = file.input + ".panda-pty-upstream";
-      if (file.alreadyPatched && states.some(other => !other.alreadyPatched)) {
+      if (file.previousPatched || (file.alreadyPatched && states.some(other => !other.alreadyPatched))) {
         if (!existsSync(backup) || sha(readFileSync(backup)) !== file.beforeSha256) {
           throw new Error(`wasm_pty_partial_source_without_upstream:${file.key}`);
         }
@@ -66,6 +67,7 @@ export function patchWasmPtySources({ ptySource, syscallSource, outputDir, recei
       files: states.map(file => ({
         key: file.key, input: file.input, upstreamSha256: file.beforeSha256,
         patchedSha256: sha(readFileSync(file.input)),
+        previousPatchedSha256: file.previousPatched ? sha(file.bytes) : null,
       })),
     };
     if (receiptPath) writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + "\n");

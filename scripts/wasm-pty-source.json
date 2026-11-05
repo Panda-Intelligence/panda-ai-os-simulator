@@ -11,7 +11,11 @@
       "key": "pty",
       "staged": "xterm-pty/emscripten-pty.js",
       "beforeSha256": "5c06b753f211e784e4ec64069a7113040eaa02a28d171d7ee249641f28f8fe20",
-      "afterSha256": "9148e542536a8ef5fbee5543a58ef50aed863e3d9add62d4d1b32b3cb0d5004b"
+      "afterSha256": "9148e542536a8ef5fbee5543a58ef50aed863e3d9add62d4d1b32b3cb0d5004b",
+      "previousPatchedSha256": [
+        "c55d62e47a6311146797841f0107b678adba512bdd1e361019d51c2d53f44c21",
+        "9148e542536a8ef5fbee5543a58ef50aed863e3d9add62d4d1b32b3cb0d5004b"
+      ]
     },
     {
       "key": "syscall",
