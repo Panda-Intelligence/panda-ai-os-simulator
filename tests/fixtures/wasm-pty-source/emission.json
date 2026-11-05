@@ -1,0 +1,61 @@
+{
+  "generatedAt": "2026-11-05T17:16:01.086Z",
+  "toolchainImageId": "sha256:203f421e68b8180a3986da47bd665af89a20acaca3478f7da280bfb2c56e90c4",
+  "emscriptenVersion": "3.1.50",
+  "xtermPtyVersion": "0.10.1",
+  "sourcePatchSha256": "ace6f4da7990a7d46aa1a0ed036e3f3e4f91fe0cad36c5b816acebecf4edbd60",
+  "emissions": [
+    {
+      "mode": "red",
+      "jsSha256": "348ec9ccd3f1ede9949643756024475eac9ceb01defed62921ae6366ac8cab96",
+      "cSha256": "3e5e7172a892d025b3c76df0a0f68ab0c0249de3ced4f26ebe12e0b35ea08162",
+      "compilerExit": 0,
+      "libraryInputs": "pristine pinned source",
+      "flags": [
+        "-O1",
+        "-g",
+        "-pthread",
+        "-sPROXY_TO_PTHREAD=1",
+        "-sASYNCIFY=1",
+        "-sFORCE_FILESYSTEM=1",
+        "-sWASM_BIGINT=1",
+        "-sMODULARIZE=1",
+        "-sEXPORT_ES6=1",
+        "-sENVIRONMENT=node"
+      ]
+    },
+    {
+      "mode": "green",
+      "jsSha256": "406dbd8e3f94f694ac058e8f74eccbce39b9b724d84f7b9c1ff57b509d735800",
+      "cSha256": "3e5e7172a892d025b3c76df0a0f68ab0c0249de3ced4f26ebe12e0b35ea08162",
+      "compilerExit": 0,
+      "libraryInputs": "canonical source patch applied before emcc",
+      "flags": [
+        "-O1",
+        "-g",
+        "-pthread",
+        "-sPROXY_TO_PTHREAD=1",
+        "-sASYNCIFY=1",
+        "-sFORCE_FILESYSTEM=1",
+        "-sWASM_BIGINT=1",
+        "-sMODULARIZE=1",
+        "-sEXPORT_ES6=1",
+        "-sENVIRONMENT=node"
+      ]
+    }
+  ],
+  "sourceLibraries": [
+    {
+      "key": "pty",
+      "staged": "xterm-pty/emscripten-pty.js",
+      "beforeSha256": "5c06b753f211e784e4ec64069a7113040eaa02a28d171d7ee249641f28f8fe20",
+      "afterSha256": "c55d62e47a6311146797841f0107b678adba512bdd1e361019d51c2d53f44c21"
+    },
+    {
+      "key": "syscall",
+      "staged": "emscripten/library_syscall.js",
+      "beforeSha256": "ea8e572e9b383f876335b2df37a1d83bf0d1053156b912a6231e3f3f6e9a5752",
+      "afterSha256": "a9f0cee09b13c7d0d7174b661da4bdb93bb042b366600c13edea38b2184089d9"
+    }
+  ]
+}

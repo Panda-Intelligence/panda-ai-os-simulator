@@ -1,0 +1,4 @@
+# 保留实际编译输出、许可证及统一补丁的原始字节。
+scripts/wasm-pty-source.patch -whitespace
+tests/fixtures/wasm-pty-source/emitted-*.js -whitespace
+tests/fixtures/wasm-pty-source/emscripten-LICENSE -whitespace

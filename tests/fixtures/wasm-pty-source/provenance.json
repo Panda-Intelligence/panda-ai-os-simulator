@@ -1,0 +1,41 @@
+{
+  "xtermPtyVersion": "0.10.1",
+  "emscriptenVersion": "3.1.50",
+  "toolchainImageId": "sha256:203f421e68b8180a3986da47bd665af89a20acaca3478f7da280bfb2c56e90c4",
+  "sourceUrls": {
+    "xterm-pty": "https://registry.npmjs.org/xterm-pty/-/xterm-pty-0.10.1.tgz",
+    "emscripten": "https://github.com/emscripten-core/emscripten/blob/3.1.50/src/library_syscall.js"
+  },
+  "files": [
+    {
+      "path": "emscripten-LICENSE",
+      "bytes": 5093,
+      "sha256": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86"
+    },
+    {
+      "path": "emscripten-pty.js",
+      "bytes": 10111,
+      "sha256": "5c06b753f211e784e4ec64069a7113040eaa02a28d171d7ee249641f28f8fe20"
+    },
+    {
+      "path": "emscripten-version.txt",
+      "bytes": 9,
+      "sha256": "077287c6f98d9664da805fa1df915160d36f0ff2985a36bf34d12c0dd4acad67"
+    },
+    {
+      "path": "library_syscall.js",
+      "bytes": 38671,
+      "sha256": "ea8e572e9b383f876335b2df37a1d83bf0d1053156b912a6231e3f3f6e9a5752"
+    },
+    {
+      "path": "xterm-pty-LICENSE",
+      "bytes": 1052,
+      "sha256": "45c32f09070ea64647927a671b0c150467e25319d31b9d38fb68e0b149d82268"
+    },
+    {
+      "path": "xterm-pty-package.json",
+      "bytes": 1169,
+      "sha256": "da7706707f738d8b92e718c18de2217a118dcb78415870cba5f75b6c8b52acff"
+    }
+  ]
+}

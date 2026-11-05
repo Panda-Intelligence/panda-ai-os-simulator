@@ -118,7 +118,7 @@ export function patchWasmContinuations(source) {
   return source;
 }
 
-export function patchWasmPtyPoll(source) {
+export function assertWasmPtySource(source) {
   const file = ts.createSourceFile("qemu-runtime.js", source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
   if (file.parseDiagnostics.length) fail("pty_javascript_syntax");
   const functions = [];
@@ -129,20 +129,46 @@ export function patchWasmPtyPoll(source) {
   visit(file);
   if (functions.length !== 1 || functions[0].parameters.map(node => node.name.getText(file)).join(",") !==
       "fds,nfds,timeout") fail("pty_poll_function");
-  const calls = [];
+  const calls = [], variables = new Map();
   function findPoll(node) {
-    if (ts.isCallExpression(node) && compact(node.expression.getText(file)) === "stream.stream_ops.poll") calls.push(node);
+    if (ts.isCallExpression(node) && /^(stream|ttyStream)\.stream_ops\.poll$/.test(compact(node.expression.getText(file)))) calls.push(node);
     ts.forEachChild(node, findPoll);
   }
   findPoll(functions[0]);
-  if (calls.length !== 1 || calls[0].arguments.length !== 2 ||
-      calls[0].arguments[0].getText(file) !== "stream") fail("pty_stream_poll");
-  const timeout = calls[0].arguments[1];
-  const replacement = "stream.tty ? timeout : -1";
-  if (compact(timeout.getText(file)) === compact(replacement)) return source;
-  if (compact(timeout.getText(file)) !== "-1") fail("pty_poll_timeout");
-  // xterm-pty 用第二个参数设置等待时间；保留客户机主循环的有限期限和零等待，其他 FD 维持原语义。
-  return source.slice(0, timeout.getStart(file)) + replacement + source.slice(timeout.end);
+  function findVariables(node) {
+    if (ts.isVariableDeclaration(node)) variables.set(node.name.getText(file), node.initializer);
+    ts.forEachChild(node, findVariables);
+  }
+  findVariables(file);
+  if (calls.length !== 2 || compact(calls[0].arguments[1]?.getText(file) ?? "") !== "stream.tty?0:-1"
+      || compact(calls[1].getText(file)) !== "ttyStream.stream_ops.poll(ttyStream,timeout)") fail("pty_source_poll_scan");
+  let readyBeforeWait = false;
+  function findReady(node) {
+    if (ts.isIfStatement(node) && compact(node.expression.getText(file)) === "nonzero||!ttyStream||!timeout"
+        && /returnnonzero[;}]/.test(compact(node.thenStatement.getText(file)))) readyBeforeWait = true;
+    ts.forEachChild(node, findReady);
+  }
+  findReady(functions[0]);
+  if (!readyBeforeWait) fail("pty_source_ready_before_wait");
+  const wait = variables.get("PTY_waitForReadableWithCallback");
+  if (!wait || wait.parameters?.map(node => node.name.getText(file)).join(",") !== "callback,timeout") fail("pty_source_wait_arguments");
+  const waitText = compact(wait.getText(file));
+  if (waitText.indexOf("if(PTY.readable)") < 0 || waitText.indexOf("if(PTY.readable)") > waitText.indexOf("PTY.onReadable")) fail("pty_source_already_readable");
+  const tty = variables.get("TTY");
+  if (!tty || !compact(tty.getText(file)).includes("stream.flags&2048")) fail("pty_source_nonblocking_read");
+  const selectFunctions = [];
+  function findSelect(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "xterm_pty_old_newselect") selectFunctions.push(node);
+    ts.forEachChild(node, findSelect);
+  }
+  findSelect(file);
+  if (selectFunctions.length !== 1 || selectFunctions[0].parameters.map(node => node.name.getText(file)).join(",") !==
+      "nfds,readfds,writefds,exceptfds,timeout") fail("pty_source_select_arguments");
+  const selectText = compact(selectFunctions[0].getText(file));
+  if (!selectText.includes("stream.tty?0:timeoutInMillis") || !selectText.includes("ttyStream.stream_ops.poll(ttyStream,timeoutInMillis)")) fail("pty_source_select_scan");
+  const selectWrapper = variables.get("___syscall__newselect");
+  if (!selectWrapper || !compact(selectWrapper.getText(file)).includes("PTY_selectTimeout(timeout)")) fail("pty_source_select_timeout_owner");
+  return source;
 }
 
 export function patchWasmRootMailbox(source) {
@@ -168,10 +194,16 @@ export function patchWasmRootMailbox(source) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.argv[2] === "--check-pty" && process.argv.length === 4) {
+    assertWasmPtySource(readFileSync(process.argv[3], "utf8"));
+    process.exit(0);
+  }
   const target = process.argv[2];
   if (!target || process.argv.length !== 3) throw new Error("Usage: node patch-wasm-continuations.mjs <runtime-js>");
   const source = readFileSync(target, "utf8");
-  const patched = patchWasmRootMailbox(patchWasmPtyPoll(patchWasmContinuations(source)));
+  // PTY 行为来自编译前的依赖源补丁；这里只验证，禁止修改生成后的 PTY 函数。
+  assertWasmPtySource(source);
+  const patched = patchWasmRootMailbox(patchWasmContinuations(source));
   writeFileSync(target, patched);
   console.log("[patch-wasm-continuations] " + target);
 }

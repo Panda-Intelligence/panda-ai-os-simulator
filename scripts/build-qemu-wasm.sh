@@ -1514,18 +1514,27 @@ stop_container() {
 }
 
 configure_and_make() {
-  local extra_cflags
+  local extra_cflags pty_library pty_receipt
   case "${QEMU_WASM_MALLOC}" in
     emmalloc|dlmalloc|mimalloc) ;;
     *) die "QEMU_WASM_MALLOC must be emmalloc, dlmalloc, or mimalloc (got ${QEMU_WASM_MALLOC})" ;;
   esac
-  extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} -sSTACK_OVERFLOW_CHECK=2 --js-library=/build/node_modules/xterm-pty/emscripten-pty.js --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
+  pty_receipt="${QEMU_WASM_BUILD_DIR}/panda-pty-source.json"
+  docker exec "${QEMU_WASM_CONTAINER}" node "${QEMU_WASM_SCRIPT_MOUNT}/patch-wasm-pty-source.mjs" \
+    --pty-source /build/node_modules/xterm-pty/emscripten-pty.js \
+    --syscall-source /emsdk/upstream/emscripten/src/library_syscall.js \
+    --output-dir "${QEMU_WASM_BUILD_DIR}/panda-pty-source" --receipt "${pty_receipt}"
+  pty_library="$(docker exec "${QEMU_WASM_CONTAINER}" node -e \
+    'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).libraryPath)' "${pty_receipt}")"
+  # 内容寻址的源库路径同时进入编译／链接命令，防止旧链接结果被误认为缓存命中。
+  extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} -sSTACK_OVERFLOW_CHECK=2 --js-library=${pty_library} --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
   step "configuring qemu-system-xtensa for wasm32"
   if [[ "${QEMU_WASM_KEEP_BUILD}" != "1" ]]; then
     docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -lc "rm -rf ${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa* ${QEMU_WASM_BUILD_DIR}/config-host.mak ${QEMU_WASM_BUILD_DIR}/build.ninja"
   fi
   docker exec \
     -e "EXTRA_CFLAGS=${extra_cflags}" \
+    -e "EMCC_CFLAGS=--js-library=${pty_library}" \
     "${QEMU_WASM_CONTAINER}" \
     emconfigure /qemu/configure \
       --static \
@@ -1542,7 +1551,7 @@ configure_and_make() {
       --extra-ldflags="${extra_cflags} -sEXPORTED_RUNTIME_METHODS=getTempRet0,setTempRet0,addFunction,removeFunction,TTY,FS,callMain -sEXPORTED_FUNCTIONS=_main,_malloc,_free,_mofei_wasm_inject_touch,_mofei_wasm_inject_button,_mofei_wasm_release_buttons,_mofei_wasm_i2c_control"
 
   step "building qemu-system-xtensa"
-  docker exec "${QEMU_WASM_CONTAINER}" emmake make -j "${JOBS}"
+  docker exec -e "EMCC_CFLAGS=--js-library=${pty_library}" "${QEMU_WASM_CONTAINER}" emmake make -j "${JOBS}"
 }
 
 patch_qemu_wasm_runtime_env_bridge() {
@@ -1612,9 +1621,13 @@ copy_artifacts() {
   docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/load.js" "${RUNTIME_LOAD_JS}" 2>/dev/null || true
   copy_if_present "${QEMU_WASM_SRC_DIR}/pc-bios/esp32s3_rev0_rom.bin" "${RUNTIME_ROM_BIN}"
 
-  if [[ "${RUNTIME_ONLY}" -eq 1 ]]; then
-    QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC}" python3 "${SCRIPT_DIR}/runtime-source-manifest.py" "${OUTPUT_DIR}" "${QEMU_WASM_SRC_DIR}" "${NATIVE_QEMU_DIR}" "${SIM_ROOT}" "${QEMU_WASM_IMAGE}"
-  else
+  local pty_source_receipt
+  pty_source_receipt="$(mktemp "${QEMU_WASM_CACHE_DIR}/pty-source-receipt.XXXXXX")"
+  docker cp "${QEMU_WASM_CONTAINER}:${QEMU_WASM_BUILD_DIR}/panda-pty-source.json" "${pty_source_receipt}"
+  QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC}" QEMU_WASM_PTY_SOURCE_RECEIPT="${pty_source_receipt}" \
+    python3 "${SCRIPT_DIR}/runtime-source-manifest.py" "${OUTPUT_DIR}" "${QEMU_WASM_SRC_DIR}" "${NATIVE_QEMU_DIR}" "${SIM_ROOT}" "${QEMU_WASM_IMAGE}"
+  rm -f "${pty_source_receipt}"
+  if [[ "${RUNTIME_ONLY}" -ne 1 ]]; then
     refresh_firmware_artifacts
   fi
   step "artifacts ready: ${OUTPUT_DIR}"
@@ -1732,12 +1745,13 @@ fi
 
 patch_qemu_wasm_runtime_env_bridge "${RUNTIME_JS}"
 patch_qemu_wasm_runtime_worker_bridge "${RUNTIME_JS}"
-if [[ -f "${RUNTIME_JS}" ]]; then
+if [[ -f "${RUNTIME_JS}" ]] && node "${SCRIPT_DIR}/patch-wasm-continuations.mjs" --check-pty "${RUNTIME_JS}" >/dev/null 2>&1; then
   node "${SCRIPT_DIR}/patch-wasm-continuations.mjs" "${RUNTIME_JS}"
 fi
 
 if [[ "${FORCE}" -eq 0 && -f "${RUNTIME_JS}" && -f "${RUNTIME_WASM}" && -f "${RUNTIME_ROM_BIN}" ]] &&
-  runtime_supports_required_boards; then
+  runtime_supports_required_boards && \
+  node "${SCRIPT_DIR}/patch-wasm-continuations.mjs" --check-pty "${RUNTIME_JS}" >/dev/null 2>&1; then
   step "cache hit: ${OUTPUT_DIR} (use --force to rebuild qemu-wasm); refreshing firmware artifacts"
   refresh_firmware_artifacts
   exit 0

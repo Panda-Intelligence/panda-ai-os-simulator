@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "xtermPtyVersion": "0.10.1",
+  "emscriptenVersion": "3.1.50",
+  "sourceUrls": {
+    "xterm-pty": "https://registry.npmjs.org/xterm-pty/-/xterm-pty-0.10.1.tgz",
+    "emscripten": "https://github.com/emscripten-core/emscripten/blob/3.1.50/src/library_syscall.js"
+  },
+  "files": [
+    {
+      "key": "pty",
+      "staged": "xterm-pty/emscripten-pty.js",
+      "beforeSha256": "5c06b753f211e784e4ec64069a7113040eaa02a28d171d7ee249641f28f8fe20",
+      "afterSha256": "c55d62e47a6311146797841f0107b678adba512bdd1e361019d51c2d53f44c21"
+    },
+    {
+      "key": "syscall",
+      "staged": "emscripten/library_syscall.js",
+      "beforeSha256": "ea8e572e9b383f876335b2df37a1d83bf0d1053156b912a6231e3f3f6e9a5752",
+      "afterSha256": "a9f0cee09b13c7d0d7174b661da4bdb93bb042b366600c13edea38b2184089d9"
+    }
+  ]
+}
