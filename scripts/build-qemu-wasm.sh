@@ -1515,6 +1515,26 @@ stop_container() {
   fi
 }
 
+patch_qemu_wasm_pty_link_input() {
+  QEMU_WASM_PTY_LIBRARY="$1" QEMU_WASM_SCRIPT_MOUNT="${QEMU_WASM_SCRIPT_MOUNT}" \
+    patch_python_if_present "${QEMU_WASM_SRC_DIR}/meson.build" '
+import os
+
+quote = chr(39)
+library = os.environ["QEMU_WASM_PTY_LIBRARY"]
+bridge = os.environ["QEMU_WASM_SCRIPT_MOUNT"].rstrip("/") + "/qemu-wasm-mofei-bridge.js"
+bridge_line = "    " + quote + "--js-library=" + bridge + quote + ",\n"
+if text.count(bridge_line) != 1:
+    raise ValueError("expected one canonical WASM bridge link argument")
+lines = text.splitlines(keepends=True)
+text = "".join(line for line in lines if not (
+    line.strip().startswith(quote + "--js-library=") and
+    line.strip().endswith("/emscripten-pty.js" + quote + ",")))
+pty_line = "    " + quote + "--js-library=" + library + quote + ",\n"
+text = text.replace(bridge_line, pty_line + bridge_line)
+'
+}
+
 configure_and_make() {
   local extra_cflags pty_library pty_receipt
   case "${QEMU_WASM_MALLOC}" in
@@ -1528,6 +1548,8 @@ configure_and_make() {
     --output-dir "${QEMU_WASM_BUILD_DIR}/panda-pty-source" --receipt "${pty_receipt}"
   pty_library="$(docker exec "${QEMU_WASM_CONTAINER}" node -e \
     'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).libraryPath)' "${pty_receipt}")"
+  # Meson 必须记录同一内容寻址路径，环境变量本身不能触发 Ninja 重新链接。
+  patch_qemu_wasm_pty_link_input "${pty_library}"
   # 内容寻址的源库路径同时进入编译／链接命令，防止旧链接结果被误认为缓存命中。
   extra_cflags="-O3 -g -Wno-error=unused-command-line-argument -matomics -mbulk-memory -DNDEBUG -DG_DISABLE_ASSERT -D_GNU_SOURCE -sASYNCIFY=1 -pthread -sPROXY_TO_PTHREAD=1 -sFORCE_FILESYSTEM -sALLOW_TABLE_GROWTH -sTOTAL_MEMORY=2300MB -sWASM_BIGINT -sMALLOC=${QEMU_WASM_MALLOC} -sSTACK_OVERFLOW_CHECK=2 --js-library=${pty_library} --js-library=${QEMU_WASM_SCRIPT_MOUNT}/qemu-wasm-mofei-bridge.js -sMODULARIZE=1 -sEXPORT_ES6=1 -sASYNCIFY_IMPORTS=ffi_call_js"
   step "configuring qemu-system-xtensa for wasm32"
