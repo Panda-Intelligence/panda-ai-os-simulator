@@ -10,6 +10,9 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, Mutex};
 use tokio::time::Instant;
 
+#[cfg(test)]
+mod read_loop_tests;
+
 pub const DEBUG_PORT_ENV: &str = "PANDA_SIM_DEBUG_PORT";
 pub const CHANNEL_DEBUG: u8 = 0x08;
 const DEBUG_BROKER_CAPACITY: usize = 128;
