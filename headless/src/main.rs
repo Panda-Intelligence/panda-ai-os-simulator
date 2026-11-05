@@ -860,6 +860,15 @@ struct SdDrive {
     image_path: Option<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum E2eSdRootPolicy {
+    Retain,
+    BatchScratch,
+}
+
+#[cfg(test)]
+mod batch_resource_tests;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TouchTap {
     x: u16,
@@ -1352,6 +1361,19 @@ fn e2e_case_sd_root(args: &Args, artifacts_dir: &Path) -> Result<PathBuf> {
     simulator_sd_root(Some(sd_root))
 }
 
+fn sync_e2e_sd_after_case(
+    image_path: &Path,
+    sd_root: &Path,
+    policy: E2eSdRootPolicy,
+    deferred_assertions: &[DeferredSdFileAssertion],
+) -> Result<()> {
+    // 批次自建目錄用完即棄；只有延後的 SD 斷言需要讀取 guest 寫回的內容。
+    if policy == E2eSdRootPolicy::BatchScratch && deferred_assertions.is_empty() {
+        return Ok(());
+    }
+    sd_image::sync_sd_image_to_dir(image_path, sd_root)
+}
+
 fn partition_label(entry: &[u8]) -> String {
     let label = &entry[12..28];
     let end = label.iter().position(|b| *b == 0).unwrap_or(label.len());
@@ -1803,8 +1825,14 @@ async fn main() -> Result<()> {
         }
         (Some(case_path), None) => {
             let case = load_e2e_case(case_path)?;
-            let outcome =
-                run_e2e_case(&args, case, debug_writer.clone(), debug_broker.clone()).await?;
+            let outcome = run_e2e_case(
+                &args,
+                case,
+                E2eSdRootPolicy::Retain,
+                debug_writer.clone(),
+                debug_broker.clone(),
+            )
+            .await?;
             if outcome.status != "FAIL" {
                 return Ok(());
             }
@@ -6102,6 +6130,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
 async fn run_e2e_case(
     args: &Args,
     case: E2ECase,
+    sd_policy: E2eSdRootPolicy,
     debug_writer: debug_transport::HeadlessDebugWriter,
     debug_broker: debug_transport::DebugTransportBroker,
 ) -> Result<CaseRunOutcome> {
@@ -7089,7 +7118,12 @@ async fn run_e2e_case(
     stderr_handle.abort();
     stdout_handle.abort();
     if let Some(image_path) = sd_drive.image_path.as_deref() {
-        sd_image::sync_sd_image_to_dir(image_path, &sd_root)?;
+        sync_e2e_sd_after_case(
+            image_path,
+            &sd_root,
+            sd_policy,
+            &deferred_sd_file_assertions,
+        )?;
     }
 
     for assertion in &deferred_sd_file_assertions {
@@ -7216,18 +7250,26 @@ async fn run_e2e_case_dir(
             case.id,
             case_path.display()
         );
-        let outcome_result =
-            run_e2e_case(&case_args, case, debug_writer.clone(), debug_broker.clone()).await;
-        if args.sd_root.is_none() {
-            // 批次案例各自建立可再生的 SD 工件；結果、截圖與 transcript 仍保留在 case artifacts。
-            cleanup_e2e_batch_sd_artifacts(
-                case_args
-                    .sd_root
-                    .as_deref()
-                    .expect("batch case must have an isolated SD root"),
-                &case_args.artifacts,
-            )?;
-        }
+        let sd_policy = if args.sd_root.is_some() {
+            E2eSdRootPolicy::Retain
+        } else {
+            E2eSdRootPolicy::BatchScratch
+        };
+        let outcome_result = run_e2e_case(
+            &case_args,
+            case,
+            sd_policy,
+            debug_writer.clone(),
+            debug_broker.clone(),
+        )
+        .await;
+        let generated_sd_root = if args.sd_root.is_none() {
+            case_args.sd_root.as_deref()
+        } else {
+            None
+        };
+        // run_e2e_case 已關閉 QEMU 並持久化結果、transcript 與截圖，才回傳 PASS。
+        cleanup_e2e_batch_artifacts(generated_sd_root, &case_args.artifacts, &outcome_result)?;
         let outcome = outcome_result?;
         outcomes.push(outcome);
     }
@@ -7265,6 +7307,29 @@ async fn run_e2e_case_dir(
         return Err(anyhow!("{} simulator E2E case(s) failed", failed.len()));
     }
 
+    Ok(())
+}
+
+fn cleanup_e2e_batch_artifacts(
+    generated_sd_root: Option<&Path>,
+    artifacts_dir: &Path,
+    outcome: &Result<CaseRunOutcome>,
+) -> Result<()> {
+    if !matches!(outcome, Ok(outcome) if outcome.status == "PASS") {
+        return Ok(());
+    }
+    if let Some(sd_root) = generated_sd_root {
+        cleanup_e2e_batch_sd_artifacts(sd_root, artifacts_dir)?;
+    }
+    let flash_path = artifacts_dir.join("flash.img");
+    if flash_path.exists() {
+        fs::remove_file(&flash_path).with_context(|| {
+            format!(
+                "removing completed batch flash image {}",
+                flash_path.display()
+            )
+        })?;
+    }
     Ok(())
 }
 
