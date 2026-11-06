@@ -481,6 +481,8 @@ typedef struct MofeiSimAddrs {
   uint32_t xTaskGetCurrentTaskHandle_addr;
   uint32_t xTaskGetStackStart_addr;
   uint32_t pcTaskGetName_addr;
+  uint32_t uxTaskGetStackHighWaterMark_addr;
+  uint32_t uxTaskGetStackHighWaterMark2_addr;
   uint32_t esp_intr_alloc_addr;
   uint32_t esp_intr_alloc_intrstatus_addr;
   uint32_t esp_intr_enable_addr;
@@ -610,6 +612,14 @@ typedef struct MofeiSimAddrs {
   uint32_t murphyVtableDictionaryScene_addr;             /* vtable for murphy::app::ReaderDictionaryResultScene */
   uint32_t murphyVtableSudokuScene_addr;                 /* vtable for murphy::app::SudokuScene */
   uint32_t murphyVtableVirtualPetScene_addr;             /* vtable for murphy::app::VirtualPetScene */
+  uint32_t murphyVtableSokobanScene_addr;
+  uint32_t murphyVtableDailyMazeScene_addr;
+  uint32_t murphyVtableArcadeChallengesScene_addr;
+  uint32_t murphyVtablePaperBoyMinesweeperScene_addr;
+  uint32_t murphyVtablePaperboyGbScene_addr;
+  uint32_t murphyVtablePaperboyNesScene_addr;
+  uint32_t murphyVtableElectronicSandScene_addr;
+  uint32_t murphyVtableSleepAppearancePreviewScene_addr;
   uint32_t murphyVtableWordPuzzleScene_addr;             /* WordPuzzleScene 的 vtable */
   uint32_t murphyVtablePandaCloudAccountScene_addr;      /* PandaCloudAccountScene 的 vtable */
   uint32_t murphyVtableGnssScene_addr;                   /* GnssScene 的 vtable */
@@ -656,9 +666,16 @@ typedef struct MofeiSimAddrs {
   uint32_t s_system_inited_1_addr;
   uint32_t s_system_full_inited_addr;
   uint32_t heap_start_addr; /* linker _heap_start for simulator-safe internal heap base */
+  /* IDF TLS 模板边界与绝对对齐值；不是 guest TCB 或固定变量偏移。 */
+  uint32_t tls_data_start_addr;
+  uint32_t tls_data_end_addr;
+  uint32_t tls_bss_start_addr;
+  uint32_t tls_bss_end_addr;
+  uint32_t tls_section_alignment;
   bool resolved;            /* true after successful symbol resolution */
 } MofeiSimAddrs;
 
 extern MofeiSimAddrs mofei_sim_addrs;
+void mofei_sim_reset_serialized_task(void);
 
 #endif /* MOFEI_SIM_ADDRS_H */

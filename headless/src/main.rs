@@ -860,6 +860,15 @@ struct SdDrive {
     image_path: Option<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum E2eSdRootPolicy {
+    Retain,
+    BatchScratch,
+}
+
+#[cfg(test)]
+mod batch_resource_tests;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct TouchTap {
     x: u16,
@@ -1352,6 +1361,19 @@ fn e2e_case_sd_root(args: &Args, artifacts_dir: &Path) -> Result<PathBuf> {
     simulator_sd_root(Some(sd_root))
 }
 
+fn sync_e2e_sd_after_case(
+    image_path: &Path,
+    sd_root: &Path,
+    policy: E2eSdRootPolicy,
+    deferred_assertions: &[DeferredSdFileAssertion],
+) -> Result<()> {
+    // 批次自建目錄用完即棄；只有延後的 SD 斷言需要讀取 guest 寫回的內容。
+    if policy == E2eSdRootPolicy::BatchScratch && deferred_assertions.is_empty() {
+        return Ok(());
+    }
+    sd_image::sync_sd_image_to_dir(image_path, sd_root)
+}
+
 fn partition_label(entry: &[u8]) -> String {
     let label = &entry[12..28];
     let end = label.iter().position(|b| *b == 0).unwrap_or(label.len());
@@ -1803,8 +1825,14 @@ async fn main() -> Result<()> {
         }
         (Some(case_path), None) => {
             let case = load_e2e_case(case_path)?;
-            let outcome =
-                run_e2e_case(&args, case, debug_writer.clone(), debug_broker.clone()).await?;
+            let outcome = run_e2e_case(
+                &args,
+                case,
+                E2eSdRootPolicy::Retain,
+                debug_writer.clone(),
+                debug_broker.clone(),
+            )
+            .await?;
             if outcome.status != "FAIL" {
                 return Ok(());
             }
@@ -2223,16 +2251,54 @@ async fn wait_for_shutdown_signal() {
 }
 
 async fn read_loop(
-    mut read_half: tokio::net::unix::OwnedReadHalf,
+    read_half: tokio::net::unix::OwnedReadHalf,
     event_tx: mpsc::UnboundedSender<HeadlessEvent>,
     injection_plan: InjectionPlan,
-    mut injection_rx: mpsc::UnboundedReceiver<InjectionCommand>,
+    injection_rx: mpsc::UnboundedReceiver<InjectionCommand>,
     geometry: BoardGeometry,
     writer: debug_transport::HeadlessDebugWriter,
     debug_broker: debug_transport::DebugTransportBroker,
     radio_peer: Option<RadioPeerSender>,
 ) -> Result<()> {
-    let mut header = [0u8; HEADER_LEN];
+    let has_injections = injection_plan.has_injections();
+    let (frame_tx, frame_rx) = mpsc::unbounded_channel();
+    let injection_worker = injection_loop(
+        injection_plan,
+        injection_rx,
+        frame_rx,
+        geometry.clone(),
+        writer,
+        event_tx.clone(),
+    );
+    let receiver = receive_loop(
+        read_half,
+        event_tx,
+        geometry,
+        debug_broker,
+        radio_peer,
+        has_injections.then_some(frame_tx),
+    );
+    tokio::pin!(receiver);
+    // 兩個 future 由同一層擁有；接收結束、注入失敗或外層取消都會同步取消另一方。
+    tokio::select! {
+        result = &mut receiver => result,
+        result = injection_worker => {
+            result?;
+            receiver.await
+        },
+    }
+}
+
+async fn injection_loop(
+    injection_plan: InjectionPlan,
+    mut injection_rx: mpsc::UnboundedReceiver<InjectionCommand>,
+    mut frame_rx: mpsc::UnboundedReceiver<bool>,
+    geometry: BoardGeometry,
+    writer: debug_transport::HeadlessDebugWriter,
+    event_tx: mpsc::UnboundedSender<HeadlessEvent>,
+) -> Result<()> {
+    let mut manual_input_open = true;
+    let mut frames_open = true;
     let mut injection_started = false;
     let mut injection_completed = false;
     let mut next_tap_index = 0usize;
@@ -2240,134 +2306,84 @@ async fn read_loop(
     let mut meaningful_frames_before_input = 0u64;
     loop {
         tokio::select! {
-            header_result = read_half.read_exact(&mut header) => {
-                match header_result {
-                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof
-                        || e.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
-                    Err(e) => return Err(e.into()),
-                    Ok(_) => {}
+            frame = frame_rx.recv(), if frames_open => {
+                let Some(has_content) = frame else {
+                    frames_open = false;
+                    continue;
+                };
+                if has_content && !injection_started {
+                    meaningful_frames_before_input =
+                        meaningful_frames_before_input.saturating_add(1);
                 }
-                let channel = header[0];
-                let _flags = header[1];
-                let payload_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
-                if payload_len > MAX_PAYLOAD {
-                    return Err(anyhow!("payload_len {payload_len} exceeds cap"));
+                let can_start_injection = injection_plan.has_injections()
+                    && !injection_started
+                    && !injection_completed
+                    && has_content
+                    && meaningful_frames_before_input
+                        >= injection_plan.startup_frames_before_input.clamp(
+                            MIN_STARTUP_FRAMES_BEFORE_INPUT,
+                            MAX_STARTUP_FRAMES_BEFORE_INPUT,
+                        );
+                if !injection_plan.has_injections() || injection_completed {
+                    continue;
                 }
-                let mut payload = vec![0u8; payload_len as usize];
-                if payload_len > 0 {
-                    read_half.read_exact(&mut payload).await?;
+                if can_start_injection {
+                    injection_started = true;
+                } else if injection_started {
+                    frames_since_last_injection += 1;
+                } else {
+                    continue;
                 }
-                match channel {
-                    CHANNEL_FRAMEBUFFER => {
-                        if payload.len() == geometry.fb_bytes() {
-                            let has_content = framebuffer_has_content(&payload, &geometry);
-                            if has_content && !injection_started {
-                                meaningful_frames_before_input =
-                                    meaningful_frames_before_input.saturating_add(1);
-                            }
-                            let can_start_injection = injection_plan.has_injections()
-                                && !injection_started
-                                && !injection_completed
-                                && has_content
-                                && meaningful_frames_before_input
-                                    >= injection_plan.startup_frames_before_input.clamp(
-                                        MIN_STARTUP_FRAMES_BEFORE_INPUT,
-                                        MAX_STARTUP_FRAMES_BEFORE_INPUT,
-                                    );
-                            if event_tx.send(HeadlessEvent::Frame(payload)).is_err() {
-                                return Ok(());
-                            }
-
-                            if !injection_plan.has_injections() || injection_completed {
-                                continue;
-                            }
-
-                            if can_start_injection {
-                                injection_started = true;
-                            } else if injection_started {
-                                frames_since_last_injection += 1;
-                            } else {
-                                continue;
-                            }
-
-                            if next_tap_index < injection_plan.taps.len() {
-                                let required_frames = if next_tap_index == FIRST_TAP_INDEX {
-                                    if injection_plan.startup_frames_before_input
-                                        <= MIN_STARTUP_FRAMES_BEFORE_INPUT
-                                    {
-                                        NO_INPUT_FRAME_GAP
-                                    } else {
-                                        FIRST_TAP_FRAME_GAP
-                                    }
-                                } else {
-                                    injection_plan.post_tap_frames_before_buttons
-                                };
-                                if frames_since_last_injection < required_frames {
-                                    continue;
-                                }
-
-                                let tap = injection_plan.taps[next_tap_index];
-                                write_touch_tap(&writer, tap.x, tap.y).await?;
-                                if injection_plan.post_tap_delay_ms > 0 {
-                                    time::sleep(Duration::from_millis(injection_plan.post_tap_delay_ms))
-                                        .await;
-                                }
-                                next_tap_index += 1;
-                                frames_since_last_injection = 0;
-                                if next_tap_index == injection_plan.taps.len()
-                                    && injection_plan.inject_buttons.is_empty()
-                                {
-                                    injection_completed = true;
-                                    if event_tx.send(HeadlessEvent::Injected).is_err() {
-                                        return Ok(());
-                                    }
-                                }
-                                continue;
-                            }
-
-                            let required_button_frames = if injection_plan.taps.is_empty() {
-                                NO_WAIT_FRAMES
-                            } else {
-                                injection_plan.post_tap_frames_before_buttons
-                            };
-                            if !injection_plan.inject_buttons.is_empty()
-                                && frames_since_last_injection >= required_button_frames
-                            {
-                                for button_id in &injection_plan.inject_buttons {
-                                    write_button_click(
-                                        &writer,
-                                        *button_id,
-                                        injection_plan.button_hold_ms,
-                                    )
-                                    .await?;
-                                }
-                                injection_completed = true;
-                                if event_tx.send(HeadlessEvent::Injected).is_err() {
-                                    return Ok(());
-                                }
-                            }
+                if next_tap_index < injection_plan.taps.len() {
+                    let required_frames = if next_tap_index == FIRST_TAP_INDEX {
+                        if injection_plan.startup_frames_before_input
+                            <= MIN_STARTUP_FRAMES_BEFORE_INPUT
+                        {
+                            NO_INPUT_FRAME_GAP
+                        } else {
+                            FIRST_TAP_FRAME_GAP
+                        }
+                    } else {
+                        injection_plan.post_tap_frames_before_buttons
+                    };
+                    if frames_since_last_injection < required_frames {
+                        continue;
+                    }
+                    let tap = injection_plan.taps[next_tap_index];
+                    write_touch_tap(&writer, tap.x, tap.y).await?;
+                    if injection_plan.post_tap_delay_ms > 0 {
+                        time::sleep(Duration::from_millis(injection_plan.post_tap_delay_ms)).await;
+                    }
+                    next_tap_index += 1;
+                    frames_since_last_injection = 0;
+                    if next_tap_index == injection_plan.taps.len()
+                        && injection_plan.inject_buttons.is_empty()
+                    {
+                        injection_completed = true;
+                        if event_tx.send(HeadlessEvent::Injected).is_err() {
+                            return Ok(());
                         }
                     }
-                    CHANNEL_DEBUG => {
-                        debug_broker.publish(payload);
+                    continue;
+                }
+                let required_button_frames = if injection_plan.taps.is_empty() {
+                    NO_WAIT_FRAMES
+                } else {
+                    injection_plan.post_tap_frames_before_buttons
+                };
+                if !injection_plan.inject_buttons.is_empty()
+                    && frames_since_last_injection >= required_button_frames
+                {
+                    for button_id in &injection_plan.inject_buttons {
+                        write_button_click(&writer, *button_id, injection_plan.button_hold_ms).await?;
                     }
-                    CHANNEL_CONTROL => {
-                        if is_sx1262_tx_event(&payload) {
-                            if let Some(peer) = &radio_peer {
-                                match peer.forward(&payload).await {
-                                    Ok(()) => eprintln!(
-                                        "[radio-broker] forwarded local SX1262 transmit event"
-                                    ),
-                                    Err(error) => eprintln!("[radio-broker] forward failed: {error}"),
-                                }
-                            }
-                        }
-                        let _ = event_tx.send(HeadlessEvent::PeripheralControl(payload));
+                    injection_completed = true;
+                    if event_tx.send(HeadlessEvent::Injected).is_err() {
+                        return Ok(());
                     }
-                    _ => { /* drain other channels */ }
                 }
             }
-            maybe_cmd = injection_rx.recv() => {
+            maybe_cmd = injection_rx.recv(), if manual_input_open => {
                 match maybe_cmd {
                     Some(InjectionCommand::TouchTap { x, y }) => {
                         write_touch_tap(&writer, x, y).await?;
@@ -2382,17 +2398,82 @@ async fn read_loop(
                             &writer,
                             button_id,
                             hold_ms.unwrap_or(injection_plan.button_hold_ms),
-                        )
-                        .await?;
+                        ).await?;
                         let _ = event_tx.send(HeadlessEvent::Injected);
                     }
                     Some(InjectionCommand::SyntheticTouchEvent { touch_type, x, y }) => {
                         write_synthetic_touch_event(&writer, touch_type, x, y).await?;
                         let _ = event_tx.send(HeadlessEvent::Injected);
                     }
-                    None => { /* channel closed */ }
+                    None => manual_input_open = false,
                 }
             }
+            else => return Ok(()),
+        }
+    }
+}
+
+async fn receive_loop(
+    mut read_half: tokio::net::unix::OwnedReadHalf,
+    event_tx: mpsc::UnboundedSender<HeadlessEvent>,
+    geometry: BoardGeometry,
+    debug_broker: debug_transport::DebugTransportBroker,
+    radio_peer: Option<RadioPeerSender>,
+    frame_tx: Option<mpsc::UnboundedSender<bool>>,
+) -> Result<()> {
+    let mut header = [0u8; HEADER_LEN];
+    loop {
+        let header_result = read_half.read_exact(&mut header).await;
+        match header_result {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::UnexpectedEof
+                    || e.kind() == std::io::ErrorKind::BrokenPipe =>
+            {
+                return Ok(())
+            }
+            Err(e) => return Err(e.into()),
+            Ok(_) => {}
+        }
+        let channel = header[0];
+        let _flags = header[1];
+        let payload_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+        if payload_len > MAX_PAYLOAD {
+            return Err(anyhow!("payload_len {payload_len} exceeds cap"));
+        }
+        let mut payload = vec![0u8; payload_len as usize];
+        if payload_len > 0 {
+            read_half.read_exact(&mut payload).await?;
+        }
+        match channel {
+            CHANNEL_FRAMEBUFFER => {
+                if payload.len() == geometry.fb_bytes() {
+                    let has_content = framebuffer_has_content(&payload, &geometry);
+                    if event_tx.send(HeadlessEvent::Frame(payload)).is_err() {
+                        return Ok(());
+                    }
+                    if let Some(frame_tx) = &frame_tx {
+                        // 保留原本暫存在 socket 的幀順序，按住與 post-tap 延遲後照序計數。
+                        let _ = frame_tx.send(has_content);
+                    }
+                }
+            }
+            CHANNEL_DEBUG => {
+                debug_broker.publish(payload);
+            }
+            CHANNEL_CONTROL => {
+                if is_sx1262_tx_event(&payload) {
+                    if let Some(peer) = &radio_peer {
+                        match peer.forward(&payload).await {
+                            Ok(()) => {
+                                eprintln!("[radio-broker] forwarded local SX1262 transmit event")
+                            }
+                            Err(error) => eprintln!("[radio-broker] forward failed: {error}"),
+                        }
+                    }
+                }
+                let _ = event_tx.send(HeadlessEvent::PeripheralControl(payload));
+            }
+            _ => { /* drain other channels */ }
         }
     }
 }
@@ -6049,6 +6130,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
 async fn run_e2e_case(
     args: &Args,
     case: E2ECase,
+    sd_policy: E2eSdRootPolicy,
     debug_writer: debug_transport::HeadlessDebugWriter,
     debug_broker: debug_transport::DebugTransportBroker,
 ) -> Result<CaseRunOutcome> {
@@ -7036,7 +7118,12 @@ async fn run_e2e_case(
     stderr_handle.abort();
     stdout_handle.abort();
     if let Some(image_path) = sd_drive.image_path.as_deref() {
-        sd_image::sync_sd_image_to_dir(image_path, &sd_root)?;
+        sync_e2e_sd_after_case(
+            image_path,
+            &sd_root,
+            sd_policy,
+            &deferred_sd_file_assertions,
+        )?;
     }
 
     for assertion in &deferred_sd_file_assertions {
@@ -7163,18 +7250,26 @@ async fn run_e2e_case_dir(
             case.id,
             case_path.display()
         );
-        let outcome_result =
-            run_e2e_case(&case_args, case, debug_writer.clone(), debug_broker.clone()).await;
-        if args.sd_root.is_none() {
-            // 批次案例各自建立可再生的 SD 工件；結果、截圖與 transcript 仍保留在 case artifacts。
-            cleanup_e2e_batch_sd_artifacts(
-                case_args
-                    .sd_root
-                    .as_deref()
-                    .expect("batch case must have an isolated SD root"),
-                &case_args.artifacts,
-            )?;
-        }
+        let sd_policy = if args.sd_root.is_some() {
+            E2eSdRootPolicy::Retain
+        } else {
+            E2eSdRootPolicy::BatchScratch
+        };
+        let outcome_result = run_e2e_case(
+            &case_args,
+            case,
+            sd_policy,
+            debug_writer.clone(),
+            debug_broker.clone(),
+        )
+        .await;
+        let generated_sd_root = if args.sd_root.is_none() {
+            case_args.sd_root.as_deref()
+        } else {
+            None
+        };
+        // run_e2e_case 已關閉 QEMU 並持久化結果、transcript 與截圖，才回傳 PASS。
+        cleanup_e2e_batch_artifacts(generated_sd_root, &case_args.artifacts, &outcome_result)?;
         let outcome = outcome_result?;
         outcomes.push(outcome);
     }
@@ -7215,6 +7310,29 @@ async fn run_e2e_case_dir(
     Ok(())
 }
 
+fn cleanup_e2e_batch_artifacts(
+    generated_sd_root: Option<&Path>,
+    artifacts_dir: &Path,
+    outcome: &Result<CaseRunOutcome>,
+) -> Result<()> {
+    if !matches!(outcome, Ok(outcome) if outcome.status == "PASS") {
+        return Ok(());
+    }
+    if let Some(sd_root) = generated_sd_root {
+        cleanup_e2e_batch_sd_artifacts(sd_root, artifacts_dir)?;
+    }
+    let flash_path = artifacts_dir.join("flash.img");
+    if flash_path.exists() {
+        fs::remove_file(&flash_path).with_context(|| {
+            format!(
+                "removing completed batch flash image {}",
+                flash_path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn cleanup_e2e_batch_sd_artifacts(sd_root: &Path, artifacts_dir: &Path) -> Result<()> {
     if sd_root.exists() {
         fs::remove_dir_all(sd_root)
@@ -7236,6 +7354,79 @@ mod tests {
 
     fn mofei_test_geometry() -> BoardGeometry {
         load_board_runtime(Some("mofei")).unwrap().geometry
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn read_loop_drains_frame_during_manual_touch_hold() {
+        let geometry = BoardGeometry {
+            raw_width: 8,
+            raw_height: 8,
+            framebuffer_width: 8,
+            framebuffer_height: 8,
+            framebuffer_format: FramebufferFormat::Mono1,
+            output_width: 8,
+            output_height: 8,
+        };
+        let framebuffer = vec![0; geometry.fb_bytes()];
+        let (host, peer) = tokio::net::UnixStream::pair().unwrap();
+        let mut peer = peer.into_std().unwrap();
+        let (read_half, _write_half) = host.into_split();
+        let writer = debug_transport::HeadlessDebugWriter::new();
+        let (out_tx, mut out_rx) = mpsc::unbounded_channel();
+        writer.bind(out_tx).await;
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let (injection_tx, injection_rx) = mpsc::unbounded_channel();
+        let reader = tokio::spawn(read_loop(
+            read_half,
+            event_tx,
+            InjectionPlan {
+                taps: Vec::new(),
+                inject_buttons: Vec::new(),
+                button_hold_ms: 0,
+                post_tap_delay_ms: 0,
+                post_tap_frames_before_buttons: 0,
+                startup_frames_before_input: 1,
+            },
+            injection_rx,
+            geometry,
+            writer,
+            debug_transport::DebugTransportBroker::new(),
+            None,
+        ));
+        injection_tx
+            .send(InjectionCommand::TouchTap { x: 120, y: 160 })
+            .unwrap();
+        let down = out_rx.recv().await.unwrap();
+        assert_eq!(down.channel, CHANNEL_TOUCH_EVENT);
+        assert_eq!(down.payload, vec![1, 120, 0, 160, 0, 0]);
+        let hold_started = time::Instant::now();
+        let mut packet = vec![CHANNEL_FRAMEBUFFER, 0, 0, 0];
+        packet.extend_from_slice(&(framebuffer.len() as u32).to_le_bytes());
+        packet.extend_from_slice(&framebuffer);
+        peer.write_all(&packet).unwrap();
+        // 保持測試可執行，讓 Unix 就緒事件被輪詢而不推進暫停的時鐘。
+        for _ in 0..256 {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(time::Instant::now(), hold_started);
+        assert!(
+            out_rx.try_recv().is_err(),
+            "UP must wait for the 250ms hold"
+        );
+        assert!(
+            matches!(event_rx.try_recv(), Ok(HeadlessEvent::Frame(bytes)) if bytes == framebuffer),
+            "read_loop must consume the framebuffer before touch UP/Injected"
+        );
+        assert!(event_rx.try_recv().is_err(), "Injected must follow UP");
+        time::advance(Duration::from_millis(TOUCH_CONTACT_HOLD_MS)).await;
+        let up = out_rx.recv().await.unwrap();
+        assert_eq!(up.payload, vec![3, 120, 0, 160, 0, 0]);
+        assert!(matches!(
+            event_rx.recv().await,
+            Some(HeadlessEvent::Injected)
+        ));
+        reader.abort();
+        assert!(reader.await.unwrap_err().is_cancelled());
     }
 
     fn s37uc_test_geometry() -> BoardGeometry {

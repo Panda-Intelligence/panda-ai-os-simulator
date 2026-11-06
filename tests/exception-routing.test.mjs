@@ -50,6 +50,9 @@ typedef struct { unsigned cpu_index; bool halted; int exception_index; } CPUStat
 typedef struct { bool ndep,ndepc,relocatable; uint32_t vecbase,exception_vector[EXC_MAX]; } Config;
 typedef struct { uint32_t pc,regs[16],sregs[12],phys_regs[64],windowbase_next; const Config* config; CPUState* cpu; int yield_needed; } CPUXtensaState;
 static struct { uint32_t murphySimulatorHooksEnabled_addr; } mofei_sim_addrs;
+static bool mofei_initialize_main_tls(CPUXtensaState* env) {(void)env;return true;}
+static uint32_t mofei_main_stack_top(void) {return MOFEI_SIM_FAKE_APP_STACK_TOP;}
+static void cpu_abort(CPUState* cpu,const char* message) {(void)cpu;(void)message;assert(0);}
 static uint32_t stack_writes[4],stack_addresses[4];
 static unsigned stack_count;
 static void cpu_stb_data(CPUXtensaState* env,uint32_t addr,uint8_t value) {(void)env;(void)addr;(void)value;}

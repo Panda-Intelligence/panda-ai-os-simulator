@@ -54,6 +54,23 @@ def record(output, qemu, native, simulator, image):
             'toolchainImageId': image_id, 'wasmAllocator': allocator,
             'runtimeBuildRevision': os.environ.get('QEMU_WASM_RUNTIME_REVISION', ''), 'artifacts': files,
             'guestBootQualified': False, 'publicationApproved': False}
+    receipt_path = os.environ.get('QEMU_WASM_PTY_SOURCE_RECEIPT')
+    if receipt_path:
+        receipt = json.loads(Path(receipt_path).read_text())
+        manifest = json.loads((simulator / 'scripts/wasm-pty-source.json').read_text())
+        patch_sha = hashlib.sha256((simulator / 'scripts/wasm-pty-source.patch').read_bytes()).hexdigest()
+        expected = {entry['key']: entry for entry in manifest['files']}
+        if (receipt.get('patchSha256') != patch_sha
+                or {entry.get('key') for entry in receipt.get('files', [])} != set(expected)
+                or len(receipt.get('files', [])) != len(expected)
+                or receipt.get('xtermPtyVersion') != manifest['xtermPtyVersion']
+                or receipt.get('emscriptenVersion') != manifest['emscriptenVersion']):
+            raise ValueError('PTY source patch provenance mismatch')
+        for entry in receipt['files']:
+            pinned = expected.get(entry['key'])
+            if not pinned or entry.get('upstreamSha256') != pinned['beforeSha256'] or entry.get('patchedSha256') != pinned['afterSha256']:
+                raise ValueError('PTY source dependency digest mismatch')
+        data['toolchainSourcePatches'] = receipt
     (output / 'runtime-source.json').write_text(json.dumps(data, indent=2) + '\n')
 
 

@@ -9,6 +9,7 @@
  */
 
 #include "qemu/osdep.h"
+#include <glib/gstdio.h>
 #ifndef __EMSCRIPTEN__
 #include <dlfcn.h>
 #include <execinfo.h>
@@ -741,6 +742,7 @@ static void esp32s3_cpu_reset(void* opaque, int n, int level) {
 }
 
 static void mofei_prepare_kernel_call_frame(CPUXtensaState* env) {
+  mofei_sim_reset_serialized_task();
   const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
   const unsigned callinc = 2;
   const uint32_t marked_return = (callinc << 30) | (env->kernel_entry & 0x3fffffffu);
@@ -1401,6 +1403,15 @@ static uint32_t mofei_resolve_elf_symbol(const uint8_t* elf_data, gsize elf_len,
   return 0;
 }
 
+static void mofei_resolve_main_tls_metadata(const uint8_t* elf_data, gsize elf_len) {
+  MofeiSimAddrs* a = &mofei_sim_addrs;
+  a->tls_data_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_data_start");
+  a->tls_data_end_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_data_end");
+  a->tls_bss_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_bss_start");
+  a->tls_bss_end_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_bss_end");
+  a->tls_section_alignment = mofei_resolve_elf_symbol(elf_data, elf_len, "_tls_section_alignment");
+}
+
 static uint32_t mofei_resolve_elf_function_end(const uint8_t* elf_data, gsize elf_len, const char* sym_name) {
   const MofeiFirmwareSymbol* sidecar_symbol = mofei_find_firmware_symbol(sym_name);
   if (sidecar_symbol) {
@@ -1538,6 +1549,19 @@ static void mofei_cpu_resume_timer_cb(void* opaque) {
     cpu_resume(cpu0);
     fprintf(stderr, "[QEMU] CPU0 resumed via safety timer\n");
   }
+}
+
+/* 每次加载持有独立临时路径；调用方在所有 ELF 消费者完成后删除。 */
+static gchar* esp32s3_write_patched_elf(const gchar* data, gsize len, GError** error) {
+  gchar* filename = NULL;
+  const gint fd = g_file_open_tmp("panda-patched-XXXXXX", &filename, error);
+  if (fd < 0) return NULL;
+  if (!g_close(fd, error) || !g_file_set_contents(filename, data, len, error)) {
+    g_unlink(filename);
+    g_free(filename);
+    return NULL;
+  }
+  return filename;
 }
 
 static void esp32s3_machine_init(MachineState* machine) {
@@ -1869,6 +1893,8 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"xTaskGetCurrentTaskHandle", &a->xTaskGetCurrentTaskHandle_addr},
             {"xTaskGetStackStart", &a->xTaskGetStackStart_addr},
             {"pcTaskGetName", &a->pcTaskGetName_addr},
+            {"uxTaskGetStackHighWaterMark", &a->uxTaskGetStackHighWaterMark_addr},
+            {"uxTaskGetStackHighWaterMark2", &a->uxTaskGetStackHighWaterMark2_addr},
             {"xQueueGenericCreate", &a->xQueueGenericCreate_addr},
             {"xQueueCreateMutex", &a->xQueueCreateMutex_addr},
             {"xQueueCreateMutexStatic", &a->xQueueCreateMutexStatic_addr},
@@ -2018,6 +2044,14 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_ZTVN5panda3app27ReaderDictionaryResultSceneE", &a->murphyVtableDictionaryScene_addr},
             {"_ZTVN5panda3app11SudokuSceneE", &a->murphyVtableSudokuScene_addr},
             {"_ZTVN5panda3app15VirtualPetSceneE", &a->murphyVtableVirtualPetScene_addr},
+            {"_ZTVN5panda3app12SokobanSceneE", &a->murphyVtableSokobanScene_addr},
+            {"_ZTVN5panda3app14DailyMazeSceneE", &a->murphyVtableDailyMazeScene_addr},
+            {"_ZTVN5panda3app21ArcadeChallengesSceneE", &a->murphyVtableArcadeChallengesScene_addr},
+            {"_ZTVN5panda3app24PaperBoyMinesweeperSceneE", &a->murphyVtablePaperBoyMinesweeperScene_addr},
+            {"_ZTVN5panda3app15PaperboyGbSceneE", &a->murphyVtablePaperboyGbScene_addr},
+            {"_ZTVN5panda3app16PaperboyNesSceneE", &a->murphyVtablePaperboyNesScene_addr},
+            {"_ZTVN5panda3app19ElectronicSandSceneE", &a->murphyVtableElectronicSandScene_addr},
+            {"_ZTVN5panda3app27SleepAppearancePreviewSceneE", &a->murphyVtableSleepAppearancePreviewScene_addr},
             {"_ZTVN5panda3app15WordPuzzleSceneE", &a->murphyVtableWordPuzzleScene_addr},
             {"_ZTVN5panda3app22PandaCloudAccountSceneE", &a->murphyVtablePandaCloudAccountScene_addr},
             {"_ZTVN5panda3app9GnssSceneE", &a->murphyVtableGnssScene_addr},
@@ -2115,6 +2149,7 @@ static void esp32s3_machine_init(MachineState* machine) {
         a->strdup_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "strdup");
         a->cxa_guard_acquire_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "__cxa_guard_acquire");
         a->cxa_guard_release_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "__cxa_guard_release");
+        mofei_resolve_main_tls_metadata(elf_data, elf_len);
         a->heap_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_heap_start");
         if (!a->heap_start_addr) {
           a->heap_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_heap_low_start");
@@ -3820,9 +3855,15 @@ static void esp32s3_machine_init(MachineState* machine) {
         manual_image_entry = entry32;
       }
 
-      gchar* tmpfile = g_build_filename(g_get_tmp_dir(), "panda-patched.elf", NULL);
-      g_file_set_contents(tmpfile, elf_data, elf_len, NULL);
+      GError* tmp_error = NULL;
+      gchar* tmpfile = esp32s3_write_patched_elf(elf_data, elf_len, &tmp_error);
       g_free(elf_data);
+      if (tmpfile == NULL) {
+        error_report("Error: could not write patched ELF for '%s': %s (domain=%s code=%d)", load_elf_filename,
+                     tmp_error->message, g_quark_to_string(tmp_error->domain), tmp_error->code);
+        g_clear_error(&tmp_error);
+        exit(1);
+      }
 
       image_size = load_elf(tmpfile, NULL, translate_phys_addr, &ss->cpu[0], &image_entry, &image_lowaddr, NULL, NULL,
                             0, EM_XTENSA, 0, 0);
@@ -3904,6 +3945,7 @@ static void esp32s3_machine_init(MachineState* machine) {
           }
         }
       }
+      g_unlink(tmpfile);
       g_free(tmpfile);
       if (image_size < 0) {
         error_report("Error: could not load ELF file '%s'", load_elf_filename);

@@ -330,6 +330,16 @@ static const char* mofei_murphy_activity_for_vptr(uint32_t vptr) {
       {mofei_sim_addrs.murphyVtableDictionaryScene_addr, "Dictionary"},
       {mofei_sim_addrs.murphyVtableSudokuScene_addr, "Sudoku"},
       {mofei_sim_addrs.murphyVtableVirtualPetScene_addr, "VirtualPet"},
+      {mofei_sim_addrs.murphyVtableSokobanScene_addr, "Sokoban"},
+      {mofei_sim_addrs.murphyVtableDailyMazeScene_addr, "DailyMaze"},
+      {mofei_sim_addrs.murphyVtableArcadeChallengesScene_addr, "ArcadeChallenges"},
+      {mofei_sim_addrs.murphyVtableWordPuzzleScene_addr, "WordPuzzle"},
+      {mofei_sim_addrs.murphyVtablePaperBoyMinesweeperScene_addr, "PaperBoyMinesweeper"},
+      {mofei_sim_addrs.murphyVtablePaperboyGbScene_addr, "PaperboyGbScene"},
+      {mofei_sim_addrs.murphyVtablePaperboyNesScene_addr, "PaperboyNesScene"},
+      {mofei_sim_addrs.murphyVtableElectronicSandScene_addr, "ElectronicSand"},
+      {mofei_sim_addrs.murphyVtableWallpaperPickerScene_addr, "SleepWallpaper"},
+      {mofei_sim_addrs.murphyVtableSleepAppearancePreviewScene_addr, "SleepAppearancePreview"},
   };
   for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); ++i) {
     if (mofei_vptr_matches(vptr, entries[i].table)) {
@@ -1501,6 +1511,7 @@ typedef struct MofeiButtonSample {
 #define MOFEI_BUTTON_QUEUE_CAP 16
 #define MOFEI_PANDA_DEBUG_MAILBOX_BYTES 4096
 
+static GMutex g_input_queue_mutex;
 static MofeiTouchSample g_touch_queue[MOFEI_TOUCH_QUEUE_CAP];
 static unsigned g_touch_queue_head;
 static unsigned g_touch_queue_count;
@@ -1514,6 +1525,7 @@ void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t to
   mofei_sim_board_touch_dimensions(&max_w, &max_h);
   if (max_w > 0 && x >= max_w) x = max_w - 1u;
   if (max_h > 0 && y >= max_h) y = max_h - 1u;
+  g_mutex_lock(&g_input_queue_mutex);
   if (g_touch_queue_count == MOFEI_TOUCH_QUEUE_CAP) {
     g_touch_queue_head = (g_touch_queue_head + 1) % MOFEI_TOUCH_QUEUE_CAP;
     g_touch_queue_count--;
@@ -1521,14 +1533,18 @@ void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t to
   unsigned tail = (g_touch_queue_head + g_touch_queue_count) % MOFEI_TOUCH_QUEUE_CAP;
   g_touch_queue[tail] = (MofeiTouchSample){x, y, action, touch_id};
   g_touch_queue_count++;
-  fprintf(stderr, "[MOFEI-SIM] touch_queue raw=%u,%u action=%u touch_id=%u depth=%u\n", x, y, action, touch_id,
-          g_touch_queue_count);
+  const unsigned depth = g_touch_queue_count;
+  g_mutex_unlock(&g_input_queue_mutex);
+  fprintf(stderr,
+          "[MOFEI-SIM] touch_queue raw=%u,%u action=%u touch_id=%u depth=%u\n",
+          x, y, action, touch_id, depth);
 }
 
 static void mofeiSimulatorButtonQueue(uint8_t button_id, bool released) {
   if (button_id > 6) {
     return;
   }
+  g_mutex_lock(&g_input_queue_mutex);
   if (g_button_queue_count == MOFEI_BUTTON_QUEUE_CAP) {
     g_button_queue_head = (g_button_queue_head + 1) % MOFEI_BUTTON_QUEUE_CAP;
     g_button_queue_count--;
@@ -1536,8 +1552,10 @@ static void mofeiSimulatorButtonQueue(uint8_t button_id, bool released) {
   unsigned tail = (g_button_queue_head + g_button_queue_count) % MOFEI_BUTTON_QUEUE_CAP;
   g_button_queue[tail] = (MofeiButtonSample){button_id, released};
   g_button_queue_count++;
-  fprintf(stderr, "[MOFEI-SIM] button_queue id=%u released=%d depth=%u\n", button_id, released ? 1 : 0,
-          g_button_queue_count);
+  const unsigned depth = g_button_queue_count;
+  g_mutex_unlock(&g_input_queue_mutex);
+  fprintf(stderr, "[MOFEI-SIM] button_queue id=%u released=%d depth=%u\n",
+          button_id, released ? 1 : 0, depth);
 }
 
 static bool mofeiSimulatorButtonEventWrite(hwaddr addr, uint8_t mask) {
@@ -2821,9 +2839,11 @@ uint32_t HELPER(mofei_queue_intercept)(CPUXtensaState* env, uint32_t target, uin
     result = mofei_next_queue_handle(0); /* A4 is capabilities, never queue kind. */
   } else if (QUEUE_TARGET(xTaskGetCurrentTaskHandle)) {
     result = mofei_serialized_task_token;
-  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName)) {
+  } else if (QUEUE_TARGET(xTaskGetStackStart) || QUEUE_TARGET(pcTaskGetName) ||
+             QUEUE_TARGET(uxTaskGetStackHighWaterMark) || QUEUE_TARGET(uxTaskGetStackHighWaterMark2)) {
     if (a2 != 0 && a2 != mofei_serialized_task_token) return 0;
     /* NULL names truthfully mean unknown. The stack is the existing mapped app context, not a TCB. */
+    /* opaque task 没有历史填充值观测；high-water 返回不可用值 0，不伪造栈余量。 */
     result = QUEUE_TARGET(xTaskGetStackStart) ? MOFEI_SIM_FAKE_APP_STACK_BASE : 0;
   } else {
     MofeiFakeQueue* queue = mofei_fake_queue(a2);
@@ -2867,15 +2887,70 @@ static const char* mofei_murphy_or_app_main_entry_name(void) {
  * executes normally. This prevents infinite redirect loops if
  * app_main's code path re-enters vTaskStartScheduler. */
 static int mofei_redirected_to_app_main;
+static int mofei_loop_task_entered;
+static uint32_t mofei_main_tls_base;
+static uint32_t mofei_main_tls_threadptr;
+
+void mofei_sim_reset_serialized_task(void) {
+  mofei_main_tls_base = 0;
+  mofei_main_tls_threadptr = 0;
+  mofei_redirected_to_app_main = 0;
+  mofei_loop_task_entered = 0;
+}
+
+static uint32_t mofei_main_stack_top(void) {
+  return mofei_main_tls_base ? mofei_main_tls_base : MOFEI_SIM_FAKE_APP_STACK_TOP;
+}
+
+static bool mofei_initialize_main_tls(CPUXtensaState* env) {
+  if (mofei_main_tls_base) {
+    env->uregs[THREADPTR] = mofei_main_tls_threadptr;
+    return true;
+  }
+  const MofeiSimAddrs* a = &mofei_sim_addrs;
+  const uint32_t align = a->tls_section_alignment;
+  if (!a->tls_data_start_addr || a->tls_data_end_addr < a->tls_data_start_addr ||
+      a->tls_bss_start_addr != a->tls_data_end_addr || a->tls_bss_end_addr < a->tls_bss_start_addr || !align ||
+      (align & (align - 1u)) || align > MOFEI_SIM_FAKE_TASK_STACK_BYTES - 16u) {
+    return false;
+  }
+  const uint32_t data_size = a->tls_data_end_addr - a->tls_data_start_addr;
+  const uint32_t total_size = a->tls_bss_end_addr - a->tls_data_start_addr;
+  if (total_size > MOFEI_SIM_FAKE_TASK_STACK_BYTES - 80u) return false;
+  const uint32_t area_size = (total_size + 15u) & ~15u;
+  const uint32_t tls_base = MOFEI_SIM_FAKE_APP_STACK_TOP - area_size;
+  /* 与 IDF uxInitialiseStackTLS 一致：TCB_SIZE=8 仅为 Xtensa ABI 地址偏置。
+   * TLS 在既有 main 栈内；所有后续帧从 tls_base 向下生长，不能覆盖模板。 */
+  const uint32_t bias = (8u + align - 1u) & ~(align - 1u);
+  if (bias > MOFEI_SIM_FAKE_TASK_STACK_BYTES - area_size) return false;
+  uint8_t* initial = g_malloc0(area_size ? area_size : 1u);
+  if (data_size && !mofei_read_guest_memory(a->tls_data_start_addr, initial, data_size)) {
+    g_free(initial);
+    return false;
+  }
+  const MemTxResult result =
+      address_space_write(&address_space_memory, tls_base, MEMTXATTRS_UNSPECIFIED, initial, area_size);
+  g_free(initial);
+  if (result != MEMTX_OK) return false;
+  mofei_main_tls_base = tls_base;
+  mofei_main_tls_threadptr = tls_base - bias;
+  env->uregs[THREADPTR] = mofei_main_tls_threadptr;
+  fprintf(stderr, "[TLS] serialized main data=%u bss=%u area=%u align=%u base=0x%08x threadptr=0x%08x\n", data_size,
+          total_size - data_size, area_size, align, tls_base, mofei_main_tls_threadptr);
+  return true;
+}
 
 static void mofei_prepare_boot_firmware_frame(CPUXtensaState* env) {
+  if (!mofei_initialize_main_tls(env)) {
+    cpu_abort(env_cpu(env), "Invalid or unreadable firmware TLS metadata");
+  }
   if (mofei_sim_addrs.murphySimulatorHooksEnabled_addr) {
     cpu_stb_data(env, mofei_sim_addrs.murphySimulatorHooksEnabled_addr, 1);
     fprintf(stderr, "[BOOT-FRAME] Murphy OS simulator hooks enabled at 0x%08x\n",
             mofei_sim_addrs.murphySimulatorHooksEnabled_addr);
   }
 
-  const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
+  const uint32_t stack_top = mofei_main_stack_top();
   const uint32_t safe_ret = 0x4037D000u;
   const unsigned callinc = 2;
   const uint32_t marked_ret = (callinc << 30) | (safe_ret & 0x3fffffffu);
@@ -2955,7 +3030,7 @@ uint32_t HELPER(mofei_enter_murphy_run_loop)(CPUXtensaState* env, uint32_t calli
   env->sregs[PS] &= ~(PS_CALLINC | PS_EXCM);
   env->sregs[PS] |= PS_UM | PS_WOE;
   env->regs[0] = 0x4037D000u;
-  env->regs[1] = MOFEI_SIM_FAKE_APP_STACK_TOP - 80u;
+  env->regs[1] = mofei_main_stack_top() - 80u;
   env->regs[2] = shell;
   env->regs[3] = context ? context : shell;
   xtensa_sync_phys_from_window(env);
@@ -3012,7 +3087,7 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
     return env->pc;
   }
 
-  const uint32_t stack_top = MOFEI_SIM_FAKE_APP_STACK_TOP;
+  const uint32_t stack_top = mofei_main_stack_top();
   const uint32_t frame_size = 80u;
   const uint32_t frame_sp = stack_top - frame_size;
   const uint32_t safe_ret = 0x4037D000u;
@@ -3207,8 +3282,6 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
  * This helper intercepts xTaskCreateUniversal's RETW: we redirect
  * execution to loopTask so that setup() and loop() actually run.
  * The address is hardcoded for now (resolved from ELF nm output). */
-static int mofei_loop_task_entered;
-
 void HELPER(mofei_maybe_jump_to_loop_task)(CPUXtensaState* env) {
   if (mofei_loop_task_entered) {
     return;
@@ -4398,11 +4471,18 @@ uint32_t HELPER(mofei_touch_read)(CPUXtensaState* env, uint32_t x_ptr, uint32_t 
   uint32_t raw_addr;
   unsigned callinc;
   uint32_t clean_addr = mofei_skip_fn_common(env, &raw_addr, &callinc);
+  MofeiTouchSample sample;
+  unsigned depth = 0;
+  g_mutex_lock(&g_input_queue_mutex);
   const bool ok = g_touch_queue_count > 0;
   if (ok) {
-    MofeiTouchSample sample = g_touch_queue[g_touch_queue_head];
+    sample = g_touch_queue[g_touch_queue_head];
     g_touch_queue_head = (g_touch_queue_head + 1) % MOFEI_TOUCH_QUEUE_CAP;
     g_touch_queue_count--;
+    depth = g_touch_queue_count;
+  }
+  g_mutex_unlock(&g_input_queue_mutex);
+  if (ok) {
     if (x_ptr != 0) {
       cpu_stw_data(env, x_ptr, sample.x);
     }
@@ -4415,9 +4495,11 @@ uint32_t HELPER(mofei_touch_read)(CPUXtensaState* env, uint32_t x_ptr, uint32_t 
     if (touch_id_ptr != 0) {
       cpu_stb_data(env, touch_id_ptr, sample.touch_id);
     }
-    fprintf(stderr, "[MOFEI-SIM] touch_read raw=%u,%u action=%u touch_id=%u depth=%u ptrs=%08x,%08x,%08x,%08x\n",
-            sample.x, sample.y, sample.action, sample.touch_id, g_touch_queue_count, x_ptr, y_ptr, action_ptr,
-            touch_id_ptr);
+    fprintf(stderr,
+            "[MOFEI-SIM] touch_read raw=%u,%u action=%u touch_id=%u depth=%u "
+            "ptrs=%08x,%08x,%08x,%08x\n",
+            sample.x, sample.y, sample.action, sample.touch_id, depth, x_ptr,
+            y_ptr, action_ptr, touch_id_ptr);
   }
   /* The firmware touch hook is intercepted at the callee ENTRY PC and jumps
    * directly back to the caller, so ENTRY/RETW never run. Match the other
@@ -4431,19 +4513,29 @@ uint32_t HELPER(mofei_button_read)(CPUXtensaState* env, uint32_t button_id_ptr, 
   uint32_t raw_addr;
   unsigned callinc;
   uint32_t clean_addr = mofei_skip_fn_common(env, &raw_addr, &callinc);
+  MofeiButtonSample sample;
+  unsigned depth = 0;
+  g_mutex_lock(&g_input_queue_mutex);
   const bool ok = g_button_queue_count > 0;
   if (ok) {
-    MofeiButtonSample sample = g_button_queue[g_button_queue_head];
+    sample = g_button_queue[g_button_queue_head];
     g_button_queue_head = (g_button_queue_head + 1) % MOFEI_BUTTON_QUEUE_CAP;
     g_button_queue_count--;
+    depth = g_button_queue_count;
+  }
+  g_mutex_unlock(&g_input_queue_mutex);
+  if (ok) {
     if (button_id_ptr != 0) {
       cpu_stb_data(env, button_id_ptr, sample.button_id);
     }
     if (released_ptr != 0) {
       cpu_stb_data(env, released_ptr, sample.released ? 1 : 0);
     }
-    fprintf(stderr, "[MOFEI-SIM] button_read id=%u released=%d depth=%u ptrs=%08x,%08x\n", sample.button_id,
-            sample.released ? 1 : 0, g_button_queue_count, button_id_ptr, released_ptr);
+    fprintf(
+        stderr,
+        "[MOFEI-SIM] button_read id=%u released=%d depth=%u ptrs=%08x,%08x\n",
+        sample.button_id, sample.released ? 1 : 0, depth, button_id_ptr,
+        released_ptr);
   }
   env->regs[callinc * 4 + 2] = ok ? 1 : 0;
   if (ok) {
