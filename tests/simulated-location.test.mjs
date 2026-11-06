@@ -11,7 +11,7 @@ const source = readFileSync(new URL("src/simulatorLocation.ts", root), "utf8");
 const javascript = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
 }).outputText;
-const { createSimulatedLocation, SIMULATED_LONDON_LOCATION, prepareSimulatedLocationImage } =
+const { createSimulatedLocation, SIMULATED_LONDON_LOCATION, prepareSimulatedLocationImage, SIMULATED_CLOCK_PATHS, simulatedClockPayload } =
   await import("data:text/javascript;base64," + Buffer.from(javascript).toString("base64"));
 const london = { name: "London", timezone: "Europe%2FLondon", latitude: 51.5074, longitude: -0.1278 };
 
@@ -105,4 +105,21 @@ test("actual FAT edit installs London aliases without changing user files or ori
     assert.deepEqual(fat.readFatFile(ff,"/Books/keep.txt"), userBytes);
     for (const path of paths) assert.deepEqual(JSON.parse(new TextDecoder().decode(fat.readFatFile(ff,path))),london);
   });
+});
+
+test("boot wall clock is written after both location aliases as plain UTC seconds", async () => {
+  const card = { bytes: new Uint8Array([1, 2, 3]) };
+  const writes = [];
+  const before = Math.floor(Date.now() / 1000);
+  assert.equal(await prepareSimulatedLocationImage(card, async (image, action) => action(image), (_image, path, bytes) => {
+    writes.push([path, new TextDecoder().decode(bytes)]);
+  }), true);
+  assert.deepEqual(writes.map(([path]) => path), ["/.mofei/simulator_location.json", "/mofei/simulator_location.json", ...SIMULATED_CLOCK_PATHS]);
+  assert.deepEqual(SIMULATED_CLOCK_PATHS, ["/.mofei/simulator_clock.txt", "/mofei/simulator_clock.txt"]);
+  for (const [, text] of writes.slice(2)) {
+    assert.match(text, /^\d{10}\n$/);
+    const seconds = Number(text.trim());
+    assert.ok(seconds >= before && seconds <= Math.floor(Date.now() / 1000) + 1, "clock is the host UTC time at preparation");
+  }
+  assert.equal(new TextDecoder().decode(simulatedClockPayload(1700000000)), "1700000000\n");
 });

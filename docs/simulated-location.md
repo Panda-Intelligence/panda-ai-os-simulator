@@ -9,6 +9,12 @@ The bundled browser worker updates only /.mofei/simulator_location.json and
 /mofei/simulator_location.json in a private copy of the virtual FAT image before
 QEMU mounts it. Both writes must succeed before the cached image is replaced.
 Template conflicts remain blocked; absent SD remains the existing no-SD mode.
+The same edit writes the boot wall clock, UTC seconds with no timezone, to
+/.mofei/simulator_clock.txt and /mofei/simulator_clock.txt. PANDA_SIMULATOR
+firmware adopts it through its GNSS time-sync path at wiring time, so the status
+bar shows a time like a device instead of "--:--"; the guest has no NTP, RTC
+battery or GNSS source under QEMU. The location stays London and the firmware
+still applies its own configured timezone.
 Existing books/settings are retained and the usual SD persistence lifecycle
 commits the running image. Old SD templates thus cannot silently keep Taipei.
 The source worker is the one instantiated by browserSimulatorRuntime.ts; the

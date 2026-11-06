@@ -3,6 +3,7 @@ import type { SimulatorFramebufferEvent, SimulatorHostBridge } from "../simulato
 import { getSimulatorBoardVisual, type SimulatorBoard } from "../boards";
 import { getPhysicalControls } from "../boardPhysicalControls";
 import { PhysicalDeviceKey } from "./PhysicalDeviceKey";
+import { snappedPanelCssSize } from "../panelScale";
 
 const TOUCH_DOWN = 1;
 const TOUCH_MOVE = 2;
@@ -210,6 +211,35 @@ export function PanelCanvas({ ariaLabel, hostBridge, board, displayScale, onRese
       if (unlisten) unlisten();
     };
   }, [board, hostBridge]);
+
+  // Present the panel the way the physical e-ink does. When the fluid layout lands near an integer
+  // device-pixel multiple (a Retina display showing the 480x800 panel at about 240 CSS px) the canvas snaps to
+  // exactly that size so every panel pixel maps to whole screen pixels and stays crisp; any other ratio is
+  // filtered, because nearest-neighbour CSS scaling drops or doubles whole columns and 1-bit text turns jagged.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const frame = canvas?.parentElement;
+    if (!canvas || !frame) return;
+    const apply = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const snapped = displayScale === 0 ? snappedPanelCssSize(frame.getBoundingClientRect(), board, dpr) : null;
+      canvas.style.width = snapped ? `${snapped.width}px` : "";
+      canvas.style.height = snapped ? `${snapped.height}px` : "";
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const integer = (value: number) => Math.round(value) >= 1 && Math.abs(value - Math.round(value)) < 0.01;
+      const crisp = integer((rect.width * dpr) / board.outputWidth) && integer((rect.height * dpr) / board.outputHeight);
+      canvas.style.imageRendering = crisp ? "pixelated" : "auto";
+    };
+    apply();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(apply) : null;
+    observer?.observe(frame);
+    window.addEventListener("resize", apply);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [board, displayScale]);
 
   // Initialize canvas with all-white (matches panel power-on state).
   useEffect(() => {
