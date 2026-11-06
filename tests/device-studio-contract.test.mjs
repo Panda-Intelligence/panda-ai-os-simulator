@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
@@ -11,6 +12,7 @@ const panelSource = await readFile(new URL("../src/components/PanelCanvas.tsx", 
 const runtimeSource = await readFile(new URL("../src/browserSimulatorRuntime.ts", import.meta.url), "utf8");
 const workerSource = await readFile(new URL("../src/browserSimulatorRuntimeWorker.js", import.meta.url), "utf8");
 const i18nSource = await readFile(new URL("../src/i18n.ts", import.meta.url), "utf8");
+const landscapeFrames = JSON.parse(await readFile(new URL("./fixtures/landscape-ssd1677-frames.json", import.meta.url), "utf8"));
 
 test("every declared board has an explicit physical visual profile", () => {
   for (const board of boards.boards) {
@@ -120,7 +122,7 @@ test("all 11 hardware boards are declared in boards.json, boards.ts, and boardPh
   }
 });
 
-test("runtime worker handles read-pico/eego-a4 slicing, molink/x4pro SSD1677 unscrambling, and x4pro touch swap", () => {
+test("runtime worker handles mono slicing, captured landscape SSD1677 pixels, and x4pro touch swap", () => {
   const postedMessages = [];
   const touchCalls = [];
   const postMessage = (msg) => {
@@ -167,7 +169,6 @@ test("runtime worker handles read-pico/eego-a4 slicing, molink/x4pro SSD1677 uns
     `\nself.__test = {
       qemuSimBoardFor,
       framebufferProfile,
-      unscrambleSsd1677WireToGuestBytes,
       emitFramebuffer,
       injectTouch,
       setLastBoardId(id) { lastBoardId = id; },
@@ -207,31 +208,13 @@ test("runtime worker handles read-pico/eego-a4 slicing, molink/x4pro SSD1677 uns
   assert.equal(eegoRgba.length, 552 * 768 * 4);
   assert.equal(eegoRgba[0], 16);
 
-  // 2. SSD1677 wire unscramble for molink & x4pro
-  const guestBytes = new Uint8Array(48000);
-  for (let i = 0; i < guestBytes.length; i += 1) {
-    guestBytes[i] = (i * 73 + 19) & 0xff;
-  }
-  const wireBytes = new Uint8Array(48000);
-  wireBytes.fill(0xff);
-  for (let y = 0; y < 800; y += 1) {
-    const srcRowOffset = y * 60;
-    const dstColByte = y >> 3;
-    const dstMask = 0x80 >> (y & 7);
-    for (let x = 0; x < 480; x += 1) {
-      const srcByte = guestBytes[srcRowOffset + (x >> 3)];
-      if ((srcByte & (0x80 >> (x & 7))) === 0) {
-        const dstIndex = (479 - x) * 100 + dstColByte;
-        wireBytes[dstIndex] &= ~dstMask;
-      }
-    }
-  }
-
-  const recoveredGuest = workerTest.unscrambleSsd1677WireToGuestBytes(wireBytes);
-  assert.deepEqual(Array.from(recoveredGuest), Array.from(guestBytes));
-
-  for (const landscapeBoard of ["molink", "x4pro"]) {
-    workerTest.setLastBoardId(landscapeBoard);
+  // 横向 SDK framebuffer 与 SSD1677 IPC 都是 100 字节一行；验证实际捕获的每个像素。
+  assert.deepEqual(landscapeFrames.frames.map(frame => frame.board).sort(), ["molink", "x4pro"]);
+  for (const frame of landscapeFrames.frames) {
+    const wireBytes = Buffer.from(frame.base64, "base64");
+    assert.equal(wireBytes.length, frame.rowStrideBytes * frame.height);
+    assert.equal(createHash("sha256").update(wireBytes).digest("hex"), frame.sha256);
+    workerTest.setLastBoardId(frame.board);
     postedMessages.length = 0;
     workerTest.emitFramebuffer(0, wireBytes);
     assert.equal(postedMessages.length, 1);
@@ -239,6 +222,17 @@ test("runtime worker handles read-pico/eego-a4 slicing, molink/x4pro SSD1677 uns
     assert.equal(postedMessages[0].payload.height, 480);
     const rgba = Buffer.from(postedMessages[0].payload.rgba_b64, "base64");
     assert.equal(rgba.length, 800 * 480 * 4);
+    for (let y = 0; y < frame.height; y += 1) {
+      for (let x = 0; x < frame.width; x += 1) {
+        const byte = wireBytes[y * frame.rowStrideBytes + (x >> 3)];
+        const expected = byte & (0x80 >> (x & 7)) ? 255 : 16;
+        const pixel = (y * frame.width + x) * 4;
+        assert.equal(rgba[pixel], expected, `${frame.board} raw pixel ${x},${y}`);
+        assert.equal(rgba[pixel + 1], expected);
+        assert.equal(rgba[pixel + 2], expected);
+        assert.equal(rgba[pixel + 3], 255);
+      }
+    }
   }
 
   // 3. Touch coordinate swap + bit 7 flag for x4pro

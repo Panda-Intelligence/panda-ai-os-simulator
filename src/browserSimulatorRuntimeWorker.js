@@ -1530,37 +1530,19 @@ function readHeapBytes(instance, ptr, len) {
 }
 
 function framebufferProfile(boardId) {
-  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1", landscapeSsd1677: false };
-  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
-  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16", landscapeSsd1677: false };
-  if (boardId === "read-pico") return { width: 684, height: 1216, format: "mono1", landscapeSsd1677: false };
-  if (boardId === "eego-a4") return { width: 552, height: 768, format: "mono1", landscapeSsd1677: false };
+  if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1" };
+  if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16" };
+  if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16" };
+  if (boardId === "read-pico") return { width: 684, height: 1216, format: "mono1" };
+  if (boardId === "eego-a4") return { width: 552, height: 768, format: "mono1" };
   if (boardId === "molink" || boardId === "x4pro") {
-    return { width: 800, height: 480, format: "mono1", landscapeSsd1677: true };
+    return { width: 800, height: 480, format: "mono1" };
   }
-  return { width: 800, height: 480, format: "mono1", landscapeSsd1677: false };
-}
-
-function unscrambleSsd1677WireToGuestBytes(wireBytes) {
-  const guest = new Uint8Array(48000);
-  guest.fill(0xff);
-  for (let y = 0; y < 800; y += 1) {
-    const dstRowOffset = y * 60;
-    const srcColByte = y >> 3;
-    const srcMask = 0x80 >> (y & 7);
-    for (let x = 0; x < 480; x += 1) {
-      const srcIndex = (479 - x) * 100 + srcColByte;
-      if ((wireBytes[srcIndex] & srcMask) === 0) {
-        const dstIndex = dstRowOffset + (x >> 3);
-        guest[dstIndex] &= ~(0x80 >> (x & 7));
-      }
-    }
-  }
-  return guest;
+  return { width: 800, height: 480, format: "mono1" };
 }
 
 function emitFramebuffer(flags, framebuffer, portraitUc = false) {
-  const { width, height, format, landscapeSsd1677 } = framebufferProfile(lastBoardId);
+  const { width, height, format } = framebufferProfile(lastBoardId);
   const packedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
   const strideBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil(width / 8) * height;
   const expectedBytes = packedBytes;
@@ -1577,12 +1559,10 @@ function emitFramebuffer(flags, framebuffer, portraitUc = false) {
   }
   const sliceBytes = framebuffer.length === 259200 ? strideBytes : framebuffer.length;
   const frameBytes = framebuffer.length === sliceBytes ? framebuffer : framebuffer.subarray(0, sliceBytes);
-  const linearBytes = format === "mono1" && landscapeSsd1677 && frameBytes.length === 48000
-    ? unscrambleSsd1677WireToGuestBytes(frameBytes)
-    : frameBytes;
+  // 横向 SSD1677 已发布 800x480 行序像素；再次按 480x800 解交错会破坏行跨度。
   const rgba = portraitUc
-    ? uc8253cRgbaToWire(oneBitToRgba(linearBytes, 240, 416))
-    : format === "gray16" ? gray16ToRgba(linearBytes, width, height) : oneBitToRgba(linearBytes, width, height);
+    ? uc8253cRgbaToWire(oneBitToRgba(frameBytes, 240, 416))
+    : format === "gray16" ? gray16ToRgba(frameBytes, width, height) : oneBitToRgba(frameBytes, width, height);
   postMessage({
     type: "framebuffer",
     payload: {
