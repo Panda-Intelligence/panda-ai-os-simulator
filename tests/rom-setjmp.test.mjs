@@ -4,6 +4,7 @@ import {readFileSync, mkdtempSync, writeFileSync, rmSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {spawnSync} from "node:child_process";
+import {idfPath, romPath, missingInputs} from "./helpers/sdkInputs.mjs";
 
 const source=name=>readFileSync(new URL(`../qemu-peripherals/${name}`,import.meta.url),"utf8");
 test("protected Lua calls use the actual ROM setjmp and SDK longjmp bodies",()=>{
@@ -21,9 +22,9 @@ test("protected Lua calls use the actual ROM setjmp and SDK longjmp bodies",()=>
   assert.doesNotMatch(shim,/4000144c|4002e23c|40001440|4002e2a0|setjmp|longjmp/);
 });
 
-test("real SDK machine header compiles the 17-word windowed jmp_buf expected by wrapped longjmp",()=>{
+test("real SDK machine header compiles the 17-word windowed jmp_buf expected by wrapped longjmp",{skip:missingInputs("ESP-IDF",[join(idfPath(),"components/esp_rom/patches/esp_rom_longjmp.S")])},()=>{
   const header=process.env.PANDA_MACHINE_SETJMP_HEADER || join(homedir(), ".espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/xtensa-esp-elf/include/machine/setjmp.h");
-  const idf=process.env.IDF_PATH || join(homedir(), ".espressif/v6.0.1/esp-idf");
+  const idf=idfPath();
   const assembly=readFileSync(join(idf,"components/esp_rom/patches/esp_rom_longjmp.S"),"utf8");
   assert.match(assembly,/l32i\s+a0, a2, 64/);
   assert.match(assembly,/l32i\s+a8, a2, 52/);
@@ -53,9 +54,8 @@ int main(void) {return 0;}
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
 
-test("actual selected ROM setjmp bytes save raw A0 at byte64 and retain the syscall spill path",()=>{
-  const romPath=process.env.PANDA_ROM_SETJMP_BIN || new URL("../../panda-developers/public/studio-simulator/simulator-runtime/qemu/esp32s3_rev0_rom.bin",import.meta.url);
-  const rom=readFileSync(romPath);
+test("actual selected ROM setjmp bytes save raw A0 at byte64 and retain the syscall spill path",{skip:missingInputs("ROM image",[romPath()])},()=>{
+  const rom=readFileSync(romPath());
   assert.equal(rom.length,0x60000);
   // Actual revision-0 alias literal targets and instructions, not a fabricated jump context.
   assert.equal(rom.readUInt32LE(0x1448),0x4002e23c);
@@ -65,9 +65,8 @@ test("actual selected ROM setjmp bytes save raw A0 at byte64 and retain the sysc
   assert.equal(rom.subarray(0x2e29c,0x2e2a0).toString("hex"),"0c021df0");
 });
 
-test("selected ROM lock and UART setters match the kernel bootstrap data layout",()=>{
-  const path=process.env.PANDA_ROM_SETJMP_BIN || new URL("../../panda-developers/public/studio-simulator/simulator-runtime/qemu/esp32s3_rev0_rom.bin",import.meta.url);
-  const rom=readFileSync(path);
+test("selected ROM lock and UART setters match the kernel bootstrap data layout",{skip:missingInputs("ROM image",[romPath()])},()=>{
+  const rom=readFileSync(romPath());
   assert.equal(rom.readUInt32LE(0x614),0x400441fc);
   assert.equal(rom.readUInt32LE(0x441f4),0x3fcef74c);
   assert.equal(rom.readUInt32LE(0x441f8),0x3fcef748);

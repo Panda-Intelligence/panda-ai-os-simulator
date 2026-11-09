@@ -4,6 +4,7 @@ import {mkdtempSync, readFileSync, writeFileSync, rmSync} from "node:fs";
 import {homedir, tmpdir} from "node:os";
 import {join} from "node:path";
 import {spawnSync} from "node:child_process";
+import {idfPath, missingInputs} from "./helpers/sdkInputs.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = name => readFileSync(new URL(`qemu-peripherals/${name}`, root), "utf8");
@@ -16,10 +17,10 @@ function fn(source, name) {
   return source.slice(start, end);
 }
 
-test("issued fake mutex ownership runs real IDF pthread and Queue holder semantics", () => {
+test("issued fake mutex ownership runs real IDF pthread and Queue holder semantics", {skip: missingInputs("ESP-IDF", [join(idfPath(), "components/pthread/pthread.c")])}, () => {
   const helper = source("target_xtensa_exc_helper.c");
   const state = helper.slice(helper.indexOf("/* Serialized simulator queue metadata;"), helper.indexOf("static uint32_t mofei_murphy_or_app_main_entry"));
-  const idf = process.env.IDF_PATH || join(homedir(), ".espressif/v6.0.1/esp-idf");
+  const idf = idfPath();
   const pthread = readFileSync(join(idf, "components/pthread/pthread.c"), "utf8");
   const queue = readFileSync(join(idf, "components/freertos/FreeRTOS-Kernel/queue.c"), "utf8");
   const tasks = readFileSync(join(idf, "components/freertos/FreeRTOS-Kernel/tasks.c"), "utf8");
