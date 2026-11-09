@@ -111,6 +111,11 @@ load, so the default window passes or fails them by chance. Key and touch respon
 `SIMULATOR_TEST_WINDOW_SCALE=<n>` stretches all windows further on an overloaded host. The earlier ad-hoc
 "240 s boot, 60 s waits" was not needed by any board in these runs.
 
+A loopback run of the rebuilt runtime (this change, host load 56-86) passed all eleven boards with the table
+above: first frames at 3.1 s for Read Pico, S3-WROOM, PaperS3, LilyGo and Eego A4, 15.2 s for S37UC and 51-54 s for
+Mofei, S3R8, Molink, X4Pro and Metalio; Read Pico answered PageDown with a changed frame after 0.3 s and
+its Virtual SD card listed the seeded folders.
+
 Read-only runs against a deployed simulator need `SIMULATOR_TEST_ALLOW_REMOTE=1`; the default stays loopback only.
 
 ## Read Pico browser boot (fixed 2026-11-09)
