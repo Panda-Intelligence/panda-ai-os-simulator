@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { idfPath, missingInputs } from "./helpers/sdkInputs.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = name => readFileSync(new URL(`qemu-peripherals/${name}`, root), "utf8");
@@ -146,7 +147,7 @@ int main(void) {
   assert.match(compileAndRun(code), /failure paths PASS/);
 });
 
-test("all serialized main frame ceilings use the TLS reservation; kernel reset discards prior ownership", () => {
+test("all serialized main frame ceilings use the TLS reservation; kernel reset discards prior ownership", { skip: missingInputs("ESP-IDF", [join(idfPath(), "components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c")]) }, () => {
   const helper = read("target_xtensa_exc_helper.c"), machine = read("hw_xtensa_esp32s3.c");
   for (const name of ["static void mofei_prepare_boot_firmware_frame(", "uint32_t HELPER(mofei_enter_murphy_run_loop)(",
     "uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)("]) {
@@ -156,7 +157,7 @@ test("all serialized main frame ceilings use the TLS reservation; kernel reset d
   }
   assert.match(fn(machine, "static void mofei_prepare_kernel_call_frame("), /mofei_sim_reset_serialized_task\(\)/);
   assert.equal((helper.match(/mofei_initialize_main_tls\(env\)/g) || []).length, 1);
-  const idf = process.env.IDF_PATH || join(homedir(), ".espressif/v6.0.1/esp-idf");
+  const idf = idfPath();
   const port = readFileSync(join(idf, "components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c"), "utf8");
   const sdk = fn(port, "FORCE_INLINE_ATTR UBaseType_t uxInitialiseStackTLS(");
   assert.match(sdk, /memcpy\(\(void \*\)uxStackPointer, &_thread_local_data_start, tls_data_size\)/);
