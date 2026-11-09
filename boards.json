@@ -141,7 +141,7 @@
       "rawHeight": 684,
       "framebufferWidth": 684,
       "framebufferHeight": 1216,
-      "framebufferFormat": "mono1",
+      "framebufferFormat": "gray16",
       "outputWidth": 684,
       "outputHeight": 1216,
       "touchI2cAddr": "0x00",

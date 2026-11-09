@@ -21,7 +21,7 @@ test("real direct capture respects framebuffer capacity, format and Read Pico ro
   const source = readFileSync(new URL("../qemu-peripherals/target_xtensa_exc_helper.c", import.meta.url), "utf8");
   const layout = body(source, "typedef struct MofeiDirectFramebufferLayout") + " MofeiDirectFramebufferLayout;";
   const parse = body(source, "static bool mofei_read_direct_framebuffer_layout(");
-  const direct = body(source, "if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_LILYGO_FRAMEBUFFER_BYTES)");
+  const direct = body(source, "if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES)");
   const header = fileURLToPath(new URL("../qemu-peripherals/mofei-sim-addrs.h", import.meta.url));
   const dir = mkdtempSync(join(tmpdir(), "panda-direct-framebuffer-"));
   try {
@@ -40,7 +40,7 @@ enum {OBJECT=0x1000,EXPORTED=0x2000,OBJECT_SLOT=0x2004,PIXELS=0x3c800000};
 static uint32_t words[6],exported_bits,object_pointer,failed_metadata;
 static uint8_t* pixels;
 static uint32_t allocation,reads,last_read,publishes,published_bytes;
-static uint8_t published[MOFEI_LILYGO_FRAMEBUFFER_BYTES];
+static uint8_t published[684u*1216u/2u];
 static bool mofei_read_guest_data_u32_checked(CPUXtensaState* env,uint32_t addr,uint32_t* value) {
  (void)env;
  if(addr==failed_metadata || addr<OBJECT || addr>=OBJECT+sizeof(words) || (addr&3))return false;
@@ -94,6 +94,10 @@ int main(void) {
  assert(!memcmp(pixels,published,allocation));
  setup(MOFEI_SIM_BOARD_M5PAPERS3,960,540,1);accepted(&env,259200,259200);
  pico(&env,MOFEI_SIM_BOARD_READ_PICO);
+ // Read Pico 固件的 UI Framebuffer 是 684x1216 Gray16（stride 342），比 LilyGo 的 259200 字节上限大。
+ setup(MOFEI_SIM_BOARD_READ_PICO,684,1216,1);accepted(&env,342u*1216u,342u*1216u);
+ assert(!memcmp(pixels,published,allocation));
+ setup(MOFEI_SIM_BOARD_LILYGO_T5S3_PRO,684,1216,1);accepted(&env,342u*1216u,342u*1216u);
  pico(&env,MOFEI_SIM_BOARD_LILYGO_T5S3_PRO); // 浏览器别名仍按真实 Mono1 对象读取。
  setup(MOFEI_SIM_BOARD_EEGO_A4,552,768,0);accepted(&env,52992,52992);
  setup(MOFEI_SIM_BOARD_LILYGO_T5S3_PRO,552,768,0);words[3]|=0x100;

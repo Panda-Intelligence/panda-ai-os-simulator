@@ -237,7 +237,8 @@ async function stopRuntime(requestId, emitResult) {
 }
 
 function qemuSimBoardFor(boardId) {
-  if (boardId === "read-pico" || boardId === "eego-a4") {
+  // Read Pico uses its own QEMU board kind: its SD card is on SDMMC, which the LilyGo kind does not attach.
+  if (boardId === "eego-a4") {
     return "lilygo-t5s3-pro";
   }
   return boardId === "mofei" ? "mofei" : boardId;
@@ -1533,7 +1534,7 @@ function framebufferProfile(boardId) {
   if (boardId === "s37uc") return { width: 416, height: 240, format: "mono1" };
   if (boardId === "m5papers3") return { width: 540, height: 960, format: "gray16" };
   if (boardId === "lilygo-t5s3-pro") return { width: 540, height: 960, format: "gray16" };
-  if (boardId === "read-pico") return { width: 684, height: 1216, format: "mono1" };
+  if (boardId === "read-pico") return { width: 684, height: 1216, format: "gray16" };
   if (boardId === "eego-a4") return { width: 552, height: 768, format: "mono1" };
   if (boardId === "molink" || boardId === "x4pro") {
     return { width: 800, height: 480, format: "mono1" };

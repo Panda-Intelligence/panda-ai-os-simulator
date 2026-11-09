@@ -4806,8 +4806,8 @@ static bool mofei_read_direct_framebuffer_layout(CPUXtensaState* env, uint32_t o
   const uint32_t pixels_per_byte = format == 1u ? 2u : 8u;
   const uint32_t expected_stride = width / pixels_per_byte + (width % pixels_per_byte != 0);
   /* SDK 像素存储没有额外行对齐；先限制乘积，再读取真实容量内的字节。 */
-  if (stride != expected_stride || stride > MOFEI_LILYGO_FRAMEBUFFER_BYTES ||
-      height > MOFEI_LILYGO_FRAMEBUFFER_BYTES / stride) {
+  if (stride != expected_stride || stride > MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES ||
+      height > MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES / stride) {
     return false;
   }
   const uint32_t bytes = stride * height;
@@ -4849,8 +4849,8 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
   static bool timer_started;
 
   const uint32_t direct_fb_bytes = mofei_sim_board_direct_framebuffer_bytes();
-  if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_LILYGO_FRAMEBUFFER_BYTES) {
-    static uint8_t lilygo_framebuffer[MOFEI_LILYGO_FRAMEBUFFER_BYTES];
+  if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES) {
+    static uint8_t lilygo_framebuffer[MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES];
     static uint32_t lilygo_publish_count;
     uint32_t exported_bits = 0;
     uint32_t framebuffer_object = 0;

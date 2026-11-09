@@ -85,10 +85,52 @@ libffi warnings remain. The GPIO test compiles the actual helper body and checks
 PaperS3 CS47 alongside unchanged LilyGo pins; both native mirror patches also
 passed `git apply --check` on the pinned native QEMU source.
 
+## Read Pico, Molink, X4Pro, Eego A4 and Metalio: input and boot windows
+
+The boot test no longer sends one canvas click to every board. Boards with a qualified touch gesture
+(Mofei, S3R8, S3-WROOM, S37UC, PaperS3, LilyGo) keep it. Every other board is driven with its own keys,
+taken from `boards.json` `keyMap` and pressed through the on-screen `.panel-physical-key` control for 250 ms,
+navigation keys first (Down/PageDown, Right, Up, Left, Confirm, Back, Power last). A board passes when one of
+its keys changes the framebuffer; if none does, the failure lists every key tried. Touch-capable boards outside
+the qualified set also get one tap, which is recorded in the report but not asserted.
+
+Measured on the 2.5.2 deployment, Chromium headless, host load between 56 and 165 across runs (first frame counted
+from Quick Launch; one value per run):
+
+| Board | First frame | Key response | Touch tap at 50% x, 20% y |
+|---|---|---|---|
+| molink | 62.8 s, 63.4 s | Down 0.3 s | no touch on this board |
+| x4pro | 67.5 s, 59.7 s | PageDown 0.3 s | no change within 15 s |
+| eego-a4 | 17.8 s, 14.0 s | PageDown 0.3 s | no change within 15 s |
+| metalio-eink4 | 58.4 s, 58.4 s, 67.4 s | Power 0.8-0.9 s | changed after 4.5-4.7 s |
+
+Painting after the first frame took about 0.36 s on every board. Boot windows are a table in the test, not a
+blanket increase: the default is 60 s, and Molink, X4Pro and Metalio carry twice their slowest measured first
+frame, rounded up (130 s, 140 s, 140 s). Their first frames sit within a few seconds of 60 s whatever the host
+load, so the default window passes or fails them by chance. Key and touch responses stay on the 15 s default.
+`SIMULATOR_TEST_WINDOW_SCALE=<n>` stretches all windows further on an overloaded host. The earlier ad-hoc
+"240 s boot, 60 s waits" was not needed by any board in these runs.
+
+Read-only runs against a deployed simulator need `SIMULATOR_TEST_ALLOW_REMOTE=1`; the default stays loopback only.
+
+## Read Pico browser boot (fixed 2026-11-09)
+
+Two faults kept Read Pico from ever painting in the browser:
+
+1. The worker started it as the `lilygo-t5s3-pro` QEMU kind. That kind attaches the SD card on SPI2 and none
+   on SDMMC, while the Read Pico firmware mounts SDMMC (1-bit CLK 38 / CMD 42 / D0 44), so every command
+   timed out (`SD card init failed: ESP_ERR_TIMEOUT`). It now starts as the native `read-pico` kind.
+2. The Read Pico UI framebuffer is Gray16 684x1216 (stride 342, 415872 bytes). The direct capture refused
+   anything above the LilyGo 259200-byte ceiling (`[LILYGO-FB] ... read=0`), and the worker and `boards.json`
+   described Mono1. The capture ceiling is now `MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES` and Read Pico is `gray16`.
+
+Both changes live in the QEMU peripherals (`mofei-sim-addrs.h`, `target_xtensa_exc_helper.c` and its patch
+mirror) and the worker, so a deployed simulator needs a rebuilt QEMU wasm runtime, not just a new UI bundle.
+
 ## Reproduction and scope
 
-Use `tests/browser-all-board-runtime.smoke.mjs` for the six-board positive
-framebuffer/input/storage matrix. Set `SIMULATOR_TEST_READ_SAMPLE=1` only with
+Use `tests/browser-all-board-runtime.smoke.mjs` for the per-board positive
+framebuffer/input/storage matrix (`SIMULATOR_TEST_BOARDS` selects boards). Set `SIMULATOR_TEST_READ_SAMPLE=1` only with
 the documented single-book seed to additionally exercise Library -> Reader.
 `tests/browser-board-lifecycle.smoke.mjs` checks real same-page Stop/restart;
 `tests/browser-round-status.smoke.mjs` checks the actual UI when artifacts are

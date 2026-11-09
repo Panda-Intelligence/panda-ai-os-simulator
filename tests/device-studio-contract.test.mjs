@@ -177,7 +177,8 @@ test("runtime worker handles mono slicing, captured landscape SSD1677 pixels, an
   runInNewContext(executableWorker, context);
   const workerTest = context.self.__test;
 
-  assert.equal(workerTest.qemuSimBoardFor("read-pico"), "lilygo-t5s3-pro");
+  // Read Pico mounts its SD card through SDMMC; the LilyGo QEMU board has no SDMMC card, so boot stalled on ESP_ERR_TIMEOUT.
+  assert.equal(workerTest.qemuSimBoardFor("read-pico"), "read-pico");
   assert.equal(workerTest.qemuSimBoardFor("eego-a4"), "lilygo-t5s3-pro");
   assert.equal(workerTest.qemuSimBoardFor("molink"), "molink");
   assert.equal(workerTest.qemuSimBoardFor("x4pro"), "x4pro");
@@ -188,15 +189,19 @@ test("runtime worker handles mono slicing, captured landscape SSD1677 pixels, an
   fullDirectBuffer.fill(0xff);
   fullDirectBuffer[0] = 0x00; // first 8 pixels black (value 16)
 
+  // The Read Pico firmware UI Framebuffer is Gray16 684x1216 (stride 342, 415872 bytes), not Mono1.
+  const readPicoGray = new Uint8Array(342 * 1216);
+  readPicoGray[0] = 0xf0; // pixel 0 level 15 (black), pixel 1 level 0 (white)
   workerTest.setLastBoardId("read-pico");
   postedMessages.length = 0;
-  workerTest.emitFramebuffer(0, fullDirectBuffer);
+  workerTest.emitFramebuffer(0, readPicoGray);
   assert.equal(postedMessages.length, 1);
   assert.equal(postedMessages[0].payload.width, 684);
   assert.equal(postedMessages[0].payload.height, 1216);
   const readPicoRgba = Buffer.from(postedMessages[0].payload.rgba_b64, "base64");
   assert.equal(readPicoRgba.length, 684 * 1216 * 4);
-  assert.equal(readPicoRgba[0], 16);
+  assert.equal(readPicoRgba[0], 0);
+  assert.equal(readPicoRgba[4], 255);
 
   workerTest.setLastBoardId("eego-a4");
   postedMessages.length = 0;
