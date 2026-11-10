@@ -590,6 +590,12 @@ struct CaseStep {
     #[serde(default)]
     #[serde(rename = "holdMs")]
     hold_ms: Option<u64>,
+    /// Keep a held button down past `holdMs` until the foreground activity
+    /// has changed (the hold's observable effect, e.g. a long Confirm leaving
+    /// the Reader), then release.
+    #[serde(default)]
+    #[serde(rename = "holdUntilActivityChange")]
+    hold_until_activity_change: bool,
     #[serde(default)]
     #[serde(rename = "minDarkRatio")]
     min_dark_ratio: Option<f64>,
@@ -667,6 +673,10 @@ struct E2EContext {
     activity_events: Vec<(StdInstant, String)>,
     pending_input_activity_after: Option<usize>,
     pending_input_log_after: Option<usize>,
+    /// Firmware-side button reads (`[MOFEI-SIM] button_read ...`), stamped when
+    /// the stderr line is parsed. QEMU's virtual clock follows host time
+    /// (no -icount), so this is the guest-observed edge time.
+    button_reads: Vec<(StdInstant, u8, bool)>,
 }
 
 #[derive(Debug)]
@@ -941,6 +951,11 @@ enum InjectionCommand {
     ButtonClick {
         button_id: u8,
         hold_ms: Option<u64>,
+    },
+    /// One edge of a held button; the runner times the hold between the two.
+    ButtonEdge {
+        button_id: u8,
+        pressed: bool,
     },
     SyntheticTouchEvent {
         touch_type: SyntheticTouchEventType,
@@ -2401,6 +2416,11 @@ async fn injection_loop(
                         ).await?;
                         let _ = event_tx.send(HeadlessEvent::Injected);
                     }
+                    Some(InjectionCommand::ButtonEdge { button_id, pressed }) => {
+                        enqueue_encoded_frame(&writer, &encode_button_frame(button_id, pressed)).await?;
+                        eprintln!("[headless] injected button edge button_id={button_id} pressed={pressed}");
+                        let _ = event_tx.send(HeadlessEvent::Injected);
+                    }
                     Some(InjectionCommand::SyntheticTouchEvent { touch_type, x, y }) => {
                         write_synthetic_touch_event(&writer, touch_type, x, y).await?;
                         let _ = event_tx.send(HeadlessEvent::Injected);
@@ -3233,10 +3253,15 @@ impl E2EContext {
             activity_events: Vec::new(),
             pending_input_activity_after: None,
             pending_input_log_after: None,
+            button_reads: Vec::new(),
         }
     }
 
     fn push_line(&mut self, line: &str) {
+        if let Some((button_id, released)) = parse_firmware_button_read(line) {
+            self.button_reads
+                .push((StdInstant::now(), button_id, released));
+        }
         self.transcript.push(line.to_string());
     }
 
@@ -4660,6 +4685,115 @@ async fn read_qemu_stdout(
         }
         let _ = event_tx.send(HeadlessEvent::SerialLine);
     }
+    Ok(())
+}
+
+/// Parses `[MOFEI-SIM] button_read id=1 released=0 depth=0 ...`, the line the
+/// QEMU helper prints when the firmware dequeues an injected button edge.
+fn parse_firmware_button_read(line: &str) -> Option<(u8, bool)> {
+    let rest =
+        &line[line.find("[MOFEI-SIM] button_read id=")? + "[MOFEI-SIM] button_read id=".len()..];
+    let (id, rest) = rest.split_once(" released=")?;
+    let released = rest.chars().next()?;
+    Some((id.parse().ok()?, released == '1'))
+}
+
+/// Boards whose QEMU model reports firmware button reads.
+fn board_reports_button_reads(board: &BoardRuntime) -> bool {
+    board.id == "mofei" || board.id == "s3r8"
+}
+
+/// Waits until the firmware has dequeued button edge `released` for
+/// `button_id` after `after_index` reads, returning the stamp of that read.
+async fn wait_for_firmware_button_read(
+    ctx: &std::sync::Arc<tokio::sync::Mutex<E2EContext>>,
+    button_id: u8,
+    released: bool,
+    after_index: usize,
+    timeout: Duration,
+) -> Result<StdInstant> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        {
+            let ctx = ctx.lock().await;
+            if let Some((at, _, _)) = ctx
+                .button_reads
+                .iter()
+                .skip(after_index)
+                .find(|(_, id, rel)| *id == button_id && *rel == released)
+            {
+                return Ok(*at);
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(anyhow!(
+                "firmware did not read button {button_id} {} within {}s",
+                if released { "release" } else { "press" },
+                timeout.as_secs()
+            ));
+        }
+        time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Holds `button_id` for at least `hold_ms` of guest time. The press edge goes
+/// in, the firmware's own dequeue of it (`button_read`) is the ack, the hold is
+/// timed from that ack (QEMU virtual time follows host time), the optional
+/// `hold_until_activity_change` effect is awaited, and the run only continues once
+/// the firmware has also dequeued the release. A host-side
+/// sleep between press and release would let a stalled guest input task see
+/// press and release back to back and count a short press.
+async fn hold_button_until_guest_time(
+    ctx: &std::sync::Arc<tokio::sync::Mutex<E2EContext>>,
+    injection_tx: &mpsc::UnboundedSender<InjectionCommand>,
+    event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
+    last_fb: &mut Option<Vec<u8>>,
+    button_id: u8,
+    hold_ms: u64,
+    hold_until_activity_change: bool,
+    timeout: Duration,
+) -> Result<()> {
+    let (reads_before, activity_at_press) = {
+        let ctx = ctx.lock().await;
+        (ctx.button_reads.len(), ctx.current_activity.clone())
+    };
+    injection_tx
+        .send(InjectionCommand::ButtonEdge {
+            button_id,
+            pressed: true,
+        })
+        .map_err(|_| anyhow!("injection channel closed"))?;
+    wait_for_injection(event_rx, last_fb, timeout, false).await?;
+    let pressed_at =
+        wait_for_firmware_button_read(ctx, button_id, false, reads_before, timeout).await?;
+    let release_at = pressed_at + Duration::from_millis(hold_ms);
+    time::sleep_until(tokio::time::Instant::from_std(release_at)).await;
+    // A guest that was stalled mid-hold polls the release before its UI tick
+    // can see the elapsed hold; releasing on wall time alone then turns a long
+    // press into a short one. Keep holding until the effect is observable.
+    if hold_until_activity_change {
+        let deadline = tokio::time::Instant::now() + timeout;
+        while ctx.lock().await.current_activity == activity_at_press {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "held button {button_id} did not change the activity from {:?} within {}s",
+                    activity_at_press,
+                    timeout.as_secs()
+                ));
+            }
+            time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+    let reads_before_release = ctx.lock().await.button_reads.len();
+    injection_tx
+        .send(InjectionCommand::ButtonEdge {
+            button_id,
+            pressed: false,
+        })
+        .map_err(|_| anyhow!("injection channel closed"))?;
+    wait_for_injection(event_rx, last_fb, timeout, false).await?;
+    wait_for_firmware_button_read(ctx, button_id, true, reads_before_release, timeout).await?;
+    eprintln!("[e2e] held button_id={button_id} for {hold_ms} ms of guest time after the firmware read the press");
     Ok(())
 }
 
@@ -6815,20 +6949,39 @@ async fn run_e2e_case(
                         let mut ctx_lock = ctx.lock().await;
                         ctx_lock.mark_input_activity_boundary();
                     }
-                    injection_tx
-                        .send(InjectionCommand::ButtonClick {
+                    let step_timeout = Duration::from_secs(args.step_timeout);
+                    let held_ms = step
+                        .hold_ms
+                        .filter(|ms| *ms > 0 && board_reports_button_reads(&board));
+                    let injection_result = if let Some(hold_ms) = held_ms {
+                        hold_button_until_guest_time(
+                            &ctx,
+                            &injection_tx,
+                            &mut event_rx,
+                            &mut last_fb,
                             button_id,
-                            hold_ms: step.hold_ms,
-                        })
-                        .ok();
-                    if let Err(e) = wait_for_injection(
-                        &mut event_rx,
-                        &mut last_fb,
-                        Duration::from_secs(args.step_timeout),
-                        step.wait_for_frame,
-                    )
-                    .await
-                    {
+                            hold_ms,
+                            step.hold_until_activity_change,
+                            step_timeout,
+                        )
+                        .await
+                    } else {
+                        injection_tx
+                            .send(InjectionCommand::ButtonClick {
+                                button_id,
+                                hold_ms: step.hold_ms,
+                            })
+                            .ok();
+                        wait_for_injection(
+                            &mut event_rx,
+                            &mut last_fb,
+                            step_timeout,
+                            step.wait_for_frame,
+                        )
+                        .await
+                        .map(|_| ())
+                    };
+                    if let Err(e) = injection_result {
                         case_failed = true;
                         failure_error = Some(format!("button step failed: {e}"));
                         step_results.push(StepResult {
@@ -8468,6 +8621,155 @@ mod tests {
 
         assert_eq!(case.steps[0].button, "back");
         assert_eq!(case.steps[0].hold_ms, Some(0));
+    }
+
+    #[test]
+    fn parses_hold_until_activity_change() {
+        let case: E2ECase = serde_json::from_str(
+            r#"{
+                "id": "long-confirm-exit",
+                "description": "holds Confirm until the Reader is left",
+                "steps": [
+                    {"type": "button", "button": "confirm", "holdMs": 650, "holdUntilActivityChange": true},
+                    {"type": "button", "button": "confirm", "holdMs": 650}
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        assert!(case.steps[0].hold_until_activity_change);
+        assert!(!case.steps[1].hold_until_activity_change);
+    }
+
+    #[test]
+    fn parses_firmware_button_read_lines() {
+        assert_eq!(
+            parse_firmware_button_read(
+                "[MOFEI-SIM] button_read id=1 released=0 depth=0 ptrs=3fd87a21,3fd87a20"
+            ),
+            Some((1, false))
+        );
+        assert_eq!(
+            parse_firmware_button_read("[MOFEI-SIM] button_read id=6 released=1 depth=2 ptrs=0,0"),
+            Some((6, true))
+        );
+        // The queue and state lines are the host side, not a firmware read.
+        assert_eq!(
+            parse_firmware_button_read("[MOFEI-SIM] button_queue id=1 released=0 depth=1"),
+            None
+        );
+        assert_eq!(
+            parse_firmware_button_read("[MOFEI-SIM] button_read id=x released=0"),
+            None
+        );
+    }
+
+    #[test]
+    fn push_line_records_only_firmware_button_reads() {
+        let mut ctx = E2EContext::new();
+        ctx.push_line("[MOFEI-SIM] button_queue id=1 released=0 depth=1");
+        assert!(ctx.button_reads.is_empty());
+        ctx.push_line("[MOFEI-SIM] button_read id=1 released=0 depth=0 ptrs=1,2");
+        ctx.push_line("[MOFEI-SIM] button_read id=1 released=1 depth=0 ptrs=1,2");
+        assert_eq!(
+            ctx.button_reads
+                .iter()
+                .map(|(_, id, rel)| (*id, *rel))
+                .collect::<Vec<_>>(),
+            vec![(1, false), (1, true)]
+        );
+    }
+
+    /// A guest whose UI tick is late: the press is read at once, the elapsed
+    /// hold is only noticed (activity change) long after `holdMs`. The release
+    /// must wait for that effect instead of following the wall clock.
+    #[tokio::test]
+    async fn hold_waits_for_the_effect_not_the_wall_clock() {
+        let ctx = std::sync::Arc::new(tokio::sync::Mutex::new(E2EContext::new()));
+        ctx.lock().await.current_activity = Some("Reader".to_string());
+        let (injection_tx, mut injection_rx) = mpsc::unbounded_channel::<InjectionCommand>();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<HeadlessEvent>();
+        let release_seen_at = std::sync::Arc::new(std::sync::Mutex::new(None::<StdInstant>));
+        let exit_at = std::sync::Arc::new(std::sync::Mutex::new(None::<StdInstant>));
+
+        let guest_ctx = ctx.clone();
+        let guest_release = release_seen_at.clone();
+        let guest_exit = exit_at.clone();
+        let guest = tokio::spawn(async move {
+            while let Some(command) = injection_rx.recv().await {
+                let InjectionCommand::ButtonEdge { button_id, pressed } = command else {
+                    panic!("expected a button edge");
+                };
+                let _ = event_tx.send(HeadlessEvent::Injected);
+                let mut c = guest_ctx.lock().await;
+                c.push_line(&format!(
+                    "[MOFEI-SIM] button_read id={button_id} released={} depth=0 ptrs=1,2",
+                    if pressed { 0 } else { 1 }
+                ));
+                if pressed {
+                    // Stalled UI tick: the exit lands 300 ms after the press.
+                    let ctx = guest_ctx.clone();
+                    let exit = guest_exit.clone();
+                    tokio::spawn(async move {
+                        time::sleep(Duration::from_millis(300)).await;
+                        *exit.lock().unwrap() = Some(StdInstant::now());
+                        ctx.lock().await.record_activity_event("FileBrowser");
+                    });
+                } else {
+                    *guest_release.lock().unwrap() = Some(StdInstant::now());
+                }
+            }
+        });
+
+        let mut last_fb = None;
+        hold_button_until_guest_time(
+            &ctx,
+            &injection_tx,
+            &mut event_rx,
+            &mut last_fb,
+            1,
+            50,
+            true,
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        drop(injection_tx);
+        guest.await.unwrap();
+
+        let released = release_seen_at.lock().unwrap().expect("release delivered");
+        let exited = exit_at.lock().unwrap().expect("exit happened");
+        assert!(
+            released >= exited,
+            "release must not precede the observed effect"
+        );
+    }
+
+    #[tokio::test]
+    async fn hold_fails_when_the_firmware_never_reads_the_press() {
+        let ctx = std::sync::Arc::new(tokio::sync::Mutex::new(E2EContext::new()));
+        let (injection_tx, mut injection_rx) = mpsc::unbounded_channel::<InjectionCommand>();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<HeadlessEvent>();
+        tokio::spawn(async move {
+            while injection_rx.recv().await.is_some() {
+                let _ = event_tx.send(HeadlessEvent::Injected);
+            }
+        });
+        let mut last_fb = None;
+        let error = hold_button_until_guest_time(
+            &ctx,
+            &injection_tx,
+            &mut event_rx,
+            &mut last_fb,
+            1,
+            50,
+            false,
+            Duration::from_millis(100),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("did not read button 1 press"), "{error}");
     }
 
     #[test]
