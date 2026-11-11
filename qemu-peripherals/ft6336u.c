@@ -40,7 +40,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(FT6336UState, FT6336U)
 #define BUTTON_ID_KEY1 1     /* MOFEI_KEY1 / GPIO 1 */
 #define BUTTON_ID_KEY2 2     /* MOFEI_KEY2 / GPIO 2 */
 #define BUTTON_GPIO_COUNT 3
-#define BUTTON_ID_COUNT 7
+#define BUTTON_ID_COUNT 8
 
 /* Touch action codes (used by ssd1677 inbound IPC dispatcher) */
 #define TOUCH_DOWN 0x01
