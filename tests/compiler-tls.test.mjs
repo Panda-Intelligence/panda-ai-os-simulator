@@ -72,7 +72,9 @@ static uint8_t* at(uint32_t addr,size_t len) {
 }
 static bool mofei_read_guest_memory(uint32_t addr,uint8_t* dest,uint32_t len) {
  ++reads;assert(addr==0x3c400000u && len==16);
- if(fail_read)return false;memcpy(dest,image,len);return true;
+ if(fail_read)return false;
+ memcpy(dest,image,len);
+ return true;
 }
 static MemTxResult address_space_write(void* space,uint32_t addr,int attrs,const void* data,size_t len) {
  (void)space;(void)attrs;++writes;if(fail_write)return 1;memcpy(at(addr,len),data,len);return MEMTX_OK;
