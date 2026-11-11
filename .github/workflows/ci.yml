@@ -18,6 +18,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.11
+      # The loader and input-queue tests compile the real QEMU helper C against glib-2.0.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libglib2.0-dev
       - run: bun install --frozen-lockfile
       - run: bun run test
       - run: bun run build
