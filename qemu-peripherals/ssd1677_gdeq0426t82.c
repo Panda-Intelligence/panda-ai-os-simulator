@@ -486,7 +486,7 @@ void mofei_wasm_inject_button(uint8_t button_id, uint8_t pressed) { ssd1677_inje
 
 EMSCRIPTEN_KEEPALIVE
 void mofei_wasm_release_buttons(void) {
-  for (uint8_t button_id = 0; button_id < 7; button_id++) {
+  for (uint8_t button_id = 0; button_id < 8; button_id++) {
     ssd1677_inject_button(button_id, 0);
   }
 }

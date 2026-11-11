@@ -1541,7 +1541,7 @@ void mofeiSimulatorTouchQueue(uint16_t x, uint16_t y, uint8_t action, uint8_t to
 }
 
 static void mofeiSimulatorButtonQueue(uint8_t button_id, bool released) {
-  if (button_id > 6) {
+  if (button_id > 7) {
     return;
   }
   g_mutex_lock(&g_input_queue_mutex);
@@ -1577,9 +1577,9 @@ static bool mofeiSimulatorButtonEventWrite(hwaddr addr, uint8_t mask) {
  * latches edge events so a fast down/up cannot be lost between firmware polls. */
 void mofeiSimulatorButtonStateWrite(uint8_t button_id, uint8_t pressed) {
   /* Button IDs are HalGPIO button ids after the legacy front-key range:
-   *   0 = Back, 1 = Confirm, 2 = Left, 3 = Right, 4 = Up, 5 = Down, 6 = Power.
+   *   0 = Back, 1 = Confirm, 2 = Left, 3 = Right, 4 = Up, 5 = Down, 6 = Power, 7 = PageForward.
    * Active-low host events are normalized here as pressed = bit set. */
-  if (button_id > 6) {
+  if (button_id > 7) {
     return;
   }
   const uint8_t mask = (uint8_t)(1u << button_id);

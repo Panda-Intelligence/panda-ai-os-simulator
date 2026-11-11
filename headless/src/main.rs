@@ -588,7 +588,7 @@ struct CaseStep {
     #[serde(rename = "delayMs")]
     delay_ms: u64,
     #[serde(default)]
-    #[serde(rename = "holdMs")]
+    #[serde(rename = "holdMs", alias = "hold_ms")]
     hold_ms: Option<u64>,
     /// Keep a held button down past `holdMs` until the foreground activity
     /// has changed (the hold's observable effect, e.g. a long Confirm leaving
@@ -1032,6 +1032,18 @@ fn parse_touch_tap(value: &str) -> std::result::Result<TouchTap, String> {
     Ok(TouchTap { x, y })
 }
 
+/// Simulator button ids shared with the firmware's `simulatorButtonForId`
+/// (apps/panda-os/device/main/SimulatorButtonIds.h).
+const SIM_BUTTON_ID_POWER: u8 = 6;
+const SIM_BUTTON_ID_PAGE_FORWARD: u8 = 7;
+const PAGE_FORWARD_BUTTON_NAMES: &[&str] = &["page_forward", "pageforward", "page-forward"];
+const POWER_BUTTON_NAMES: &[&str] = &["power", "pwr"];
+
+/// Mofei-class 3-key boards (Power, Confirm, PageForward in BoardConfig.h).
+fn board_has_power_page_forward_keys(board_id: &str) -> bool {
+    matches!(board_id, "mofei" | "s3r8" | "s3wroom")
+}
+
 fn load_board_runtime(board_id: Option<&str>) -> Result<BoardRuntime> {
     let registry: BoardRegistry = serde_json::from_str(include_str!("../../boards.json"))
         .context("parsing standalone boards.json")?;
@@ -1062,7 +1074,19 @@ fn load_board_runtime(board_id: Option<&str>) -> Result<BoardRuntime> {
         button_ids_by_name.insert("right".to_string(), 3);
         button_ids_by_name.insert("up".to_string(), 4);
         button_ids_by_name.insert("down".to_string(), 5);
-    } else if profile.id == "s37uc" {
+    }
+    // Boards whose BoardConfig declares kButtonMap{Power, Confirm, PageForward}: the third key
+    // is PageForward and the first is Power (GPIO0 is also BOOT). Only these boards get the
+    // names; every other board keeps its own key map and a case naming these keys fails.
+    if board_has_power_page_forward_keys(&profile.id) {
+        for name in PAGE_FORWARD_BUTTON_NAMES {
+            button_ids_by_name.insert((*name).to_string(), SIM_BUTTON_ID_PAGE_FORWARD);
+        }
+        for name in POWER_BUTTON_NAMES {
+            button_ids_by_name.insert((*name).to_string(), SIM_BUTTON_ID_POWER);
+        }
+    }
+    if profile.id == "s37uc" {
         button_ids_by_name.insert("back".to_string(), 0);
         button_ids_by_name.insert("lock".to_string(), 0);
         button_ids_by_name.insert("confirm".to_string(), 1);
@@ -3392,12 +3416,50 @@ fn load_e2e_case(case_path: &Path) -> Result<E2ECase> {
         .with_context(|| format!("reading case file {}", case_path.display()))?;
     let case: E2ECase = serde_json::from_str(&raw)
         .with_context(|| format!("parsing case file {}", case_path.display()))?;
+    let mut case = case;
     if case.steps.is_empty() {
         return Err(anyhow!("case file has no steps"));
     }
+    normalize_button_steps(&mut case)?;
     validate_boot_copy_files(&case)?;
     validate_before_boot_steps(&case)?;
     Ok(case)
+}
+
+/// `press` and `hold` are explicit spellings of the `button` step:
+/// `{"type":"press","button":"page_forward"}` is a tap and
+/// `{"type":"hold","button":"confirm","holdMs":700}` (or `hold_ms`) keeps the key down for
+/// that long. They are validated here and run through the `button` path; the step keeps its
+/// own type so the result rows match the case file.
+fn normalize_button_steps(case: &mut E2ECase) -> Result<()> {
+    for (index, step) in case.steps.iter_mut().enumerate() {
+        let kind = step.step_type.clone();
+        if kind != "press" && kind != "hold" {
+            continue;
+        }
+        if step.button.trim().is_empty() {
+            return Err(anyhow!(
+                "step {} ({kind}) needs a \"button\" name",
+                index + 1
+            ));
+        }
+        if kind == "press" && step.hold_ms.unwrap_or(0) != 0 {
+            return Err(anyhow!(
+                "step {} (press) must not set holdMs; use a hold step",
+                index + 1
+            ));
+        }
+        if kind == "hold" && step.hold_ms.unwrap_or(0) == 0 {
+            return Err(anyhow!(
+                "step {} (hold) needs holdMs greater than 0",
+                index + 1
+            ));
+        }
+        if kind == "press" {
+            step.hold_ms = Some(0);
+        }
+    }
+    Ok(())
 }
 
 fn validate_boot_copy_files(case: &E2ECase) -> Result<()> {
@@ -3624,7 +3686,7 @@ fn missing_case_capabilities(case: &E2ECase, board: &BoardRuntime) -> Vec<String
         .collect::<std::collections::HashSet<_>>();
     for step in &case.steps {
         match step.step_type.as_str() {
-            "button" if !step.button.trim().is_empty() => {
+            "button" | "press" | "hold" if !step.button.trim().is_empty() => {
                 required.insert(format!(
                     "button.{}",
                     step.button.trim().to_ascii_lowercase()
@@ -6939,7 +7001,7 @@ async fn run_e2e_case(
                     }
                 }
             }
-            "button" => match simulator_button_injection(&board, &step.button) {
+            "button" | "press" | "hold" => match simulator_button_injection(&board, &step.button) {
                 Ok(ButtonInjection::ButtonClick { button_id }) => {
                     eprintln!(
                         "[e2e] injecting physical button {} as simulator button_id={}",
@@ -6985,7 +7047,7 @@ async fn run_e2e_case(
                         case_failed = true;
                         failure_error = Some(format!("button step failed: {e}"));
                         step_results.push(StepResult {
-                            step_type: "button".to_string(),
+                            step_type: step.step_type.clone(),
                             status: "FAIL".to_string(),
                             elapsed_ms: step_start.elapsed().as_millis() as u64,
                             error: Some(format!("{e}")),
@@ -6993,7 +7055,7 @@ async fn run_e2e_case(
                         break;
                     }
                     step_results.push(StepResult {
-                        step_type: "button".to_string(),
+                        step_type: step.step_type.clone(),
                         status: "PASS".to_string(),
                         elapsed_ms: step_start.elapsed().as_millis() as u64,
                         error: None,
@@ -7006,7 +7068,7 @@ async fn run_e2e_case(
                     case_failed = true;
                     failure_error = Some(format!("button step failed: {e}"));
                     step_results.push(StepResult {
-                        step_type: "button".to_string(),
+                        step_type: step.step_type.clone(),
                         status: "FAIL".to_string(),
                         elapsed_ms: step_start.elapsed().as_millis() as u64,
                         error: Some(format!("{e}")),
@@ -8621,6 +8683,161 @@ mod tests {
 
         assert_eq!(case.steps[0].button, "back");
         assert_eq!(case.steps[0].hold_ms, Some(0));
+    }
+
+    fn load_case_from_json(name: &str, json: &str) -> Result<E2ECase> {
+        let dir = temp_test_dir(name);
+        let path = dir.join("case.json");
+        fs::write(&path, json).unwrap();
+        let loaded = load_e2e_case(&path);
+        let _ = fs::remove_dir_all(&dir);
+        loaded
+    }
+
+    #[test]
+    fn mofei_class_boards_press_power_and_page_forward_by_name() {
+        for board_id in ["mofei", "s3r8", "s3wroom"] {
+            let board = load_board_runtime(Some(board_id)).unwrap();
+            for name in ["page_forward", "pageforward", "page-forward", "PageForward"] {
+                assert_eq!(
+                    simulator_button_injection(&board, name).unwrap(),
+                    ButtonInjection::ButtonClick { button_id: 7 },
+                    "{board_id} {name}"
+                );
+            }
+            for name in ["power", "pwr"] {
+                assert_eq!(
+                    simulator_button_injection(&board, name).unwrap(),
+                    ButtonInjection::ButtonClick { button_id: 6 },
+                    "{board_id} {name}"
+                );
+            }
+            assert!(board.capabilities.contains("button.page_forward"));
+            assert!(board.capabilities.contains("button.power"));
+        }
+    }
+
+    #[test]
+    fn mofei_keeps_its_existing_button_ids() {
+        let mofei = load_board_runtime(Some("mofei")).unwrap();
+        for (name, id) in [
+            ("back", 0),
+            ("lock", 0),
+            ("confirm", 1),
+            ("key1", 1),
+            ("left", 2),
+            ("key2", 2),
+            ("right", 3),
+            ("up", 4),
+            ("down", 5),
+        ] {
+            assert_eq!(
+                simulator_button_injection(&mofei, name).unwrap(),
+                ButtonInjection::ButtonClick { button_id: id },
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn boards_without_a_page_forward_key_reject_it_instead_of_remapping() {
+        for board_id in [
+            "s37uc",
+            "lilygo-t5s3-pro",
+            "x4pro",
+            "molink",
+            "m5papers3",
+            "read-pico",
+        ] {
+            let board = load_board_runtime(Some(board_id)).unwrap();
+            let err = simulator_button_injection(&board, "page_forward").unwrap_err();
+            let message = format!("{err}");
+            assert!(
+                message.contains("unsupported simulator button 'page_forward'")
+                    && message.contains(board_id),
+                "{board_id}: {message}"
+            );
+            assert!(!board.capabilities.contains("button.page_forward"));
+        }
+    }
+
+    #[test]
+    fn page_forward_step_is_reported_as_a_missing_capability_on_other_boards() {
+        let mut case = minimal_case("page-forward-needs-the-key");
+        case.steps = serde_json::from_str(
+            r#"[{"type": "button", "button": "page_forward", "holdMs": 700}]"#,
+        )
+        .unwrap();
+        let mofei = load_board_runtime(Some("mofei")).unwrap();
+        assert!(missing_case_capabilities(&case, &mofei).is_empty());
+        let s37uc = s37uc_test_board();
+        assert_eq!(
+            missing_case_capabilities(&case, &s37uc),
+            vec!["button.page_forward".to_string()]
+        );
+    }
+
+    #[test]
+    fn press_and_hold_steps_validate_and_require_the_key() {
+        let case = load_case_from_json(
+            "press-hold-schema",
+            r#"{
+                "id": "press-hold",
+                "description": "explicit press and hold steps",
+                "steps": [
+                    {"type": "press", "button": "page_forward"},
+                    {"type": "hold", "button": "page_forward", "hold_ms": 700},
+                    {"type": "hold", "button": "confirm", "holdMs": 650, "holdUntilActivityChange": true}
+                ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            case.steps
+                .iter()
+                .map(|step| step.step_type.as_str())
+                .collect::<Vec<_>>(),
+            ["press", "hold", "hold"]
+        );
+        assert_eq!(case.steps[0].hold_ms, Some(0));
+        assert_eq!(case.steps[1].hold_ms, Some(700));
+        assert_eq!(case.steps[2].hold_ms, Some(650));
+        assert!(case.steps[2].hold_until_activity_change);
+        let s37uc = s37uc_test_board();
+        assert_eq!(
+            missing_case_capabilities(&case, &s37uc),
+            vec!["button.page_forward".to_string()]
+        );
+    }
+
+    #[test]
+    fn press_and_hold_steps_reject_inconsistent_fields() {
+        for (name, step, expected) in [
+            (
+                "hold-no-ms",
+                r#"{"type": "hold", "button": "back"}"#,
+                "needs holdMs",
+            ),
+            (
+                "hold-zero-ms",
+                r#"{"type": "hold", "button": "back", "holdMs": 0}"#,
+                "needs holdMs",
+            ),
+            (
+                "press-with-ms",
+                r#"{"type": "press", "button": "back", "holdMs": 400}"#,
+                "must not set holdMs",
+            ),
+            (
+                "press-no-button",
+                r#"{"type": "press"}"#,
+                "needs a \"button\" name",
+            ),
+        ] {
+            let json = format!(r#"{{"id": "{name}", "description": "bad", "steps": [{step}]}}"#);
+            let err = load_case_from_json(name, &json).unwrap_err();
+            assert!(format!("{err}").contains(expected), "{name}: {err}");
+        }
     }
 
     #[test]
