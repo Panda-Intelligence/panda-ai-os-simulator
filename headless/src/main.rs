@@ -937,7 +937,7 @@ enum HeadlessEvent {
     SerialLine,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum InjectionCommand {
     TouchTap {
         x: u16,
@@ -947,6 +947,10 @@ enum InjectionCommand {
         x: u16,
         y: u16,
         direction: TouchGestureDirection,
+    },
+    TouchLongPress {
+        x: u16,
+        y: u16,
     },
     ButtonClick {
         button_id: u8,
@@ -2432,6 +2436,10 @@ async fn injection_loop(
                         write_touch_swipe(&writer, x, y, direction, &geometry).await?;
                         let _ = event_tx.send(HeadlessEvent::Injected);
                     }
+                    Some(InjectionCommand::TouchLongPress { x, y }) => {
+                        write_touch_long_press(&writer, x, y).await?;
+                        let _ = event_tx.send(HeadlessEvent::Injected);
+                    }
                     Some(InjectionCommand::ButtonClick { button_id, hold_ms }) => {
                         write_button_click(
                             &writer,
@@ -2598,6 +2606,21 @@ async fn enqueue_encoded_frame(
 // TapGestureRecognizer 的默认上限为 500ms；保留明显余量，避免 QEMU 调度抖动
 // 将固定的 down/up 注入误判为超时长按。
 const TOUCH_CONTACT_HOLD_MS: u64 = 250;
+/// Firmware long-press recogniser fires after 500 ms of stationary contact;
+/// hold well past that so a loaded guest still observes it.
+const TOUCH_LONG_PRESS_HOLD_MS: u64 = 900;
+
+async fn write_touch_long_press(
+    writer: &debug_transport::HeadlessDebugWriter,
+    x: u16,
+    y: u16,
+) -> Result<()> {
+    enqueue_encoded_frame(writer, &encode_touch_frame(0x01, x, y, 0)).await?;
+    time::sleep(Duration::from_millis(TOUCH_LONG_PRESS_HOLD_MS)).await;
+    enqueue_encoded_frame(writer, &encode_touch_frame(0x03, x, y, 0)).await?;
+    eprintln!("[headless] injected touch long press x={x} y={y}");
+    Ok(())
+}
 
 async fn write_touch_tap(
     writer: &debug_transport::HeadlessDebugWriter,
@@ -3758,6 +3781,22 @@ fn board_center_touch(geometry: &BoardGeometry) -> TouchTap {
     TouchTap {
         x: (geometry.output_width / 2).min(u32::from(u16::MAX)) as u16,
         y: (geometry.output_height / 2).min(u32::from(u16::MAX)) as u16,
+    }
+}
+
+fn touch_event_injection_command(
+    touch_type: SyntheticTouchEventType,
+    x: u16,
+    y: u16,
+) -> InjectionCommand {
+    let swipe = |direction| InjectionCommand::TouchSwipe { x, y, direction };
+    match touch_type {
+        SyntheticTouchEventType::Tap => InjectionCommand::TouchTap { x, y },
+        SyntheticTouchEventType::LongPress => InjectionCommand::TouchLongPress { x, y },
+        SyntheticTouchEventType::SwipeUp => swipe(TouchGestureDirection::Up),
+        SyntheticTouchEventType::SwipeDown => swipe(TouchGestureDirection::Down),
+        SyntheticTouchEventType::SwipeLeft => swipe(TouchGestureDirection::Left),
+        SyntheticTouchEventType::SwipeRight => swipe(TouchGestureDirection::Right),
     }
 }
 
@@ -6857,12 +6896,16 @@ async fn run_e2e_case(
                     let mut ctx_lock = ctx.lock().await;
                     ctx_lock.mark_input_activity_boundary();
                 }
+                // The firmware only recognises gestures from real contact
+                // sequences (down, moves, up). The pre-recognised synthetic
+                // channel is not consumed as a gesture, so deliver every
+                // touch_event through the same contact path as `touch`.
                 injection_tx
-                    .send(InjectionCommand::SyntheticTouchEvent {
+                    .send(touch_event_injection_command(
                         touch_type,
-                        x: mapped_tap.x,
-                        y: mapped_tap.y,
-                    })
+                        mapped_tap.x,
+                        mapped_tap.y,
+                    ))
                     .ok();
                 if let Err(e) = wait_for_injection(
                     &mut event_rx,
@@ -9070,6 +9113,56 @@ mod tests {
             synthetic_touch_event_type(&case.steps[0].event).unwrap(),
             SyntheticTouchEventType::SwipeDown
         );
+    }
+
+    #[test]
+    fn touch_event_steps_use_real_contact_commands() {
+        for (event, expected) in [
+            ("tap", InjectionCommand::TouchTap { x: 10, y: 20 }),
+            (
+                "long_press",
+                InjectionCommand::TouchLongPress { x: 10, y: 20 },
+            ),
+            (
+                "swipe_left",
+                InjectionCommand::TouchSwipe {
+                    x: 10,
+                    y: 20,
+                    direction: TouchGestureDirection::Left,
+                },
+            ),
+            (
+                "swipe_right",
+                InjectionCommand::TouchSwipe {
+                    x: 10,
+                    y: 20,
+                    direction: TouchGestureDirection::Right,
+                },
+            ),
+            (
+                "swipe_up",
+                InjectionCommand::TouchSwipe {
+                    x: 10,
+                    y: 20,
+                    direction: TouchGestureDirection::Up,
+                },
+            ),
+            (
+                "swipe_down",
+                InjectionCommand::TouchSwipe {
+                    x: 10,
+                    y: 20,
+                    direction: TouchGestureDirection::Down,
+                },
+            ),
+        ] {
+            let touch_type = synthetic_touch_event_type(event).unwrap();
+            assert_eq!(
+                touch_event_injection_command(touch_type, 10, 20),
+                expected,
+                "{event}"
+            );
+        }
     }
 
     #[test]
