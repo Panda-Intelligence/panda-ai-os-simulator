@@ -21,6 +21,7 @@
 //     received, exits with code 2 and writes nothing.
 
 mod debug_transport;
+mod runtime_apps;
 #[path = "../../src-tauri/src/simulator_resolver.rs"]
 mod simulator_resolver;
 
@@ -278,6 +279,9 @@ struct E2ECase {
 struct E2EBoot {
     #[serde(default)]
     copy_files: Vec<E2EBootCopyFile>,
+    /// Official Runtime App authoring directories to install through the toolchain (see runtime_apps.rs).
+    #[serde(default)]
+    runtime_apps: Vec<runtime_apps::E2EBootRuntimeApp>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -731,6 +735,11 @@ struct Args {
     /// is requested.
     #[arg(long, default_value_t = 10)]
     duration: u64,
+
+    /// Trust-root key (`pos keygen` JSON) of the simulator test firmware, used to sign `boot.runtimeApps` packages.
+    /// Defaults to PANDA_SIMULATOR_RUNTIME_APP_ROOT_KEY; there is no other fallback.
+    #[arg(long)]
+    runtime_app_root_key: Option<PathBuf>,
 
     /// Output PNG path. Required unless --case writes screenshot.png under --artifacts.
     #[arg(long)]
@@ -3445,6 +3454,7 @@ fn load_e2e_case(case_path: &Path) -> Result<E2ECase> {
     }
     normalize_button_steps(&mut case)?;
     validate_boot_copy_files(&case)?;
+    runtime_apps::validate_boot_runtime_apps(&case.boot.runtime_apps)?;
     validate_before_boot_steps(&case)?;
     Ok(case)
 }
@@ -5936,196 +5946,6 @@ fn read_toolchain_fixture_key(path: &Path) -> Result<ToolchainFixtureKey> {
         .with_context(|| format!("parsing Panda fixture key {}", path.display()))
 }
 
-#[derive(Clone, Copy)]
-struct PandaLuaFixtureApp {
-    template_name: Option<&'static str>,
-    example_dir: Option<&'static str>,
-    app_dir_name: &'static str,
-    signed_package_name: &'static str,
-}
-
-const PANDA_HELLO_FIXTURE_APP: PandaLuaFixtureApp = PandaLuaFixtureApp {
-    template_name: Some("hello"),
-    example_dir: None,
-    app_dir_name: "hello",
-    signed_package_name: "hello.signed.pap",
-};
-
-const PANDA_COUNTER_FIXTURE_APP: PandaLuaFixtureApp = PandaLuaFixtureApp {
-    template_name: None,
-    example_dir: Some("apps/examples/counter"),
-    app_dir_name: "counter",
-    signed_package_name: "counter.signed.pap",
-};
-
-fn panda_lua_fixture_app_for_case(case_id: &str) -> Option<PandaLuaFixtureApp> {
-    if !case_id.contains("panda-apps-lua-") {
-        return None;
-    }
-    if case_id.contains("counter") {
-        Some(PANDA_COUNTER_FIXTURE_APP)
-    } else {
-        Some(PANDA_HELLO_FIXTURE_APP)
-    }
-}
-
-fn copy_dir_recursive(source: &Path, target: &Path) -> Result<()> {
-    fs::create_dir_all(target)
-        .with_context(|| format!("creating recursive copy target {}", target.display()))?;
-    for entry in fs::read_dir(source)
-        .with_context(|| format!("reading recursive copy source {}", source.display()))?
-    {
-        let entry = entry
-            .with_context(|| format!("reading recursive copy entry under {}", source.display()))?;
-        let file_type = entry.file_type().with_context(|| {
-            format!(
-                "reading recursive copy entry type {}",
-                entry.path().display()
-            )
-        })?;
-        let target_path = target.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_recursive(&entry.path(), &target_path)?;
-        } else if file_type.is_file() {
-            fs::copy(entry.path(), &target_path).with_context(|| {
-                format!(
-                    "copying recursive fixture source {} -> {}",
-                    entry.path().display(),
-                    target_path.display()
-                )
-            })?;
-        }
-    }
-    Ok(())
-}
-
-fn seed_panda_lua_app_package(sd_root: &Path, fixture: PandaLuaFixtureApp) -> Result<()> {
-    let repo_root = repo_root_path()?;
-    let toolchain_dir = repo_root.join("apps/toolchain");
-    let fixture_root = std::env::temp_dir().join(format!(
-        "mofei-panda-e2e-fixture-{}-{}-{}",
-        std::process::id(),
-        fixture.app_dir_name,
-        stable_socket_suffix_hash(&sd_root.to_string_lossy())
-    ));
-    let app_dir = fixture_root.join(fixture.app_dir_name);
-    let root_key_path = fixture_root.join("root-key.json");
-    let key_path = fixture_root.join("key.json");
-    let package_path = fixture_root.join(format!("{}.pap", fixture.app_dir_name));
-    let signed_package_path = fixture_root.join(fixture.signed_package_name);
-
-    if fixture_root.exists() {
-        fs::remove_dir_all(&fixture_root).with_context(|| {
-            format!("resetting Panda app fixture dir {}", fixture_root.display())
-        })?;
-    }
-    fs::create_dir_all(&fixture_root)
-        .with_context(|| format!("creating Panda app fixture dir {}", fixture_root.display()))?;
-
-    if let Some(template_name) = fixture.template_name {
-        run_toolchain_fixture_command(
-            &toolchain_dir,
-            &[
-                "new",
-                template_name,
-                app_dir
-                    .to_str()
-                    .ok_or_else(|| anyhow!("non-UTF8 Panda app fixture path"))?,
-            ],
-            &[],
-        )?;
-    } else if let Some(example_dir) = fixture.example_dir {
-        copy_dir_recursive(&repo_root.join(example_dir), &app_dir)?;
-    }
-    run_toolchain_fixture_command(
-        &toolchain_dir,
-        &[
-            "pack",
-            app_dir
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda app fixture path"))?,
-            "--out",
-            package_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda package fixture path"))?,
-        ],
-        &[],
-    )?;
-    run_toolchain_fixture_command(
-        &toolchain_dir,
-        &[
-            "keygen",
-            "--out",
-            root_key_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda root fixture path"))?,
-            "--id",
-            "root.simulator.e2e",
-        ],
-        &[],
-    )?;
-    let root_key = read_toolchain_fixture_key(&root_key_path)?;
-    run_toolchain_fixture_command(
-        &toolchain_dir,
-        &[
-            "keygen",
-            "--out",
-            key_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda key fixture path"))?,
-            "--id",
-            "dev.simulator.e2e",
-        ],
-        &[],
-    )?;
-    let trust_environment = [
-        (
-            "PANDA_INTERNAL_ROOT_PRIVATE_KEY_PEM",
-            root_key.private_key_pem.as_str(),
-        ),
-        (
-            "PANDA_TRUST_ROOT_PUBLIC_KEY_PEM",
-            root_key.public_key_pem.as_str(),
-        ),
-    ];
-    run_toolchain_fixture_command(
-        &toolchain_dir,
-        &[
-            "sign",
-            package_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda package fixture path"))?,
-            "--key",
-            key_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda key fixture path"))?,
-            "--out",
-            signed_package_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda signed package fixture path"))?,
-        ],
-        &trust_environment,
-    )?;
-    run_toolchain_fixture_command(
-        &toolchain_dir,
-        &[
-            "install",
-            signed_package_path
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 Panda signed package fixture path"))?,
-            "--target",
-            sd_root
-                .to_str()
-                .ok_or_else(|| anyhow!("non-UTF8 simulator SD root path"))?,
-        ],
-        &trust_environment,
-    )?;
-    sync_visible_system_dir(sd_root)?;
-    fs::remove_dir_all(&fixture_root)
-        .with_context(|| format!("removing Panda app fixture dir {}", fixture_root.display()))?;
-    Ok(())
-}
-
 fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> {
     let case_id = case.id.trim().to_ascii_lowercase();
     if case_needs_default_font_packs(&case_id) {
@@ -6148,8 +5968,6 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
     let needs_opds_browser_entry = case_id.contains("opds-browser-");
     let needs_seeded_study = case_id.contains("study-seeded");
     let needs_large_canonical_study = case_id.contains("study-large-canonical");
-    let panda_lua_fixture_app = panda_lua_fixture_app_for_case(&case_id);
-    let needs_panda_lua_app = panda_lua_fixture_app.is_some();
     let needs_tc_benchmark = case_id.contains("tc-benchmark");
     let needs_persisted_grid_settings = case_id.contains("persist-verifier");
     let needs_grid_browser_prefs = case_id.contains("cover-card") || needs_persisted_grid_settings;
@@ -6169,7 +5987,6 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
         && !needs_opds_browser_entry
         && !needs_seeded_study
         && !needs_large_canonical_study
-        && !needs_panda_lua_app
         && !needs_tc_benchmark
     {
         return Ok(());
@@ -6356,9 +6173,6 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
                 .with_context(|| format!("creating large Study fixture dir {}", path.display()))?;
         }
     }
-    if let Some(fixture) = panda_lua_fixture_app {
-        seed_panda_lua_app_package(sd_root, fixture)?;
-    }
     Ok(())
 }
 
@@ -6447,6 +6261,18 @@ async fn run_e2e_case(
     let sd_root = e2e_case_sd_root(args, &artifacts_dir)?;
     eprintln!("[e2e] simulator SD root: {}", sd_root.display());
     seed_boot_copy_files(&case, &sd_root)?;
+    if !case.boot.runtime_apps.is_empty() {
+        eprintln!("[e2e] boot.runtimeApps: {}", case.boot.runtime_apps.len());
+        let root_key = args
+            .runtime_app_root_key
+            .clone()
+            .or_else(|| std::env::var_os(runtime_apps::ROOT_KEY_ENV).map(PathBuf::from));
+        runtime_apps::seed_boot_runtime_apps(
+            &case.boot.runtime_apps,
+            &sd_root,
+            root_key.as_deref(),
+        )?;
+    }
     seed_case_specific_sd_fixtures(&case, &sd_root)?;
     let _simulator_location = write_simulator_location(&sd_root)?;
     sync_visible_system_dir(&sd_root)?;
@@ -8516,72 +8342,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "product-fixtures")]
-    #[test]
-    fn panda_lua_app_fixture_installs_signed_pap_package() {
-        for (case_id, fixture, expected_app_id, expected_name, storage_requested) in [
-            (
-                "dashboard-panda-apps-lua-app-smoke",
-                PANDA_HELLO_FIXTURE_APP,
-                "ai.pandacat.app.hello",
-                "Hello Panda",
-                false,
-            ),
-            (
-                "dashboard-panda-apps-lua-debug-breakpoint-smoke",
-                PANDA_HELLO_FIXTURE_APP,
-                "ai.pandacat.app.hello",
-                "Hello Panda",
-                false,
-            ),
-            (
-                "dashboard-panda-apps-lua-counter-storage-denied-smoke",
-                PANDA_COUNTER_FIXTURE_APP,
-                "ai.pandacat.example.counter",
-                "Persistent Counter",
-                true,
-            ),
-        ] {
-            let tmp_dir = temp_test_dir(case_id);
-
-            seed_case_specific_sd_fixtures(&minimal_case(case_id), &tmp_dir).unwrap();
-
-            let hidden_index =
-                fs::read_to_string(tmp_dir.join(".mofei/apps/installed.json")).unwrap();
-            let visible_index =
-                fs::read_to_string(tmp_dir.join("mofei/apps/installed.json")).unwrap();
-            for index in [&hidden_index, &visible_index] {
-                let parsed: serde_json::Value = serde_json::from_str(index).unwrap();
-                let app = &parsed["apps"][0];
-                assert_eq!(app["id"], expected_app_id);
-                assert_eq!(app["name"], expected_name);
-                assert_eq!(
-                    app["packagePath"],
-                    format!(
-                        "/.mofei/apps/{}/{}",
-                        expected_app_id, fixture.signed_package_name
-                    )
-                );
-                assert_eq!(app["storageRequested"], storage_requested);
-                assert_eq!(app["storageGranted"], false);
-            }
-            assert!(tmp_dir
-                .join(format!(
-                    ".mofei/apps/{}/{}",
-                    expected_app_id, fixture.signed_package_name
-                ))
-                .exists());
-            assert!(tmp_dir
-                .join(format!(
-                    "mofei/apps/{}/{}",
-                    expected_app_id, fixture.signed_package_name
-                ))
-                .exists());
-
-            fs::remove_dir_all(tmp_dir).unwrap();
-        }
-    }
-
     #[test]
     fn parses_case_skip_reason() {
         let case: E2ECase = serde_json::from_str(
@@ -10637,6 +10397,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: Some(PathBuf::from("/tmp/sd-root")),
+            runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,
             tap_x: 240,
@@ -10734,6 +10495,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: None,
+            runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,
             tap_x: 240,
