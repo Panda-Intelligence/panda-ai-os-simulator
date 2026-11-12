@@ -21,6 +21,7 @@
 //     received, exits with code 2 and writes nothing.
 
 mod debug_transport;
+mod runtime_apps;
 #[path = "../../src-tauri/src/simulator_resolver.rs"]
 mod simulator_resolver;
 
@@ -278,6 +279,9 @@ struct E2ECase {
 struct E2EBoot {
     #[serde(default)]
     copy_files: Vec<E2EBootCopyFile>,
+    /// Official Runtime App authoring directories to install through the toolchain (see runtime_apps.rs).
+    #[serde(default)]
+    runtime_apps: Vec<runtime_apps::E2EBootRuntimeApp>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -731,6 +735,11 @@ struct Args {
     /// is requested.
     #[arg(long, default_value_t = 10)]
     duration: u64,
+
+    /// Trust-root key (`pos keygen` JSON) of the simulator test firmware, used to sign `boot.runtimeApps` packages.
+    /// Defaults to PANDA_SIMULATOR_RUNTIME_APP_ROOT_KEY; there is no other fallback.
+    #[arg(long)]
+    runtime_app_root_key: Option<PathBuf>,
 
     /// Output PNG path. Required unless --case writes screenshot.png under --artifacts.
     #[arg(long)]
@@ -3445,6 +3454,7 @@ fn load_e2e_case(case_path: &Path) -> Result<E2ECase> {
     }
     normalize_button_steps(&mut case)?;
     validate_boot_copy_files(&case)?;
+    runtime_apps::validate_boot_runtime_apps(&case.boot.runtime_apps)?;
     validate_before_boot_steps(&case)?;
     Ok(case)
 }
@@ -6447,6 +6457,18 @@ async fn run_e2e_case(
     let sd_root = e2e_case_sd_root(args, &artifacts_dir)?;
     eprintln!("[e2e] simulator SD root: {}", sd_root.display());
     seed_boot_copy_files(&case, &sd_root)?;
+    if !case.boot.runtime_apps.is_empty() {
+        eprintln!("[e2e] boot.runtimeApps: {}", case.boot.runtime_apps.len());
+        let root_key = args
+            .runtime_app_root_key
+            .clone()
+            .or_else(|| std::env::var_os(runtime_apps::ROOT_KEY_ENV).map(PathBuf::from));
+        runtime_apps::seed_boot_runtime_apps(
+            &case.boot.runtime_apps,
+            &sd_root,
+            root_key.as_deref(),
+        )?;
+    }
     seed_case_specific_sd_fixtures(&case, &sd_root)?;
     let _simulator_location = write_simulator_location(&sd_root)?;
     sync_visible_system_dir(&sd_root)?;
@@ -10637,6 +10659,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: Some(PathBuf::from("/tmp/sd-root")),
+            runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,
             tap_x: 240,
@@ -10734,6 +10757,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: None,
+            runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,
             tap_x: 240,
