@@ -64,11 +64,12 @@ const FIXTURE_TC_EPUB_PATH: &str = "test/epubs/test_tc.epub";
 const SEEDED_TC_EPUB_FILENAME: &str = "aaa_test_tc.epub";
 const SEEDED_EMPTY_TXT_FILENAME: &str = "aaa_empty.txt";
 const SEEDED_MFP_FALLBACK_FILENAME: &str = "㐀.txt";
-// The runner retains the complete broad Reader family and seeds the active
-// 26px source-complete UI fallback used by the default Mofei UI ladder. The full 14-file payload is validated by
-// host/golden-SD tests; duplicating every complete MFP into both simulator
-// system roots would exceed the bounded 128 MiB temporary FAT image.
-const PANDA_DEFAULT_FONT_PACKS: [&str; 8] = [
+// The runner retains the complete broad Reader family and seeds the 20/26/32px
+// source-complete UI fallbacks used by the default (Large tier) Mofei UI
+// ladder. The full 14-file payload is validated by host/golden-SD tests;
+// duplicating every complete MFP into both simulator system roots would
+// exceed the bounded 128 MiB temporary FAT image.
+const PANDA_DEFAULT_FONT_PACKS: [&str; 10] = [
     "notosans_tc_13_japanese_common.mfp",
     "notosans_tc_16_japanese_common.mfp",
     "notosans_tc_20_japanese_common.mfp",
@@ -76,7 +77,9 @@ const PANDA_DEFAULT_FONT_PACKS: [&str; 8] = [
     "notosans_tc_26_japanese_common.mfp",
     "notosans_tc_32_japanese_common.mfp",
     "notosans_tc_40_japanese_common.mfp",
+    "notosans_tc_20_source_complete.mfp",
     "notosans_tc_26_source_complete.mfp",
+    "notosans_tc_32_source_complete.mfp",
 ];
 const PANDA_MFP_FALLBACK_CASE_PACKS: [&str; 1] = ["notosans_tc_26_source_complete.mfp"];
 const TXT_TOUCH_PAGE_TURN_CASE_ID: &str =
@@ -10761,8 +10764,15 @@ mod tests {
 
     #[test]
     fn default_font_fixture_includes_active_mofei_source_complete_pack() {
-        assert!(PANDA_DEFAULT_FONT_PACKS.contains(&"notosans_tc_26_source_complete.mfp"));
-        assert!(!PANDA_DEFAULT_FONT_PACKS.contains(&"notosans_tc_32_source_complete.mfp"));
+        // The default Mofei UI tier is Large: primary 32 px, secondary 26 px, caption 20 px. FontStore only
+        // leaves the degraded embedded ladder (where Pinyin candidates and every non-embedded hanzi draw as
+        // "?") when all three same-size source-complete packs are on the SD card, as on a factory device.
+        for px in [20, 26, 32] {
+            let name = format!("notosans_tc_{px}_source_complete.mfp");
+            assert!(PANDA_DEFAULT_FONT_PACKS.contains(&name.as_str()), "{name}");
+        }
+        // The 13/16/18/24/40 px complete packs stay out: the isolated FAT image is bounded to 128 MiB.
+        assert!(!PANDA_DEFAULT_FONT_PACKS.contains(&"notosans_tc_40_source_complete.mfp"));
     }
 
     #[cfg(feature = "product-fixtures")]
