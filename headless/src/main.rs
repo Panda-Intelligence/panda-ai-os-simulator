@@ -687,6 +687,10 @@ struct E2EContext {
     /// the stderr line is parsed. QEMU's virtual clock follows host time
     /// (no -icount), so this is the guest-observed edge time.
     button_reads: Vec<(StdInstant, u8, bool)>,
+    /// QEMU console mailbox outcomes for serial command frames: the mailbox is a single slot and
+    /// rejects a frame while the guest has not consumed the previous request or response.
+    console_rejections: usize,
+    console_accepts: usize,
 }
 
 #[derive(Debug)]
@@ -3316,10 +3320,17 @@ impl E2EContext {
             pending_input_activity_after: None,
             pending_input_log_after: None,
             button_reads: Vec::new(),
+            console_rejections: 0,
+            console_accepts: 0,
         }
     }
 
     fn push_line(&mut self, line: &str) {
+        if line.contains("[MOFEI-SIM] console mailbox rejected") {
+            self.console_rejections += 1;
+        } else if line.contains("[MOFEI-SIM] console request len=") {
+            self.console_accepts += 1;
+        }
         if let Some((button_id, released)) = parse_firmware_button_read(line) {
             self.button_reads
                 .push((StdInstant::now(), button_id, released));
@@ -6570,14 +6581,50 @@ async fn run_e2e_case(
                     let mut ctx_lock = ctx.lock().await;
                     ctx_lock.mark_input_activity_boundary();
                 }
-                if !debug_writer
-                    .send(debug_transport::OutFrame {
-                        channel: CHANNEL_SERIAL_COMMAND,
-                        flags: 0,
-                        payload: line,
-                    })
-                    .await
-                {
+                // The QEMU console mailbox drops a frame while the guest still holds the previous one
+                // (`console mailbox rejected`), which on a loaded host happens seconds after the previous
+                // command was acknowledged. Watch the outcome and resend until the mailbox accepts it.
+                let mut transport_ok = true;
+                let retry_deadline =
+                    tokio::time::Instant::now() + Duration::from_secs(args.step_timeout);
+                loop {
+                    let (rejected_before, accepted_before) = {
+                        let ctx_lock = ctx.lock().await;
+                        (ctx_lock.console_rejections, ctx_lock.console_accepts)
+                    };
+                    if !debug_writer
+                        .send(debug_transport::OutFrame {
+                            channel: CHANNEL_SERIAL_COMMAND,
+                            flags: 0,
+                            payload: line.clone(),
+                        })
+                        .await
+                    {
+                        transport_ok = false;
+                        break;
+                    }
+                    let outcome_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                    let mut rejected = false;
+                    while tokio::time::Instant::now() < outcome_deadline {
+                        {
+                            let ctx_lock = ctx.lock().await;
+                            if ctx_lock.console_accepts > accepted_before {
+                                break;
+                            }
+                            if ctx_lock.console_rejections > rejected_before {
+                                rejected = true;
+                                break;
+                            }
+                        }
+                        time::sleep(Duration::from_millis(25)).await;
+                    }
+                    if !rejected || tokio::time::Instant::now() >= retry_deadline {
+                        break;
+                    }
+                    eprintln!("[e2e] serial command rejected by the console mailbox; resending");
+                    time::sleep(Duration::from_millis(500)).await;
+                }
+                if !transport_ok {
                     let error = "simulator serial command transport unavailable";
                     case_failed = true;
                     failure_error = Some(format!("serial_command write failed: {error}"));
@@ -8769,6 +8816,15 @@ mod tests {
             parse_firmware_button_read("[MOFEI-SIM] button_read id=x released=0"),
             None
         );
+    }
+
+    #[test]
+    fn push_line_counts_console_mailbox_outcomes() {
+        let mut ctx = E2EContext::new();
+        ctx.push_line("[MOFEI-SIM] console mailbox rejected pending_read=1 pending=1 len=18");
+        ctx.push_line("[MOFEI-SIM] console request len=18");
+        ctx.push_line("[MOFEI-SIM] console frame received len=18");
+        assert_eq!((ctx.console_rejections, ctx.console_accepts), (1, 1));
     }
 
     #[test]
