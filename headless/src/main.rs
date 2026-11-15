@@ -591,6 +591,9 @@ struct CaseStep {
     after_input: bool,
     #[serde(default, rename = "waitForFrame")]
     wait_for_frame: bool,
+    /// `wait_idle`: how long the screen must stay unchanged (no new frame) before the step passes.
+    #[serde(default, rename = "quietMs")]
+    quiet_ms: Option<u64>,
     #[serde(default)]
     #[serde(rename = "delayMs")]
     delay_ms: u64,
@@ -5137,6 +5140,49 @@ fn drain_pending_e2e_events(
     frames_drained
 }
 
+const DEFAULT_WAIT_IDLE_QUIET_MS: u64 = 1500;
+
+/// Returns the number of frames seen once no frame arrived for `quiet`; errors when frames keep
+/// arriving until `timeout` or the event stream closes.
+async fn wait_for_quiet_frames(
+    event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
+    last_fb: &mut Option<Vec<u8>>,
+    quiet: Duration,
+    timeout: Duration,
+) -> Result<u64> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut frames = 0u64;
+    loop {
+        let quiet_until = (tokio::time::Instant::now() + quiet).min(deadline);
+        match time::timeout_at(quiet_until, event_rx.recv()).await {
+            Ok(Some(HeadlessEvent::Frame(fb))) => {
+                *last_fb = Some(fb);
+                frames += 1;
+            }
+            Ok(Some(HeadlessEvent::PeripheralControl(payload))) => {
+                log_peripheral_control_event(&payload);
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Err(anyhow!(
+                    "simulator event stream closed while waiting for an idle screen"
+                ))
+            }
+            Err(_) => {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(anyhow!(
+                        "screen did not stay quiet for {} ms within {} s ({} frame(s) seen)",
+                        quiet.as_millis(),
+                        timeout.as_secs(),
+                        frames
+                    ));
+                }
+                return Ok(frames);
+            }
+        }
+    }
+}
+
 async fn wait_for_injection(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
     last_fb: &mut Option<Vec<u8>>,
@@ -6597,6 +6643,44 @@ async fn run_e2e_case(
                     elapsed_ms: step_start.elapsed().as_millis() as u64,
                     error: None,
                 });
+            }
+            "wait_idle" => {
+                // Condition wait for background work with no log marker (page index, prefetch): pass once the
+                // framebuffer has been quiet for `quietMs`, fail if it never settles within the step timeout.
+                let quiet =
+                    Duration::from_millis(step.quiet_ms.unwrap_or(DEFAULT_WAIT_IDLE_QUIET_MS));
+                match wait_for_quiet_frames(
+                    &mut event_rx,
+                    &mut last_fb,
+                    quiet,
+                    Duration::from_secs(args.step_timeout),
+                )
+                .await
+                {
+                    Ok(frames) => {
+                        eprintln!(
+                            "[e2e] wait_idle settled after {frames} frame(s), quiet {} ms",
+                            quiet.as_millis()
+                        );
+                        step_results.push(StepResult {
+                            step_type: "wait_idle".to_string(),
+                            status: "PASS".to_string(),
+                            elapsed_ms: step_start.elapsed().as_millis() as u64,
+                            error: None,
+                        });
+                    }
+                    Err(e) => {
+                        case_failed = true;
+                        failure_error = Some(format!("wait_idle failed: {e}"));
+                        step_results.push(StepResult {
+                            step_type: "wait_idle".to_string(),
+                            status: "FAIL".to_string(),
+                            elapsed_ms: step_start.elapsed().as_millis() as u64,
+                            error: Some(format!("{e}")),
+                        });
+                        break;
+                    }
+                }
             }
             "wait" => {
                 step_results.push(StepResult {
@@ -9008,6 +9092,53 @@ mod tests {
 
         assert_eq!(frames, 2);
         assert_eq!(last_fb, Some(vec![0x22]));
+    }
+
+    #[tokio::test]
+    async fn wait_idle_passes_after_the_last_frame_and_fails_while_frames_keep_coming() {
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let mut last_fb = None;
+        event_tx.send(HeadlessEvent::Frame(vec![0x11])).unwrap();
+        event_tx.send(HeadlessEvent::Frame(vec![0x22])).unwrap();
+        let frames = wait_for_quiet_frames(
+            &mut event_rx,
+            &mut last_fb,
+            Duration::from_millis(30),
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(frames, 2);
+        assert_eq!(last_fb, Some(vec![0x22]));
+
+        let feeder = event_tx.clone();
+        let producer = tokio::spawn(async move {
+            for i in 0..40u8 {
+                if feeder.send(HeadlessEvent::Frame(vec![i])).is_err() {
+                    break;
+                }
+                time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let error = wait_for_quiet_frames(
+            &mut event_rx,
+            &mut last_fb,
+            Duration::from_millis(200),
+            Duration::from_millis(150),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("did not stay quiet"));
+        producer.abort();
+    }
+
+    #[test]
+    fn parses_wait_idle_quiet_ms() {
+        let case: E2ECase = serde_json::from_str(
+            r#"{"id": "idle", "description": "d", "steps": [{"type": "wait_idle", "quietMs": 2500}]}"#,
+        )
+        .unwrap();
+        assert_eq!(case.steps[0].quiet_ms, Some(2500));
     }
 
     #[tokio::test]
