@@ -124,6 +124,8 @@ static inline bool mofei_sim_board_uses_gt911(void) {
 #define MOFEI_EEGO_A4_FRAMEBUFFER_WIDTH 552u
 #define MOFEI_EEGO_A4_FRAMEBUFFER_HEIGHT 768u
 #define MOFEI_EEGO_A4_FRAMEBUFFER_BYTES ((MOFEI_EEGO_A4_FRAMEBUFFER_WIDTH * MOFEI_EEGO_A4_FRAMEBUFFER_HEIGHT) / 8u)
+#define MOFEI_SSD1677_GRAY4_EXPORT_BYTES (800u * 480u / 2u)
+#define MOFEI_EEGO_A4_GRAY4_EXPORT_BYTES (MOFEI_EEGO_A4_FRAMEBUFFER_WIDTH * MOFEI_EEGO_A4_FRAMEBUFFER_HEIGHT / 2u)
 
 static inline uint32_t mofei_sim_board_direct_framebuffer_bytes(void) {
   switch (mofei_sim_active_board) {
@@ -320,6 +322,7 @@ typedef struct MofeiSimAddrs {
   uint32_t gfxSimulatorFrameBuffer_addr;           /* simulator static framebuffer hook */
   uint32_t murphySimulatorFramebuffer_addr;        /* Murphy OS exported framebuffer data pointer */
   uint32_t murphySimulatorFramebufferStorage_addr; /* Murphy OS simulator framebuffer storage */
+  uint32_t murphySimulatorGray4Export_addr;        /* 可选的 Gray4 发布指针 */
   /* Intercepted SPI/SKIP functions */
   uint32_t spi_beginTransaction_addr;     /* SPIClass::beginTransaction */
   uint32_t spi_endTransaction_addr;       /* SPIClass::endTransaction */

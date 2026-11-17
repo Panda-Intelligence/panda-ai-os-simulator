@@ -67,9 +67,9 @@ impl BoardDisplayGeometry {
         }
     }
 
-    fn fb_bytes(&self) -> usize {
+    fn fb_bytes(&self, format: FramebufferFormat) -> usize {
         let pixels = self.width as usize * self.height as usize;
-        match self.format {
+        match format {
             FramebufferFormat::Mono1 => pixels.div_ceil(8),
             FramebufferFormat::Gray16 => pixels.div_ceil(2),
         }
@@ -267,7 +267,13 @@ fn dispatch(
         }
         CHANNEL_FRAMEBUFFER => {
             let geometry = lock_geometry(geometry).clone();
-            let rgba = framebuffer_to_rgba(&payload, &geometry);
+            let rgba = match framebuffer_to_rgba(&payload, &geometry, flags) {
+                Ok(rgba) => rgba,
+                Err(error) => {
+                    let _ = app.emit("simulator-error", error);
+                    return;
+                }
+            };
             let encoded = BASE64_STANDARD.encode(&rgba);
             let payload_json = serde_json::json!({
                 "kind": if flags & FB_FLAG_PARTIAL != 0 { "partial" } else { "full" },
@@ -302,38 +308,54 @@ fn dispatch(
 }
 
 const FB_FLAG_PARTIAL: u8 = 0x01;
+const FB_FLAG_GRAY16: u8 = 0x02;
 
-fn framebuffer_to_rgba(fb: &[u8], geometry: &BoardDisplayGeometry) -> Vec<u8> {
-    let mut out = vec![0u8; (geometry.width as usize) * (geometry.height as usize) * 4];
-    let n = fb.len().min(geometry.fb_bytes());
-    let pixels_per_byte = match geometry.format {
+fn framebuffer_to_rgba(
+    fb: &[u8],
+    geometry: &BoardDisplayGeometry,
+    flags: u8,
+) -> Result<Vec<u8>, String> {
+    let gray16_override = flags & FB_FLAG_GRAY16 != 0;
+    let format = if gray16_override {
+        FramebufferFormat::Gray16
+    } else {
+        geometry.format
+    };
+    let expected_bytes = geometry.fb_bytes(format);
+    if gray16_override && fb.len() != expected_bytes {
+        return Err(format!(
+            "ipc: dropped Gray16 framebuffer payload len={}, expected={expected_bytes}",
+            fb.len()
+        ));
+    }
+    let pixels_per_byte = match format {
         FramebufferFormat::Mono1 => 8,
         FramebufferFormat::Gray16 => 2,
     };
-    for (byte_idx, b) in fb.iter().copied().take(n).enumerate() {
-        for subpixel in 0..pixels_per_byte {
-            let pixel_idx = byte_idx * pixels_per_byte + subpixel;
-            let value = match geometry.format {
-                FramebufferFormat::Mono1 => {
-                    if (b >> (7 - subpixel)) & 1 != 0 {
-                        0xFF
-                    } else {
-                        0x00
-                    }
+    let mut out = vec![0u8; (geometry.width as usize) * (geometry.height as usize) * 4];
+    for (pixel, rgba) in out
+        .chunks_exact_mut(4)
+        .take(fb.len().min(expected_bytes) * pixels_per_byte)
+        .enumerate()
+    {
+        let b = fb[pixel / pixels_per_byte];
+        let subpixel = pixel % pixels_per_byte;
+        let value = match format {
+            FramebufferFormat::Mono1 => {
+                if (b >> (7 - subpixel)) & 1 != 0 {
+                    0xFF
+                } else {
+                    0x00
                 }
-                FramebufferFormat::Gray16 => {
-                    let level = if subpixel == 0 { b >> 4 } else { b & 0x0F };
-                    0xFF - level * 17
-                }
-            };
-            let off = pixel_idx * 4;
-            out[off] = value;
-            out[off + 1] = value;
-            out[off + 2] = value;
-            out[off + 3] = 0xFF;
-        }
+            }
+            FramebufferFormat::Gray16 => {
+                let level = if subpixel == 0 { b >> 4 } else { b & 0x0F };
+                0xFF - level * 17
+            }
+        };
+        rgba.copy_from_slice(&[value, value, value, 0xFF]);
     }
-    out
+    Ok(out)
 }
 
 /// Encode a touch event for channel 0x04. Board touch models consume the same
@@ -373,5 +395,29 @@ pub fn encode_peripheral_control(payload: Vec<u8>) -> OutFrame {
         channel: CHANNEL_CONTROL,
         flags: 0,
         payload,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn framebuffer_format_override_applies_only_to_its_frame() {
+        let geometry = BoardDisplayGeometry::new(8, 1, FramebufferFormat::Mono1);
+        let gray = [0x05, 0xAF, 0x05, 0xAF];
+        let flags = FB_FLAG_GRAY16 | FB_FLAG_PARTIAL;
+        let palette = framebuffer_to_rgba(&gray, &geometry, flags).unwrap();
+        assert_eq!(
+            &palette[..16],
+            &[255, 255, 255, 255, 170, 170, 170, 255, 85, 85, 85, 255, 0, 0, 0, 255],
+        );
+        assert!(framebuffer_to_rgba(&gray[..1], &geometry, flags).is_err());
+        assert!(framebuffer_to_rgba(&[0; 5], &geometry, flags).is_err());
+
+        let mono = framebuffer_to_rgba(&[0xAA], &geometry, FB_FLAG_PARTIAL).unwrap();
+        assert_eq!(&mono[..8], &[255, 255, 255, 255, 0, 0, 0, 255]);
+        let geometry = BoardDisplayGeometry::new(8, 1, FramebufferFormat::Gray16);
+        assert_eq!(framebuffer_to_rgba(&gray, &geometry, 0).unwrap(), palette);
     }
 }

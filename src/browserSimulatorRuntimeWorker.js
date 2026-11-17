@@ -15,6 +15,8 @@ const PARTITION_ENTRY_SIZE = 32;
 const PARTITION_MAGIC = 0x50aa;
 const PARTITION_END_MAGIC = 0xebeb;
 const IPC_FRAMEBUFFER_CHANNEL = 0x01;
+const FB_FLAG_PARTIAL = 0x01;
+const FB_FLAG_GRAY16 = 0x02;
 const IPC_DEBUG_CHANNEL = 0x02;
 const IPC_CONTROL_CHANNEL = 0x06;
 const PERIPHERAL_CONTROL_MIN_PAYLOAD = 10;
@@ -1543,7 +1545,8 @@ function framebufferProfile(boardId) {
 }
 
 function emitFramebuffer(flags, framebuffer, portraitUc = false) {
-  const { width, height, format } = framebufferProfile(lastBoardId);
+  const { width, height, format: boardFormat } = framebufferProfile(lastBoardId);
+  const format = flags & FB_FLAG_GRAY16 ? "gray16" : boardFormat;
   const packedBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil((width * height) / 8);
   const strideBytes = format === "gray16" ? Math.ceil(width / 2) * height : Math.ceil(width / 8) * height;
   const expectedBytes = packedBytes;
@@ -1558,16 +1561,21 @@ function emitFramebuffer(flags, framebuffer, portraitUc = false) {
     );
     return;
   }
-  const sliceBytes = framebuffer.length === 259200 ? strideBytes : framebuffer.length;
+  const sliceBytes = format === "mono1" && framebuffer.length === 259200 ? strideBytes : framebuffer.length;
   const frameBytes = framebuffer.length === sliceBytes ? framebuffer : framebuffer.subarray(0, sliceBytes);
   // 横向 SSD1677 已发布 800x480 行序像素；再次按 480x800 解交错会破坏行跨度。
-  const rgba = portraitUc
-    ? uc8253cRgbaToWire(oneBitToRgba(frameBytes, 240, 416))
-    : format === "gray16" ? gray16ToRgba(frameBytes, width, height) : oneBitToRgba(frameBytes, width, height);
+  let rgba;
+  if (format === "gray16") {
+    rgba = gray16ToRgba(frameBytes, width, height);
+  } else if (portraitUc) {
+    rgba = uc8253cRgbaToWire(oneBitToRgba(frameBytes, 240, 416));
+  } else {
+    rgba = oneBitToRgba(frameBytes, width, height);
+  }
   postMessage({
     type: "framebuffer",
     payload: {
-      kind: flags & 0x01 ? "partial" : "full",
+      kind: flags & FB_FLAG_PARTIAL ? "partial" : "full",
       width,
       height,
       rgba_b64: bytesToBase64(rgba),
