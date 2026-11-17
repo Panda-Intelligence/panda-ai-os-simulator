@@ -5221,7 +5221,7 @@ const DEFAULT_WAIT_IDLE_QUIET_MS: u64 = 1500;
 /// arriving until `timeout` or the event stream closes.
 async fn wait_for_quiet_frames(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     quiet: Duration,
     timeout: Duration,
 ) -> Result<u64> {
@@ -9295,8 +9295,18 @@ mod tests {
     async fn wait_idle_passes_after_the_last_frame_and_fails_while_frames_keep_coming() {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let mut last_fb = None;
-        event_tx.send(HeadlessEvent::Frame(vec![0x11])).unwrap();
-        event_tx.send(HeadlessEvent::Frame(vec![0x22])).unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x11],
+                format: FramebufferFormat::Mono1,
+            }))
+            .unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            }))
+            .unwrap();
         let frames = wait_for_quiet_frames(
             &mut event_rx,
             &mut last_fb,
@@ -9306,12 +9316,24 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(frames, 2);
-        assert_eq!(last_fb, Some(vec![0x22]));
+        assert_eq!(
+            last_fb,
+            Some(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            })
+        );
 
         let feeder = event_tx.clone();
         let producer = tokio::spawn(async move {
             for i in 0..40u8 {
-                if feeder.send(HeadlessEvent::Frame(vec![i])).is_err() {
+                if feeder
+                    .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                        pixels: vec![i],
+                        format: FramebufferFormat::Mono1,
+                    }))
+                    .is_err()
+                {
                     break;
                 }
                 time::sleep(Duration::from_millis(10)).await;
