@@ -599,6 +599,9 @@ struct CaseStep {
     after_input: bool,
     #[serde(default, rename = "waitForFrame")]
     wait_for_frame: bool,
+    /// `wait_idle`: how long the screen must stay unchanged (no new frame) before the step passes.
+    #[serde(default, rename = "quietMs")]
+    quiet_ms: Option<u64>,
     #[serde(default)]
     #[serde(rename = "delayMs")]
     delay_ms: u64,
@@ -696,6 +699,10 @@ struct E2EContext {
     /// the stderr line is parsed. QEMU's virtual clock follows host time
     /// (no -icount), so this is the guest-observed edge time.
     button_reads: Vec<(StdInstant, u8, bool)>,
+    /// QEMU console mailbox outcomes for serial command frames: the mailbox is a single slot and
+    /// rejects a frame while the guest has not consumed the previous request or response.
+    console_rejections: usize,
+    console_accepts: usize,
 }
 
 #[derive(Debug)]
@@ -3377,10 +3384,17 @@ impl E2EContext {
             pending_input_activity_after: None,
             pending_input_log_after: None,
             button_reads: Vec::new(),
+            console_rejections: 0,
+            console_accepts: 0,
         }
     }
 
     fn push_line(&mut self, line: &str) {
+        if line.contains("[MOFEI-SIM] console mailbox rejected") {
+            self.console_rejections += 1;
+        } else if line.contains("[MOFEI-SIM] console request len=") {
+            self.console_accepts += 1;
+        }
         if let Some((button_id, released)) = parse_firmware_button_read(line) {
             self.button_reads
                 .push((StdInstant::now(), button_id, released));
@@ -5201,6 +5215,49 @@ fn drain_pending_e2e_events(
     frames_drained
 }
 
+const DEFAULT_WAIT_IDLE_QUIET_MS: u64 = 1500;
+
+/// Returns the number of frames seen once no frame arrived for `quiet`; errors when frames keep
+/// arriving until `timeout` or the event stream closes.
+async fn wait_for_quiet_frames(
+    event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
+    last_fb: &mut Option<Vec<u8>>,
+    quiet: Duration,
+    timeout: Duration,
+) -> Result<u64> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut frames = 0u64;
+    loop {
+        let quiet_until = (tokio::time::Instant::now() + quiet).min(deadline);
+        match time::timeout_at(quiet_until, event_rx.recv()).await {
+            Ok(Some(HeadlessEvent::Frame(fb))) => {
+                *last_fb = Some(fb);
+                frames += 1;
+            }
+            Ok(Some(HeadlessEvent::PeripheralControl(payload))) => {
+                log_peripheral_control_event(&payload);
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return Err(anyhow!(
+                    "simulator event stream closed while waiting for an idle screen"
+                ))
+            }
+            Err(_) => {
+                if tokio::time::Instant::now() >= deadline {
+                    return Err(anyhow!(
+                        "screen did not stay quiet for {} ms within {} s ({} frame(s) seen)",
+                        quiet.as_millis(),
+                        timeout.as_secs(),
+                        frames
+                    ));
+                }
+                return Ok(frames);
+            }
+        }
+    }
+}
+
 async fn wait_for_injection(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
     last_fb: &mut Option<CapturedFramebuffer>,
@@ -6588,14 +6645,50 @@ async fn run_e2e_case(
                     let mut ctx_lock = ctx.lock().await;
                     ctx_lock.mark_input_activity_boundary();
                 }
-                if !debug_writer
-                    .send(debug_transport::OutFrame {
-                        channel: CHANNEL_SERIAL_COMMAND,
-                        flags: 0,
-                        payload: line,
-                    })
-                    .await
-                {
+                // The QEMU console mailbox drops a frame while the guest still holds the previous one
+                // (`console mailbox rejected`), which on a loaded host happens seconds after the previous
+                // command was acknowledged. Watch the outcome and resend until the mailbox accepts it.
+                let mut transport_ok = true;
+                let retry_deadline =
+                    tokio::time::Instant::now() + Duration::from_secs(args.step_timeout);
+                loop {
+                    let (rejected_before, accepted_before) = {
+                        let ctx_lock = ctx.lock().await;
+                        (ctx_lock.console_rejections, ctx_lock.console_accepts)
+                    };
+                    if !debug_writer
+                        .send(debug_transport::OutFrame {
+                            channel: CHANNEL_SERIAL_COMMAND,
+                            flags: 0,
+                            payload: line.clone(),
+                        })
+                        .await
+                    {
+                        transport_ok = false;
+                        break;
+                    }
+                    let outcome_deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+                    let mut rejected = false;
+                    while tokio::time::Instant::now() < outcome_deadline {
+                        {
+                            let ctx_lock = ctx.lock().await;
+                            if ctx_lock.console_accepts > accepted_before {
+                                break;
+                            }
+                            if ctx_lock.console_rejections > rejected_before {
+                                rejected = true;
+                                break;
+                            }
+                        }
+                        time::sleep(Duration::from_millis(25)).await;
+                    }
+                    if !rejected || tokio::time::Instant::now() >= retry_deadline {
+                        break;
+                    }
+                    eprintln!("[e2e] serial command rejected by the console mailbox; resending");
+                    time::sleep(Duration::from_millis(500)).await;
+                }
+                if !transport_ok {
                     let error = "simulator serial command transport unavailable";
                     case_failed = true;
                     failure_error = Some(format!("serial_command write failed: {error}"));
@@ -6661,6 +6754,44 @@ async fn run_e2e_case(
                     elapsed_ms: step_start.elapsed().as_millis() as u64,
                     error: None,
                 });
+            }
+            "wait_idle" => {
+                // Condition wait for background work with no log marker (page index, prefetch): pass once the
+                // framebuffer has been quiet for `quietMs`, fail if it never settles within the step timeout.
+                let quiet =
+                    Duration::from_millis(step.quiet_ms.unwrap_or(DEFAULT_WAIT_IDLE_QUIET_MS));
+                match wait_for_quiet_frames(
+                    &mut event_rx,
+                    &mut last_fb,
+                    quiet,
+                    Duration::from_secs(args.step_timeout),
+                )
+                .await
+                {
+                    Ok(frames) => {
+                        eprintln!(
+                            "[e2e] wait_idle settled after {frames} frame(s), quiet {} ms",
+                            quiet.as_millis()
+                        );
+                        step_results.push(StepResult {
+                            step_type: "wait_idle".to_string(),
+                            status: "PASS".to_string(),
+                            elapsed_ms: step_start.elapsed().as_millis() as u64,
+                            error: None,
+                        });
+                    }
+                    Err(e) => {
+                        case_failed = true;
+                        failure_error = Some(format!("wait_idle failed: {e}"));
+                        step_results.push(StepResult {
+                            step_type: "wait_idle".to_string(),
+                            status: "FAIL".to_string(),
+                            elapsed_ms: step_start.elapsed().as_millis() as u64,
+                            error: Some(format!("{e}")),
+                        });
+                        break;
+                    }
+                }
             }
             "wait" => {
                 step_results.push(StepResult {
@@ -8813,6 +8944,15 @@ mod tests {
     }
 
     #[test]
+    fn push_line_counts_console_mailbox_outcomes() {
+        let mut ctx = E2EContext::new();
+        ctx.push_line("[MOFEI-SIM] console mailbox rejected pending_read=1 pending=1 len=18");
+        ctx.push_line("[MOFEI-SIM] console request len=18");
+        ctx.push_line("[MOFEI-SIM] console frame received len=18");
+        assert_eq!((ctx.console_rejections, ctx.console_accepts), (1, 1));
+    }
+
+    #[test]
     fn push_line_records_only_firmware_button_reads() {
         let mut ctx = E2EContext::new();
         ctx.push_line("[MOFEI-SIM] button_queue id=1 released=0 depth=1");
@@ -9149,6 +9289,53 @@ mod tests {
                 format: FramebufferFormat::Gray16,
             })
         );
+    }
+
+    #[tokio::test]
+    async fn wait_idle_passes_after_the_last_frame_and_fails_while_frames_keep_coming() {
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let mut last_fb = None;
+        event_tx.send(HeadlessEvent::Frame(vec![0x11])).unwrap();
+        event_tx.send(HeadlessEvent::Frame(vec![0x22])).unwrap();
+        let frames = wait_for_quiet_frames(
+            &mut event_rx,
+            &mut last_fb,
+            Duration::from_millis(30),
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        assert_eq!(frames, 2);
+        assert_eq!(last_fb, Some(vec![0x22]));
+
+        let feeder = event_tx.clone();
+        let producer = tokio::spawn(async move {
+            for i in 0..40u8 {
+                if feeder.send(HeadlessEvent::Frame(vec![i])).is_err() {
+                    break;
+                }
+                time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let error = wait_for_quiet_frames(
+            &mut event_rx,
+            &mut last_fb,
+            Duration::from_millis(200),
+            Duration::from_millis(150),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("did not stay quiet"));
+        producer.abort();
+    }
+
+    #[test]
+    fn parses_wait_idle_quiet_ms() {
+        let case: E2ECase = serde_json::from_str(
+            r#"{"id": "idle", "description": "d", "steps": [{"type": "wait_idle", "quietMs": 2500}]}"#,
+        )
+        .unwrap();
+        assert_eq!(case.steps[0].quiet_ms, Some(2500));
     }
 
     #[tokio::test]
