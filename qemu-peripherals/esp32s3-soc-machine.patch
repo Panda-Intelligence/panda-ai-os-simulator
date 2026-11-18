@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,981 +9,4307 @@
+@@ -9,981 +9,4309 @@
   */
 
  #include "qemu/osdep.h"
@@ -2634,6 +2634,8 @@
 +            {"_ZNK17BookMetadataCache21cleanupBuildArtifactsEv", &a->bmcCleanupBuildArtifacts_addr},
 +        };
 +
++        /* 旧固件没有 Gray4 导出符号，继续使用原来的帧缓冲。 */
++        a->murphySimulatorGray4Export_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "murphySimulatorGray4Export");
 +        int resolved_count = 0;
 +        for (int i = 0; i < (int)(sizeof(syms) / sizeof(syms[0])); i++) {
 +          uint32_t val = mofei_resolve_elf_symbol(elf_data, elf_len, syms[i].name);
@@ -5217,7 +5219,7 @@
  }
 
  static const TypeInfo esp32s3_info = {
-@@ -993,10 +4319,6 @@
+@@ -993,10 +4321,6 @@
      .class_init = esp32s3_machine_class_init,
  };
 

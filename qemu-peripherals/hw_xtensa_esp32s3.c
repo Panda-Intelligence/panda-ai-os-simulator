@@ -2099,6 +2099,8 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_ZNK17BookMetadataCache21cleanupBuildArtifactsEv", &a->bmcCleanupBuildArtifacts_addr},
         };
 
+        /* 旧固件没有 Gray4 导出符号，继续使用原来的帧缓冲。 */
+        a->murphySimulatorGray4Export_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "murphySimulatorGray4Export");
         int resolved_count = 0;
         for (int i = 0; i < (int)(sizeof(syms) / sizeof(syms[0])); i++) {
           uint32_t val = mofei_resolve_elf_symbol(elf_data, elf_len, syms[i].name);

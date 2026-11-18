@@ -198,6 +198,7 @@ const HEADER_LEN: usize = 8;
 const MAX_PAYLOAD: u32 = 1 << 20;
 
 const CHANNEL_FRAMEBUFFER: u8 = 0x01;
+const FB_FLAG_GRAY16: u8 = 0x02;
 const CHANNEL_CONTROL: u8 = 0x06;
 const CHANNEL_TOUCH_EVENT: u8 = 0x04;
 const CHANNEL_BUTTON_EVENT: u8 = 0x05;
@@ -372,6 +373,13 @@ struct BoardGeometry {
 }
 
 impl BoardGeometry {
+    fn with_framebuffer_format(&self, framebuffer_format: FramebufferFormat) -> Self {
+        Self {
+            framebuffer_format,
+            ..self.clone()
+        }
+    }
+
     fn fb_bytes(&self) -> usize {
         let pixels = self.framebuffer_width as usize * self.framebuffer_height as usize;
         match self.framebuffer_format {
@@ -630,6 +638,10 @@ struct CaseStep {
     #[serde(default)]
     #[serde(rename = "maxWhitePixels")]
     max_white_pixels: Option<u32>,
+    #[serde(default, rename = "minGrayPixels")]
+    min_gray_pixels: Option<u32>,
+    #[serde(default, rename = "maxGrayPixels")]
+    max_gray_pixels: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -946,9 +958,15 @@ impl SyntheticTouchEventType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct CapturedFramebuffer {
+    pixels: Vec<u8>,
+    format: FramebufferFormat,
+}
+
 #[derive(Debug)]
 enum HeadlessEvent {
-    Frame(Vec<u8>),
+    Frame(CapturedFramebuffer),
     PeripheralControl(Vec<u8>),
     Injected,
     TouchRead(TouchTap),
@@ -2109,7 +2127,7 @@ async fn main() -> Result<()> {
 
     // Capture framebuffers until the duration elapses or QEMU exits.
     let deadline = time::Instant::now() + Duration::from_secs(args.duration);
-    let mut last_fb: Option<Vec<u8>> = None;
+    let mut last_fb = None;
     let mut frames_seen: u64 = 0;
     let mut frames_at_injection: Option<u64> = None;
     let mut touch_reads_seen = std::collections::HashSet::new();
@@ -2131,7 +2149,8 @@ async fn main() -> Result<()> {
             maybe_event = event_rx.recv() => {
                 match maybe_event {
                     Some(HeadlessEvent::Frame(fb)) => {
-                        let has_meaningful_content = framebuffer_has_meaningful_content(&fb, &board.geometry);
+                        let geometry = board.geometry.with_framebuffer_format(fb.format);
+                        let has_meaningful_content = framebuffer_has_meaningful_content(&fb.pixels, &geometry);
                         last_fb = Some(fb);
                         frames_seen += 1;
                         let post_injection_frames = frames_at_injection
@@ -2227,7 +2246,8 @@ async fn main() -> Result<()> {
             ));
         }
     }
-    write_png(out, &fb, &board.geometry).with_context(|| format!("writing {}", out.display()))?;
+    let geometry = board.geometry.with_framebuffer_format(fb.format);
+    write_png(out, &fb.pixels, &geometry).with_context(|| format!("writing {}", out.display()))?;
     eprintln!("[headless] screenshot written: {}", out.display());
     Ok(())
 }
@@ -2506,7 +2526,7 @@ async fn receive_loop(
             Ok(_) => {}
         }
         let channel = header[0];
-        let _flags = header[1];
+        let flags = header[1];
         let payload_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
         if payload_len > MAX_PAYLOAD {
             return Err(anyhow!("payload_len {payload_len} exceeds cap"));
@@ -2517,9 +2537,19 @@ async fn receive_loop(
         }
         match channel {
             CHANNEL_FRAMEBUFFER => {
-                if payload.len() == geometry.fb_bytes() {
-                    let has_content = framebuffer_has_content(&payload, &geometry);
-                    if event_tx.send(HeadlessEvent::Frame(payload)).is_err() {
+                let format = if flags & FB_FLAG_GRAY16 != 0 {
+                    FramebufferFormat::Gray16
+                } else {
+                    geometry.framebuffer_format
+                };
+                let frame_geometry = geometry.with_framebuffer_format(format);
+                if payload.len() == frame_geometry.fb_bytes() {
+                    let has_content = framebuffer_has_content(&payload, &frame_geometry);
+                    let frame = CapturedFramebuffer {
+                        pixels: payload,
+                        format,
+                    };
+                    if event_tx.send(HeadlessEvent::Frame(frame)).is_err() {
                         return Ok(());
                     }
                     if let Some(frame_tx) = &frame_tx {
@@ -2855,6 +2885,7 @@ struct ScreenshotRegionStats {
     total_pixels: u32,
     dark_pixels: u32,
     white_pixels: u32,
+    gray_pixels: u32,
 }
 
 impl ScreenshotRegionStats {
@@ -2867,7 +2898,12 @@ impl ScreenshotRegionStats {
     }
 }
 
-fn framebuffer_pixel_is_dark(fb: &[u8], geometry: &BoardGeometry, x: u32, y: u32) -> Result<bool> {
+fn framebuffer_output_gray_value(
+    fb: &[u8],
+    geometry: &BoardGeometry,
+    x: u32,
+    y: u32,
+) -> Result<u8> {
     if fb.len() != geometry.fb_bytes() {
         return Err(anyhow!(
             "framebuffer length {} does not match expected {}",
@@ -2894,7 +2930,7 @@ fn framebuffer_pixel_is_dark(fb: &[u8], geometry: &BoardGeometry, x: u32, y: u32
             geometry.output_height
         )
     })?;
-    Ok(framebuffer_gray_value(fb, geometry, source_x, source_y) < 128)
+    Ok(framebuffer_gray_value(fb, geometry, source_x, source_y))
 }
 
 fn framebuffer_region_stats(
@@ -2933,11 +2969,12 @@ fn framebuffer_region_stats(
     }
 
     let mut dark_pixels = 0u32;
+    let mut gray_pixels = 0u32;
     for sample_y in y..y_end {
         for sample_x in x..x_end {
-            if framebuffer_pixel_is_dark(fb, geometry, sample_x, sample_y)? {
-                dark_pixels += 1;
-            }
+            let value = framebuffer_output_gray_value(fb, geometry, sample_x, sample_y)?;
+            dark_pixels += u32::from(value < 128);
+            gray_pixels += u32::from(value != 0 && value != 255);
         }
     }
 
@@ -2946,6 +2983,7 @@ fn framebuffer_region_stats(
         total_pixels,
         dark_pixels,
         white_pixels: total_pixels - dark_pixels,
+        gray_pixels,
     })
 }
 
@@ -2993,7 +3031,9 @@ fn assert_screenshot_region(
         || step.min_dark_pixels.is_some()
         || step.max_dark_pixels.is_some()
         || step.min_white_pixels.is_some()
-        || step.max_white_pixels.is_some();
+        || step.max_white_pixels.is_some()
+        || step.min_gray_pixels.is_some()
+        || step.max_gray_pixels.is_some();
     if !has_threshold {
         return Err(anyhow!(
             "assert_screenshot_region '{}' requires at least one ratio or pixel threshold",
@@ -3030,7 +3070,7 @@ fn assert_screenshot_region(
         )
     };
     let summary = format!(
-        "'{}' {} dark={}/{} ({:.4}) white={}/{} ({:.4})",
+        "'{}' {} dark={}/{} ({:.4}) white={}/{} ({:.4}) gray={}/{}",
         label,
         region_summary,
         stats.dark_pixels,
@@ -3038,7 +3078,9 @@ fn assert_screenshot_region(
         dark_ratio,
         stats.white_pixels,
         stats.total_pixels,
-        white_ratio
+        white_ratio,
+        stats.gray_pixels,
+        stats.total_pixels
     );
 
     if let Some(min) = step.min_dark_ratio {
@@ -3125,6 +3167,28 @@ fn assert_screenshot_region(
                 "{} white pixels {} above max {}",
                 summary,
                 stats.white_pixels,
+                max
+            ));
+        }
+    }
+    if let Some(min) = step.min_gray_pixels {
+        let min = scale_reference_pixel_threshold(min, reference_region.pixels(), region.pixels());
+        if stats.gray_pixels < min {
+            return Err(anyhow!(
+                "{} gray pixels {} below min {}",
+                summary,
+                stats.gray_pixels,
+                min
+            ));
+        }
+    }
+    if let Some(max) = step.max_gray_pixels {
+        let max = scale_reference_pixel_threshold(max, reference_region.pixels(), region.pixels());
+        if stats.gray_pixels > max {
+            return Err(anyhow!(
+                "{} gray pixels {} above max {}",
+                summary,
+                stats.gray_pixels,
                 max
             ));
         }
@@ -4875,7 +4939,7 @@ async fn hold_button_until_guest_time(
     ctx: &std::sync::Arc<tokio::sync::Mutex<E2EContext>>,
     injection_tx: &mpsc::UnboundedSender<InjectionCommand>,
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     button_id: u8,
     hold_ms: u64,
     hold_until_activity_change: bool,
@@ -5055,7 +5119,7 @@ async fn wait_for_log_contains(
 
 async fn wait_for_peripheral_control_ack(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     expected_device: u8,
     expected_request_id: u32,
     timeout: Duration,
@@ -5096,7 +5160,7 @@ async fn execute_peripheral_control(
     phase: &str,
     debug_writer: &debug_transport::HeadlessDebugWriter,
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     timeout: Duration,
 ) -> Result<()> {
     let (device, payload) = peripheral_control_request(step, request_id)?;
@@ -5128,7 +5192,7 @@ async fn execute_peripheral_control(
 
 fn drain_pending_e2e_events(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
 ) -> u64 {
     let mut frames_drained = 0u64;
     loop {
@@ -5157,7 +5221,7 @@ const DEFAULT_WAIT_IDLE_QUIET_MS: u64 = 1500;
 /// arriving until `timeout` or the event stream closes.
 async fn wait_for_quiet_frames(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     quiet: Duration,
     timeout: Duration,
 ) -> Result<u64> {
@@ -5196,7 +5260,7 @@ async fn wait_for_quiet_frames(
 
 async fn wait_for_injection(
     event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
-    last_fb: &mut Option<Vec<u8>>,
+    last_fb: &mut Option<CapturedFramebuffer>,
     timeout: Duration,
     wait_for_frame: bool,
 ) -> Result<u64> {
@@ -6454,7 +6518,7 @@ async fn run_e2e_case(
         radio_peer,
     ));
     let start_time = StdInstant::now();
-    let mut last_fb: Option<Vec<u8>> = None;
+    let mut last_fb = None;
     let mut step_results: Vec<StepResult> = Vec::new();
     let mut deferred_sd_file_assertions: Vec<DeferredSdFileAssertion> = Vec::new();
     let mut case_failed = false;
@@ -7173,7 +7237,7 @@ async fn run_e2e_case(
             }
             "assert_screenshot_region" => {
                 let frames_drained = drain_pending_e2e_events(&mut event_rx, &mut last_fb);
-                let fb = match last_fb.as_deref() {
+                let fb = match last_fb.as_ref() {
                     Some(fb) => fb,
                     None => {
                         case_failed = true;
@@ -7189,10 +7253,11 @@ async fn run_e2e_case(
                         break;
                     }
                 };
+                let geometry = board.geometry.with_framebuffer_format(fb.format);
                 match assert_screenshot_region_with_checkpoint(
                     step,
-                    fb,
-                    &board.geometry,
+                    &fb.pixels,
+                    &geometry,
                     reference_viewport,
                     args.capture_assertion_screenshots,
                     &artifacts_dir,
@@ -7327,7 +7392,10 @@ async fn run_e2e_case(
         eprintln!("[e2e] final drain captured {final_frames_drained} framebuffer(s)");
     }
 
-    let fb = last_fb.unwrap_or_else(|| vec![0xFFu8; board.geometry.fb_bytes()]);
+    let fb = last_fb.unwrap_or_else(|| CapturedFramebuffer {
+        pixels: vec![0xFFu8; board.geometry.fb_bytes()],
+        format: board.geometry.framebuffer_format,
+    });
 
     qemu.cleanup().await;
     debug_writer.unbind().await;
@@ -7403,12 +7471,13 @@ async fn run_e2e_case(
         let ctx_lock = ctx.lock().await;
         ctx_lock.transcript.clone()
     };
+    let geometry = board.geometry.with_framebuffer_format(fb.format);
     persist_e2e_artifacts(
         &artifacts_dir,
         &case_result,
         &transcript_lines,
-        &fb,
-        &board.geometry,
+        &fb.pixels,
+        &geometry,
     )?;
 
     if case_failed {
@@ -7632,7 +7701,7 @@ mod tests {
             "UP must wait for the 250ms hold"
         );
         assert!(
-            matches!(event_rx.try_recv(), Ok(HeadlessEvent::Frame(bytes)) if bytes == framebuffer),
+            matches!(event_rx.try_recv(), Ok(HeadlessEvent::Frame(frame)) if frame.pixels == framebuffer),
             "read_loop must consume the framebuffer before touch UP/Injected"
         );
         assert!(event_rx.try_recv().is_err(), "Injected must follow UP");
@@ -7645,6 +7714,62 @@ mod tests {
         ));
         reader.abort();
         assert!(reader.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn receive_loop_decodes_gray16_and_mono1_per_frame() {
+        let geometry = BoardGeometry {
+            raw_width: 8,
+            raw_height: 1,
+            framebuffer_width: 8,
+            framebuffer_height: 1,
+            framebuffer_format: FramebufferFormat::Mono1,
+            output_width: 8,
+            output_height: 1,
+        };
+        let (host, mut peer) = tokio::net::UnixStream::pair().unwrap();
+        let (read_half, _write_half) = host.into_split();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let reader = tokio::spawn(receive_loop(
+            read_half,
+            event_tx,
+            geometry.clone(),
+            debug_transport::DebugTransportBroker::new(),
+            None,
+            None,
+        ));
+
+        for (flags, pixels) in [
+            (0, &[0b0101_0101][..]),
+            (FB_FLAG_GRAY16 | 0x01, &[0x05, 0xAF, 0x05, 0xAF]),
+            (FB_FLAG_GRAY16, &[0xFF]),
+            (0, &[0x05, 0xAF, 0x05, 0xAF]),
+            (0x01, &[0b1010_1010]),
+        ] {
+            let mut packet = vec![CHANNEL_FRAMEBUFFER, flags, 0, 0];
+            packet.extend_from_slice(&(pixels.len() as u32).to_le_bytes());
+            packet.extend_from_slice(pixels);
+            peer.write_all(&packet).await.unwrap();
+        }
+        peer.shutdown().await.unwrap();
+        reader.await.unwrap().unwrap();
+
+        for (format, expected) in [
+            (FramebufferFormat::Mono1, [0, 255, 0, 255]),
+            (FramebufferFormat::Gray16, [255, 170, 85, 0]),
+            (FramebufferFormat::Mono1, [255, 0, 255, 0]),
+        ] {
+            let Some(HeadlessEvent::Frame(frame)) = event_rx.recv().await else {
+                panic!("missing {format:?} frame");
+            };
+            assert_eq!(frame.format, format);
+            let frame_geometry = geometry.with_framebuffer_format(frame.format);
+            assert_eq!(
+                expected,
+                [0, 1, 2, 3].map(|x| framebuffer_gray_value(&frame.pixels, &frame_geometry, x, 0))
+            );
+        }
+        assert!(event_rx.recv().await.is_none());
     }
 
     fn s37uc_test_geometry() -> BoardGeometry {
@@ -9137,9 +9262,19 @@ mod tests {
     async fn wait_for_frame_requires_a_frame_after_injection() {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let mut last_fb = None;
-        event_tx.send(HeadlessEvent::Frame(vec![0x11])).unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x11],
+                format: FramebufferFormat::Mono1,
+            }))
+            .unwrap();
         event_tx.send(HeadlessEvent::Injected).unwrap();
-        event_tx.send(HeadlessEvent::Frame(vec![0x22])).unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            }))
+            .unwrap();
 
         let frames =
             wait_for_injection(&mut event_rx, &mut last_fb, Duration::from_millis(20), true)
@@ -9147,15 +9282,31 @@ mod tests {
                 .unwrap();
 
         assert_eq!(frames, 2);
-        assert_eq!(last_fb, Some(vec![0x22]));
+        assert_eq!(
+            last_fb,
+            Some(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            })
+        );
     }
 
     #[tokio::test]
     async fn wait_idle_passes_after_the_last_frame_and_fails_while_frames_keep_coming() {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let mut last_fb = None;
-        event_tx.send(HeadlessEvent::Frame(vec![0x11])).unwrap();
-        event_tx.send(HeadlessEvent::Frame(vec![0x22])).unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x11],
+                format: FramebufferFormat::Mono1,
+            }))
+            .unwrap();
+        event_tx
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            }))
+            .unwrap();
         let frames = wait_for_quiet_frames(
             &mut event_rx,
             &mut last_fb,
@@ -9165,12 +9316,24 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(frames, 2);
-        assert_eq!(last_fb, Some(vec![0x22]));
+        assert_eq!(
+            last_fb,
+            Some(CapturedFramebuffer {
+                pixels: vec![0x22],
+                format: FramebufferFormat::Gray16,
+            })
+        );
 
         let feeder = event_tx.clone();
         let producer = tokio::spawn(async move {
             for i in 0..40u8 {
-                if feeder.send(HeadlessEvent::Frame(vec![i])).is_err() {
+                if feeder
+                    .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                        pixels: vec![i],
+                        format: FramebufferFormat::Mono1,
+                    }))
+                    .is_err()
+                {
                     break;
                 }
                 time::sleep(Duration::from_millis(10)).await;
@@ -9795,7 +9958,10 @@ mod tests {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let mut last_fb = None;
         event_tx
-            .send(HeadlessEvent::Frame(vec![0xAA, 0x55]))
+            .send(HeadlessEvent::Frame(CapturedFramebuffer {
+                pixels: vec![0xAA, 0x55],
+                format: FramebufferFormat::Mono1,
+            }))
             .unwrap();
         event_tx
             .send(HeadlessEvent::PeripheralControl(vec![
@@ -9817,7 +9983,13 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(last_fb, Some(vec![0xAA, 0x55]));
+        assert_eq!(
+            last_fb,
+            Some(CapturedFramebuffer {
+                pixels: vec![0xAA, 0x55],
+                format: FramebufferFormat::Mono1,
+            })
+        );
     }
 
     #[test]
@@ -10121,11 +10293,55 @@ mod tests {
             ScreenshotRegionStats {
                 total_pixels: 4,
                 dark_pixels: 3,
-                white_pixels: 1
+                white_pixels: 1,
+                gray_pixels: 0,
             }
         );
-        assert!(framebuffer_pixel_is_dark(&fb, &geometry, 10, 20).unwrap());
-        assert!(!framebuffer_pixel_is_dark(&fb, &geometry, 11, 21).unwrap());
+        assert_eq!(
+            framebuffer_output_gray_value(&fb, &geometry, 10, 20).unwrap(),
+            0
+        );
+        assert_eq!(
+            framebuffer_output_gray_value(&fb, &geometry, 11, 21).unwrap(),
+            255
+        );
+    }
+
+    #[test]
+    fn screenshot_region_distinguishes_gray_pixels_from_black_and_white() {
+        let geometry = BoardGeometry {
+            raw_width: 8,
+            raw_height: 1,
+            framebuffer_width: 8,
+            framebuffer_height: 1,
+            framebuffer_format: FramebufferFormat::Gray16,
+            output_width: 8,
+            output_height: 1,
+        };
+        let viewport = ReferenceViewport {
+            width: 8,
+            height: 1,
+        };
+        let fb = [0x05, 0xAF, 0x00, 0xFF];
+        let mut step: CaseStep = serde_json::from_str(
+            r#"{"type":"assert_screenshot_region","x":0,"y":0,"width":8,"height":1,
+                "minGrayPixels":2,"maxGrayPixels":2}"#,
+        )
+        .unwrap();
+        let summary = assert_screenshot_region(&step, &fb, &geometry, viewport).unwrap();
+        assert!(summary.contains("gray=2/8"));
+
+        step.min_gray_pixels = None;
+        step.max_gray_pixels = Some(0);
+        let error = assert_screenshot_region(&step, &fb, &geometry, viewport).unwrap_err();
+        assert!(error.to_string().contains("gray pixels 2 above max 0"));
+
+        let mono = geometry.with_framebuffer_format(FramebufferFormat::Mono1);
+        assert_screenshot_region(&step, &[0xA5], &mono, viewport).unwrap();
+        step.max_gray_pixels = None;
+        step.min_gray_pixels = Some(1);
+        let error = assert_screenshot_region(&step, &[0xA5], &mono, viewport).unwrap_err();
+        assert!(error.to_string().contains("gray pixels 0 below min 1"));
     }
 
     #[test]
@@ -10272,10 +10488,14 @@ mod tests {
             ScreenshotRegionStats {
                 total_pixels: 2,
                 dark_pixels: 2,
-                white_pixels: 0
+                white_pixels: 0,
+                gray_pixels: 0,
             }
         );
-        assert!(framebuffer_pixel_is_dark(&fb, &geometry, 11, 20).unwrap());
+        assert_eq!(
+            framebuffer_output_gray_value(&fb, &geometry, 11, 20).unwrap(),
+            0
+        );
     }
 
     #[test]

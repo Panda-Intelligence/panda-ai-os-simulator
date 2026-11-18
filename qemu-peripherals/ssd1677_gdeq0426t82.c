@@ -67,6 +67,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(SSD1677State, SSD1677_GDEQ0426)
 /* Frame flags */
 #define IPC_FLAG_FB_FULL 0x00
 #define IPC_FLAG_FB_PARTIAL 0x01
+#define IPC_FLAG_FB_GRAY16 0x02
 
 /* Inbound IPC parser limits */
 #define HEADER_LEN 8
@@ -237,6 +238,7 @@ extern bool mofeiSimulatorConsolePollResponse(void);
 extern bool mofeiSimulatorPandaDebugWriteRequest(const uint8_t* payload, uint32_t len);
 extern bool mofeiSimulatorPandaDebugPollResponse(void);
 void ssd1677_publish_direct_framebuffer(const uint8_t* payload, uint32_t len);
+void ssd1677_publish_gray4_framebuffer(const uint8_t* payload, uint32_t len, bool portrait);
 #ifdef __EMSCRIPTEN__
 extern void mofei_wasm_ipc_send(uint32_t channel, uint32_t flags, const uint8_t* payload, uint32_t len);
 #endif
@@ -1007,6 +1009,31 @@ void ssd1677_publish_direct_framebuffer(const uint8_t* payload, uint32_t len) {
     return;
   }
   ipc_send_frame(g_ssd1677, IPC_CHANNEL_FRAMEBUFFER, IPC_FLAG_FB_FULL, payload, len);
+}
+
+void ssd1677_publish_gray4_framebuffer(const uint8_t* payload, uint32_t len, bool portrait) {
+  if (!g_ssd1677 || !payload || len == 0) {
+    return;
+  }
+  if (portrait) {
+    static uint8_t landscape[MOFEI_SSD1677_GRAY4_EXPORT_BYTES];
+    if (len != sizeof(landscape)) {
+      return;
+    }
+    /* 与单色帧顺序一致，逻辑 (x, y) 对应线上的 (y, 479 - x)。 */
+    for (uint32_t row = 0; row < EPD_HEIGHT; ++row) {
+      const uint32_t x = EPD_HEIGHT - 1u - row;
+      const uint32_t shift = x % 2u == 0 ? 4u : 0u;
+      for (uint32_t y = 0; y < EPD_WIDTH; y += 2u) {
+        const uint32_t src = y * (MURPHY_LOGICAL_WIDTH / 2u) + x / 2u;
+        const uint8_t first = (payload[src] >> shift) & 0x0fu;
+        const uint8_t second = (payload[src + MURPHY_LOGICAL_WIDTH / 2u] >> shift) & 0x0fu;
+        landscape[(row * EPD_WIDTH + y) / 2u] = (first << 4u) | second;
+      }
+    }
+    payload = landscape;
+  }
+  ipc_send_frame(g_ssd1677, IPC_CHANNEL_FRAMEBUFFER, IPC_FLAG_FB_GRAY16, payload, len);
 }
 
 void ssd1677_inject_real_framebuffer(const uint8_t* data, uint32_t len) {

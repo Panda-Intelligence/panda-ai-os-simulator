@@ -124,7 +124,7 @@ impl ReadLoopFixture {
 
     fn assert_frame(&mut self, payload: &[u8]) {
         assert!(
-            matches!(self.events.try_recv(), Ok(HeadlessEvent::Frame(bytes)) if bytes == payload)
+            matches!(self.events.try_recv(), Ok(HeadlessEvent::Frame(frame)) if frame.pixels == payload)
         );
     }
 
