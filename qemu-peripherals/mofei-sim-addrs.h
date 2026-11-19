@@ -249,14 +249,15 @@ typedef struct MofeiSimAddrs {
   uint32_t loop_addr;                                         /* loop() entry point */
   uint32_t app_main_addr;                                     /* app_main() entry point */
   uint32_t loopTask_addr;                                     /* loopTask() entry point */
-  uint32_t murphySimulatorMain_addr;                          /* Murphy OS simulator synchronous entry point */
-  uint32_t murphySimulatorEnterRunLoop_addr;                  /* Murphy OS simulator run-loop marker */
-  uint32_t murphyRunDeviceMain_retw;                          /* RETW after DeviceShell::startSimulatorLoop() */
-  uint32_t murphyDeviceShellStartSimulatorLoop_addr;          /* DeviceShell::startSimulatorLoop() */
-  uint32_t murphyDeviceShellRunSimulatorLoopContext_addr;     /* DeviceShell::runSimulatorLoop(Context) */
-  uint32_t murphyDeviceShellRunSimulatorLoopMethod_addr;      /* DeviceShell::runSimulatorLoop() */
-  uint32_t murphyDeviceShellRunSimulatorLoopWithContext_addr; /* DeviceShell::runSimulatorLoopWithContext(Context) */
-  uint32_t murphyDeviceShellRunSimulatorLoop_addr;            /* DeviceShell::runSimulatorLoop() */
+  uint32_t pandaSimulatorMain_addr;                           /* Panda AI OS simulator synchronous entry point */
+  const char* simulator_main_symbol_name;                     /* 已解析的固件入口名称 */
+  uint32_t pandaSimulatorEnterRunLoop_addr;                   /* Panda AI OS simulator run-loop marker */
+  uint32_t pandaRunDeviceMain_retw;                           /* RETW after DeviceShell::startSimulatorLoop() */
+  uint32_t pandaDeviceShellStartSimulatorLoop_addr;           /* DeviceShell::startSimulatorLoop() */
+  uint32_t pandaDeviceShellRunSimulatorLoopContext_addr;      /* DeviceShell::runSimulatorLoop(Context) */
+  uint32_t pandaDeviceShellRunSimulatorLoopMethod_addr;       /* DeviceShell::runSimulatorLoop() */
+  uint32_t pandaDeviceShellRunSimulatorLoopWithContext_addr;  /* DeviceShell::runSimulatorLoopWithContext(Context) */
+  uint32_t pandaDeviceShellRunSimulatorLoop_addr;             /* DeviceShell::runSimulatorLoop() */
   uint32_t start_cpu0_addr;                                   /* ESP-IDF start_cpu0() entry point */
   uint32_t xTaskCreateUniversal_addr;                         /* xTaskCreateUniversal() entry point */
   uint32_t esp_cache_msync_addr;                              /* esp_cache_msync() entry point */
@@ -272,57 +273,57 @@ typedef struct MofeiSimAddrs {
   uint32_t gfxSimulatorPublishFrameBuffer_return;             /* RETW instruction inside the publish wrapper */
   uint32_t mofeiSimulatorPublishFramebuffer_addr;             /* simulator framebuffer publish hook */
   uint32_t mofeiSimulatorPublishFramebuffer_retw;             /* RETW instruction inside simulator publish hook */
-  uint32_t murphySimulatorBootFirstFrame_addr;                /* Murphy OS simulator first-frame entry point */
-  uint32_t murphySimulatorPublishFramebuffer_addr;            /* Murphy OS simulator framebuffer publish hook */
-  uint32_t murphySimulatorPublishFramebuffer_retw;            /* RETW instruction inside Murphy OS publish hook */
-  uint32_t murphySimulatorTraceActivity_addr;                 /* Murphy OS simulator activity trace marker */
-  uint32_t murphySimulatorHooksEnabled_addr;                  /* Murphy OS simulator hook enable flag */
+  uint32_t pandaSimulatorBootFirstFrame_addr;                 /* Panda AI OS simulator first-frame entry point */
+  uint32_t pandaSimulatorPublishFramebuffer_addr;             /* Panda AI OS simulator framebuffer publish hook */
+  uint32_t pandaSimulatorPublishFramebuffer_retw;             /* RETW instruction inside Panda AI OS publish hook */
+  uint32_t pandaSimulatorTraceActivity_addr;                  /* Panda AI OS simulator activity trace marker */
+  uint32_t pandaSimulatorHooksEnabled_addr;                   /* Panda AI OS simulator hook enable flag */
   /* ActivityManager symbols */
   uint32_t goToBoot_addr;                    /* ActivityManager::goToBoot() */
   uint32_t goHome_addr;                      /* ActivityManager::goHome() */
   uint32_t activityManager_begin_addr;       /* ActivityManager::begin() */
   uint32_t activityManager_addr;             /* activityManager global (BSS) */
-  uint32_t murphyDeviceShell_addr;           /* runMurphyDeviceMain static DeviceShell */
-  uint32_t murphyDeviceRunner_addr;          /* runMurphyDeviceMain static AppRunner */
-  uint32_t murphyDeviceFramebuffer_addr;     /* runMurphyDeviceMain static Framebuffer */
-  uint32_t murphyDeviceDisplay_addr;         /* runMurphyDeviceMain static DisplayEsp */
-  uint32_t murphyDeviceSleepInput_addr;      /* runMurphyDeviceMain static SleepHoldInput */
-  uint32_t murphyDevicePower_addr;           /* runMurphyDeviceMain static PowerEsp */
-  uint32_t murphyDeviceFrontlight_addr;      /* runMurphyDeviceMain static FrontlightEsp */
-  uint32_t murphyDeviceStorage_addr;         /* runMurphyDeviceMain static StorageEsp */
-  uint32_t murphyDeviceCastStore_addr;       /* runMurphyDeviceMain static CastFrameStore */
-  uint32_t murphyDeviceInput_addr;           /* runMurphyDeviceMain static InputEsp */
-  uint32_t murphyDeviceMappedInput_addr;     /* runMurphyDeviceMain static PortraitInput */
-  uint32_t murphyDeviceDebugInput_addr;      /* runMurphyDeviceMain static SyntheticInput */
-  uint32_t murphyDeviceRemoteInput_addr;     /* runMurphyDeviceMain static RemoteInput */
-  uint32_t murphyDeviceWindow_addr;          /* runMurphyDeviceMain static Window */
-  uint32_t murphyDeviceNowMs_addr;           /* runMurphyDeviceMain nowMs function */
-  uint32_t murphyInputEspVtable_addr;        /* vtable for InputEsp */
-  uint32_t murphyPortraitInputVtable_addr;   /* vtable for PortraitInput */
-  uint32_t murphySleepHoldInputVtable_addr;  /* vtable for SleepHoldInput */
-  uint32_t murphyRemoteInputVtable_addr;     /* vtable for RemoteInput */
-  uint32_t murphySyntheticInputVtable_addr;  /* vtable for SyntheticInput */
-  uint32_t murphySimulatorShellContext_addr; /* Murphy OS simulator shell context */
-  uint32_t murphySimulatorRunner_addr;
-  uint32_t murphySimulatorFramebufferObject_addr;
-  uint32_t murphySimulatorDisplay_addr;
-  uint32_t murphySimulatorSleepInput_addr;
-  uint32_t murphySimulatorPower_addr;
-  uint32_t murphySimulatorFrontlight_addr;
-  uint32_t murphySimulatorStorage_addr;
-  uint32_t murphySimulatorUiFont_addr;
-  uint32_t murphySimulatorBodyFont_addr;
-  uint32_t murphySimulatorCastStore_addr;
-  uint32_t murphySimulatorRunnerInput_addr;
-  uint32_t murphySimulatorRunnerWindow_addr;
-  uint32_t murphySimulatorRunnerNowMs_addr;
+  uint32_t pandaDeviceShell_addr;            /* runPandaDeviceMain static DeviceShell */
+  uint32_t pandaDeviceRunner_addr;           /* runPandaDeviceMain static AppRunner */
+  uint32_t pandaDeviceFramebuffer_addr;      /* runPandaDeviceMain static Framebuffer */
+  uint32_t pandaDeviceDisplay_addr;          /* runPandaDeviceMain static DisplayEsp */
+  uint32_t pandaDeviceSleepInput_addr;       /* runPandaDeviceMain static SleepHoldInput */
+  uint32_t pandaDevicePower_addr;            /* runPandaDeviceMain static PowerEsp */
+  uint32_t pandaDeviceFrontlight_addr;       /* runPandaDeviceMain static FrontlightEsp */
+  uint32_t pandaDeviceStorage_addr;          /* runPandaDeviceMain static StorageEsp */
+  uint32_t pandaDeviceCastStore_addr;        /* runPandaDeviceMain static CastFrameStore */
+  uint32_t pandaDeviceInput_addr;            /* runPandaDeviceMain static InputEsp */
+  uint32_t pandaDeviceMappedInput_addr;      /* runPandaDeviceMain static PortraitInput */
+  uint32_t pandaDeviceDebugInput_addr;       /* runPandaDeviceMain static SyntheticInput */
+  uint32_t pandaDeviceRemoteInput_addr;      /* runPandaDeviceMain static RemoteInput */
+  uint32_t pandaDeviceWindow_addr;           /* runPandaDeviceMain static Window */
+  uint32_t pandaDeviceNowMs_addr;            /* runPandaDeviceMain nowMs function */
+  uint32_t pandaInputEspVtable_addr;         /* vtable for InputEsp */
+  uint32_t pandaPortraitInputVtable_addr;    /* vtable for PortraitInput */
+  uint32_t pandaSleepHoldInputVtable_addr;   /* vtable for SleepHoldInput */
+  uint32_t pandaRemoteInputVtable_addr;      /* vtable for RemoteInput */
+  uint32_t pandaSyntheticInputVtable_addr;   /* vtable for SyntheticInput */
+  uint32_t pandaSimulatorShellContext_addr;  /* Panda AI OS simulator shell context */
+  uint32_t pandaSimulatorRunner_addr;
+  uint32_t pandaSimulatorFramebufferObject_addr;
+  uint32_t pandaSimulatorDisplay_addr;
+  uint32_t pandaSimulatorSleepInput_addr;
+  uint32_t pandaSimulatorPower_addr;
+  uint32_t pandaSimulatorFrontlight_addr;
+  uint32_t pandaSimulatorStorage_addr;
+  uint32_t pandaSimulatorUiFont_addr;
+  uint32_t pandaSimulatorBodyFont_addr;
+  uint32_t pandaSimulatorCastStore_addr;
+  uint32_t pandaSimulatorRunnerInput_addr;
+  uint32_t pandaSimulatorRunnerWindow_addr;
+  uint32_t pandaSimulatorRunnerNowMs_addr;
   /* Display/rendering globals */
   uint32_t display_addr;                           /* display global (BSS, MofeiDisplay object) */
   uint32_t renderer_addr;                          /* renderer global (BSS, GfxRenderer object) */
   uint32_t gfxSimulatorFrameBuffer_addr;           /* simulator static framebuffer hook */
-  uint32_t murphySimulatorFramebuffer_addr;        /* Murphy OS exported framebuffer data pointer */
-  uint32_t murphySimulatorFramebufferStorage_addr; /* Murphy OS simulator framebuffer storage */
-  uint32_t murphySimulatorGray4Export_addr;        /* 可选的 Gray4 发布指针 */
+  uint32_t pandaSimulatorFramebuffer_addr;         /* Panda AI OS exported framebuffer data pointer */
+  uint32_t pandaSimulatorFramebufferStorage_addr;  /* Panda AI OS simulator framebuffer storage */
+  uint32_t pandaSimulatorGray4Export_addr;         /* 可选的 Gray4 发布指针 */
   /* Intercepted SPI/SKIP functions */
   uint32_t spi_beginTransaction_addr;     /* SPIClass::beginTransaction */
   uint32_t spi_endTransaction_addr;       /* SPIClass::endTransaction */
@@ -331,9 +332,9 @@ typedef struct MofeiSimAddrs {
   uint32_t sendCommand_addr;              /* MofeiDisplay::sendCommand */
   uint32_t sendData_byte_addr;            /* MofeiDisplay::sendData(uint8_t) */
   uint32_t sendData_buf_addr;             /* MofeiDisplay::sendData(const uint8_t*, size_t) */
-  uint32_t epdBusWriteCommand_addr;       /* murphyos::EpdBusEsp::writeCommand */
-  uint32_t epdBusWriteData_addr;          /* murphyos::EpdBusEsp::writeData */
-  uint32_t epdBusWaitBusy_addr;           /* murphyos::EpdBusEsp::waitBusy */
+  uint32_t epdBusWriteCommand_addr;       /* pandaos::EpdBusEsp::writeCommand */
+  uint32_t epdBusWriteData_addr;          /* pandaos::EpdBusEsp::writeData */
+  uint32_t epdBusWaitBusy_addr;           /* pandaos::EpdBusEsp::waitBusy */
   uint32_t addApbChangeCallback_addr;     /* addApbChangeCallback */
   uint32_t removeApbChangeCallback_addr;  /* removeApbChangeCallback */
   uint32_t getApbFrequency_addr;          /* getApbFrequency */
@@ -581,67 +582,67 @@ typedef struct MofeiSimAddrs {
   uint32_t epubReaderRender_addr;                /* EpubReaderActivity::render(RenderLock&&) */
   uint32_t txtReaderRender_addr;                 /* TxtReaderActivity::render(RenderLock&&) */
   uint32_t xtcReaderRender_addr;                 /* XtcReaderActivity::render(RenderLock&&) */
-  uint32_t murphyVtableHomeScene_addr;           /* vtable for murphy::app::HomeScene */
-  uint32_t murphyVtableSettingsScene_addr;       /* vtable for murphy::app::SettingsScene */
-  uint32_t murphyVtableWifiSelectionScene_addr;  /* vtable for murphy::app::WifiSelectionScene */
-  uint32_t murphyVtableFileBrowserScene_addr;    /* vtable for murphy::app::FileBrowserScene */
-  uint32_t murphyVtableLibraryScene_addr;        /* vtable for murphy::app::LibraryScene */
-  uint32_t murphyVtableRecentBooksScene_addr;    /* vtable for murphy::app::RecentBooksScene */
-  uint32_t murphyVtableArcadeHubScene_addr;      /* vtable for murphy::app::ArcadeHubScene */
-  uint32_t murphyVtableGame2048Scene_addr;       /* vtable for murphy::app::Game2048Scene */
-  uint32_t murphyVtableWeatherScene_addr;        /* vtable for Murphy WeatherScene */
-  uint32_t murphyVtableCalendarScene_addr;       /* vtable for Murphy CalendarScene */
-  uint32_t murphyVtableTodayScene_addr;          /* panda::app 匿名命名空间 TodayScene 的 vtable */
-  uint32_t murphyVtableStudyHubScene_addr;       /* vtable for murphy::app::study::StudyHubScene */
-  uint32_t murphyVtableCardsTodayScene_addr;     /* vtable for Murphy CardsTodayScene */
-  uint32_t murphyVtableStudyQueueScene_addr;
-  uint32_t murphyVtableStudyReviewQueueScene_addr;
-  uint32_t murphyVtableStudyImportStatusScene_addr;
-  uint32_t murphyVtableStudyQuizScene_addr;
-  uint32_t murphyVtableStudyReportScene_addr;
-  uint32_t murphyVtableStudyRecoveryScene_addr;
-  uint32_t murphyVtableKeyboardScene_addr;               /* vtable for murphy::ui::KeyboardScene */
-  uint32_t murphyVtableConfirmationScene_addr;           /* vtable for panda::ui::ConfirmationScene */
-  uint32_t murphyVtableReaderScene_addr;                 /* vtable for murphy::app::ReaderScene */
-  uint32_t murphyVtableSleepScene_addr;                  /* vtable for murphy::app::SleepScene */
-  uint32_t murphyVtableWallpaperPickerScene_addr;        /* WallpaperPickerScene 的 vtable */
-  uint32_t murphyVtablePandaHubScene_addr;               /* vtable for murphy::app::PandaHubScene */
-  uint32_t murphyVtablePandaLuaAppScene_addr;            /* vtable for murphy::app::PandaLuaAppScene */
-  uint32_t murphyVtableButtonRemapScene_addr;            /* vtable for murphy::app::ButtonRemapScene */
-  uint32_t murphyVtableDiagnosticsScene_addr;            /* vtable for murphy::app::DiagnosticsScene */
-  uint32_t murphyVtableFontPickerScene_addr;             /* vtable for murphy::app::FontPickerScene */
-  uint32_t murphyVtableEnumEditorScene_addr;             /* vtable for murphy::app::EnumEditorScene */
-  uint32_t murphyVtableToggleGroupScene_addr;            /* vtable for murphy::app::ToggleGroupScene */
-  uint32_t murphyVtableSearchResultsScene_addr;          /* vtable for murphy::app::SearchResultsScene */
-  uint32_t murphyVtableBookmarkListScene_addr;           /* vtable for murphy::app::BookmarkListScene */
-  uint32_t murphyVtableChapterListScene_addr;            /* vtable for murphy::app::ChapterListScene */
-  uint32_t murphyVtablePercentJumpScene_addr;            /* vtable for murphy::app::PercentJumpScene */
-  uint32_t murphyVtableDictionaryScene_addr;             /* vtable for murphy::app::ReaderDictionaryResultScene */
-  uint32_t murphyVtableSudokuScene_addr;                 /* vtable for murphy::app::SudokuScene */
-  uint32_t murphyVtableVirtualPetScene_addr;             /* vtable for murphy::app::VirtualPetScene */
-  uint32_t murphyVtableSokobanScene_addr;
-  uint32_t murphyVtableDailyMazeScene_addr;
-  uint32_t murphyVtableArcadeChallengesScene_addr;
-  uint32_t murphyVtablePaperBoyMinesweeperScene_addr;
-  uint32_t murphyVtablePaperboyGbScene_addr;
-  uint32_t murphyVtablePaperboyNesScene_addr;
-  uint32_t murphyVtableElectronicSandScene_addr;
-  uint32_t murphyVtableSleepAppearancePreviewScene_addr;
-  uint32_t murphyVtableWordPuzzleScene_addr;             /* WordPuzzleScene 的 vtable */
-  uint32_t murphyVtablePandaCloudAccountScene_addr;      /* PandaCloudAccountScene 的 vtable */
-  uint32_t murphyVtableGnssScene_addr;                   /* GnssScene 的 vtable */
-  uint32_t murphyVtableGridOrderScene_addr;              /* GridOrderScene 的 vtable */
-  uint32_t murphyVtableRegionOnboardingScene_addr;       /* RegionOnboardingScene 的 vtable */
-  uint32_t murphyVtableClockFocusScene_addr;             /* ClockFocusScene 的 vtable */
-  uint32_t murphyVtableTimerToolsScene_addr;             /* TimerToolsScene 的 vtable */
-  uint32_t murphyVtablePomodoroDurationEditorScene_addr; /* PomodoroDurationEditorScene 的 vtable */
-  uint32_t murphyVtableAlarmListScene_addr;              /* AlarmListScene 的 vtable */
-  uint32_t murphyVtableAlarmEditorScene_addr;            /* AlarmEditorScene 的 vtable */
-  uint32_t murphyVtableAlarmWeekdayEditorScene_addr;     /* AlarmWeekdayEditorScene 的 vtable */
-  uint32_t murphyVtableHanaAssistantScene_addr;          /* HanaAssistantScene 的 vtable */
-  uint32_t murphyVtableWeReadScene_addr;                 /* WeReadScene 的 vtable */
-  uint32_t murphyVtableOtaStatusScene_addr;              /* OtaStatusScene 的 vtable */
-  uint32_t murphyVtableMessageScene_addr;                /* MessageScene 的 vtable */
+  uint32_t pandaVtableHomeScene_addr;            /* vtable for murphy::app::HomeScene */
+  uint32_t pandaVtableSettingsScene_addr;        /* vtable for murphy::app::SettingsScene */
+  uint32_t pandaVtableWifiSelectionScene_addr;   /* vtable for murphy::app::WifiSelectionScene */
+  uint32_t pandaVtableFileBrowserScene_addr;     /* vtable for murphy::app::FileBrowserScene */
+  uint32_t pandaVtableLibraryScene_addr;         /* vtable for murphy::app::LibraryScene */
+  uint32_t pandaVtableRecentBooksScene_addr;     /* vtable for murphy::app::RecentBooksScene */
+  uint32_t pandaVtableArcadeHubScene_addr;       /* vtable for murphy::app::ArcadeHubScene */
+  uint32_t pandaVtableGame2048Scene_addr;        /* vtable for murphy::app::Game2048Scene */
+  uint32_t pandaVtableWeatherScene_addr;         /* vtable for Panda AI OS WeatherScene */
+  uint32_t pandaVtableCalendarScene_addr;        /* vtable for Panda AI OS CalendarScene */
+  uint32_t pandaVtableTodayScene_addr;           /* panda::app 匿名命名空间 TodayScene 的 vtable */
+  uint32_t pandaVtableStudyHubScene_addr;        /* vtable for murphy::app::study::StudyHubScene */
+  uint32_t pandaVtableCardsTodayScene_addr;      /* vtable for Panda AI OS CardsTodayScene */
+  uint32_t pandaVtableStudyQueueScene_addr;
+  uint32_t pandaVtableStudyReviewQueueScene_addr;
+  uint32_t pandaVtableStudyImportStatusScene_addr;
+  uint32_t pandaVtableStudyQuizScene_addr;
+  uint32_t pandaVtableStudyReportScene_addr;
+  uint32_t pandaVtableStudyRecoveryScene_addr;
+  uint32_t pandaVtableKeyboardScene_addr;        /* vtable for murphy::ui::KeyboardScene */
+  uint32_t pandaVtableConfirmationScene_addr;    /* vtable for panda::ui::ConfirmationScene */
+  uint32_t pandaVtableReaderScene_addr;          /* vtable for murphy::app::ReaderScene */
+  uint32_t pandaVtableSleepScene_addr;           /* vtable for murphy::app::SleepScene */
+  uint32_t pandaVtableWallpaperPickerScene_addr; /* WallpaperPickerScene 的 vtable */
+  uint32_t pandaVtablePandaHubScene_addr;        /* vtable for murphy::app::PandaHubScene */
+  uint32_t pandaVtablePandaLuaAppScene_addr;     /* vtable for murphy::app::PandaLuaAppScene */
+  uint32_t pandaVtableButtonRemapScene_addr;     /* vtable for murphy::app::ButtonRemapScene */
+  uint32_t pandaVtableDiagnosticsScene_addr;     /* vtable for murphy::app::DiagnosticsScene */
+  uint32_t pandaVtableFontPickerScene_addr;      /* vtable for murphy::app::FontPickerScene */
+  uint32_t pandaVtableEnumEditorScene_addr;      /* vtable for murphy::app::EnumEditorScene */
+  uint32_t pandaVtableToggleGroupScene_addr;     /* vtable for murphy::app::ToggleGroupScene */
+  uint32_t pandaVtableSearchResultsScene_addr;   /* vtable for murphy::app::SearchResultsScene */
+  uint32_t pandaVtableBookmarkListScene_addr;    /* vtable for murphy::app::BookmarkListScene */
+  uint32_t pandaVtableChapterListScene_addr;     /* vtable for murphy::app::ChapterListScene */
+  uint32_t pandaVtablePercentJumpScene_addr;     /* vtable for murphy::app::PercentJumpScene */
+  uint32_t pandaVtableDictionaryScene_addr;      /* vtable for murphy::app::ReaderDictionaryResultScene */
+  uint32_t pandaVtableSudokuScene_addr;          /* vtable for murphy::app::SudokuScene */
+  uint32_t pandaVtableVirtualPetScene_addr;      /* vtable for murphy::app::VirtualPetScene */
+  uint32_t pandaVtableSokobanScene_addr;
+  uint32_t pandaVtableDailyMazeScene_addr;
+  uint32_t pandaVtableArcadeChallengesScene_addr;
+  uint32_t pandaVtablePaperBoyMinesweeperScene_addr;
+  uint32_t pandaVtablePaperboyGbScene_addr;
+  uint32_t pandaVtablePaperboyNesScene_addr;
+  uint32_t pandaVtableElectronicSandScene_addr;
+  uint32_t pandaVtableSleepAppearancePreviewScene_addr;
+  uint32_t pandaVtableWordPuzzleScene_addr;              /* WordPuzzleScene 的 vtable */
+  uint32_t pandaVtablePandaCloudAccountScene_addr;       /* PandaCloudAccountScene 的 vtable */
+  uint32_t pandaVtableGnssScene_addr;                    /* GnssScene 的 vtable */
+  uint32_t pandaVtableGridOrderScene_addr;               /* GridOrderScene 的 vtable */
+  uint32_t pandaVtableRegionOnboardingScene_addr;        /* RegionOnboardingScene 的 vtable */
+  uint32_t pandaVtableClockFocusScene_addr;              /* ClockFocusScene 的 vtable */
+  uint32_t pandaVtableTimerToolsScene_addr;              /* TimerToolsScene 的 vtable */
+  uint32_t pandaVtablePomodoroDurationEditorScene_addr;  /* PomodoroDurationEditorScene 的 vtable */
+  uint32_t pandaVtableAlarmListScene_addr;               /* AlarmListScene 的 vtable */
+  uint32_t pandaVtableAlarmEditorScene_addr;             /* AlarmEditorScene 的 vtable */
+  uint32_t pandaVtableAlarmWeekdayEditorScene_addr;      /* AlarmWeekdayEditorScene 的 vtable */
+  uint32_t pandaVtableHanaAssistantScene_addr;           /* HanaAssistantScene 的 vtable */
+  uint32_t pandaVtableWeReadScene_addr;                  /* WeReadScene 的 vtable */
+  uint32_t pandaVtableOtaStatusScene_addr;               /* OtaStatusScene 的 vtable */
+  uint32_t pandaVtableMessageScene_addr;                 /* MessageScene 的 vtable */
   uint32_t fillRect_addr;                                /* GfxRenderer::fillRect(int,int,int,int,bool) const */
   uint32_t displayBuffer_addr;                           /* GfxRenderer::displayBuffer(HalDisplay::RefreshMode) const */
   uint32_t renderActivitySync_addr;                      /* renderActivitySynchronously(Activity*) */

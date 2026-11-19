@@ -199,7 +199,7 @@ void chsc6440_inject_touch(const uint8_t* payload, uint32_t len) {
       continue;
     }
     present[fid] = (action != TOUCH_UP);
-    /* The simulator host injects Murphy OS logical portrait coordinates.
+    /* The simulator host injects Panda AI OS logical portrait coordinates.
      * The virtual CHSC register frame exposes the controller calibration
      * plane: raw X follows logical Y, raw Y follows logical X. */
     x[fid] = scale_axis_endpoint(ey, LOGICAL_HEIGHT, MAX_RAW_X);

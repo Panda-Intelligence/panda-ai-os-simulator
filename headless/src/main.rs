@@ -5365,7 +5365,7 @@ fn write_simulator_system_fixture(
     Ok(())
 }
 
-fn write_murphy_system_fixture(
+fn write_panda_system_fixture(
     sd_root: &Path,
     relative_path: &Path,
     contents: impl AsRef<[u8]>,
@@ -5606,7 +5606,7 @@ fn reader_progress_path(book_path: &str) -> String {
     format!("progress/{hash:08x}.mprg")
 }
 
-fn provision_murphy_font_packs(sd_root: &Path, directory: &str, font_names: &[&str]) -> Result<()> {
+fn provision_panda_font_packs(sd_root: &Path, directory: &str, font_names: &[&str]) -> Result<()> {
     let source_dir = repo_root_path()?.join("apps/panda-os/host/tests/fixtures");
     let target_dir = sd_root.join(directory);
     fs::create_dir_all(&target_dir).with_context(|| {
@@ -5629,18 +5629,18 @@ fn provision_murphy_font_packs(sd_root: &Path, directory: &str, font_names: &[&s
     Ok(())
 }
 
-fn provision_murphy_default_font_packs(sd_root: &Path) -> Result<()> {
+fn provision_panda_default_font_packs(sd_root: &Path) -> Result<()> {
     // FontStore discovers this canonical hidden directory first. Mirroring the
     // broad packs into /murphy/fonts doubles the payload and exceeds the
     // isolated 128 MiB E2E FAT image on font-picker cases.
-    provision_murphy_font_packs(sd_root, ".murphy/fonts", &PANDA_DEFAULT_FONT_PACKS)
+    provision_panda_font_packs(sd_root, ".murphy/fonts", &PANDA_DEFAULT_FONT_PACKS)
 }
 
 fn provision_mfp_fallback_case_font_packs(sd_root: &Path) -> Result<()> {
     // The case asserts the simulator's legacy fallback branch at its native
     // 26px role. It needs only this source-complete file, not a mirror of the
     // broad pack family that would exhaust the isolated FAT image.
-    provision_murphy_font_packs(sd_root, "murphy/fonts", &PANDA_MFP_FALLBACK_CASE_PACKS)
+    provision_panda_font_packs(sd_root, "murphy/fonts", &PANDA_MFP_FALLBACK_CASE_PACKS)
 }
 
 fn case_needs_default_font_packs(case_id: &str) -> bool {
@@ -6073,7 +6073,7 @@ fn read_toolchain_fixture_key(path: &Path) -> Result<ToolchainFixtureKey> {
 fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> {
     let case_id = case.id.trim().to_ascii_lowercase();
     if case_needs_default_font_packs(&case_id) {
-        provision_murphy_default_font_packs(sd_root)?;
+        provision_panda_default_font_packs(sd_root)?;
     }
     let needs_books = case_id.starts_with(STORAGE_DIAGNOSTIC_CASE_PREFIX)
         || case_id.contains("file-browser")
@@ -6127,9 +6127,9 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
         write_simulator_system_fixture(sd_root, Path::new("settings.json"), settings_json)?;
     }
     if needs_grid_browser_prefs {
-        write_murphy_system_fixture(sd_root, Path::new("browser.bin"), SEEDED_BROWSER_GRID_PREFS)?;
+        write_panda_system_fixture(sd_root, Path::new("browser.bin"), SEEDED_BROWSER_GRID_PREFS)?;
     } else if needs_header_grid_toggle {
-        write_murphy_system_fixture(sd_root, Path::new("browser.bin"), SEEDED_BROWSER_LIST_PREFS)?;
+        write_panda_system_fixture(sd_root, Path::new("browser.bin"), SEEDED_BROWSER_LIST_PREFS)?;
     }
 
     if needs_books {
@@ -6206,12 +6206,12 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
         // file and persisted catalog path aligned with that contract.
         let epub_path = sd_root.join("Books").join("root-reading.epub");
         copy_or_generate_epub_fixture(&fixture_epub_path, &epub_path, &case_id)?;
-        write_murphy_system_fixture(
+        write_panda_system_fixture(
             sd_root,
             Path::new("library.bin"),
             seeded_library_root_epub_reading_index(),
         )?;
-        write_murphy_system_fixture(
+        write_panda_system_fixture(
             sd_root,
             Path::new(&reader_progress_path("/Books/root-reading.epub")),
             seeded_reader_progress_epub(),
@@ -6247,7 +6247,7 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
     }
 
     if needs_recent {
-        write_murphy_system_fixture(
+        write_panda_system_fixture(
             sd_root,
             Path::new("recents.bin"),
             seeded_recent_books_store(),
@@ -6271,12 +6271,12 @@ fn seed_case_specific_sd_fixtures(case: &E2ECase, sd_root: &Path) -> Result<()> 
             .with_context(|| format!("creating seeded study deck dir {}", deck_path.display()))?;
         fs::write(&deck_path, SEEDED_STUDY_DECK_JSON)
             .with_context(|| format!("writing seeded study deck {}", deck_path.display()))?;
-        write_murphy_system_fixture(
+        write_panda_system_fixture(
             sd_root,
             Path::new("study/queue.msq"),
             seeded_study_review_queue_msq(),
         )?;
-        write_murphy_system_fixture(
+        write_panda_system_fixture(
             sd_root,
             Path::new("study/state.mst"),
             seeded_study_state_mst(),
@@ -10948,7 +10948,7 @@ mod tests {
     #[test]
     fn default_font_fixture_uses_only_the_canonical_hidden_font_directory() {
         let tmp_dir = temp_test_dir("default-font-fixture-layout");
-        provision_murphy_default_font_packs(&tmp_dir).unwrap();
+        provision_panda_default_font_packs(&tmp_dir).unwrap();
 
         for font_name in PANDA_DEFAULT_FONT_PACKS {
             assert!(tmp_dir.join(".murphy/fonts").join(font_name).is_file());
@@ -10960,7 +10960,7 @@ mod tests {
     #[test]
     fn mfp_fallback_fixture_seeds_only_its_legacy_source_complete_font() {
         let tmp_dir = temp_test_dir("mfp-fallback-font-fixture-layout");
-        provision_murphy_default_font_packs(&tmp_dir).unwrap();
+        provision_panda_default_font_packs(&tmp_dir).unwrap();
         provision_mfp_fallback_case_font_packs(&tmp_dir).unwrap();
 
         for font_name in PANDA_DEFAULT_FONT_PACKS {

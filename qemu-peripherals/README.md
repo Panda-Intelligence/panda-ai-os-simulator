@@ -1,6 +1,6 @@
-# QEMU peripherals - Murphy simulator
+# QEMU peripherals for Panda AI OS
 
-C source for the custom QEMU virtual peripherals that present Murphy-supported
+C source for the custom QEMU virtual peripherals that present supported
 e-paper boards, SPI controller, and capacitive touch controllers to the guest
 firmware.
 
@@ -33,6 +33,14 @@ firmware.
 
 Run `scripts/integrate-peripherals.sh [--soc]` to copy sources and apply
 build fragments. See [`INTEGRATION.md`](INTEGRATION.md) for full details.
+
+The SoC symbol table resolves `pandaSimulatorMain`, the Panda simulator hooks
+and `pandaos` C++ symbols first. The same lookup accepts their former names
+when a supplied older ELF or browser symbol sidecar lacks the corresponding
+current symbol. The resolver logs the name it found. Keep the table in
+`hw_xtensa_esp32s3.c` and the native bootstrap patch synchronized.
+
+Updated 2026-11-19 by Codex.
 
 ## Manual test checklist (post-integration)
 

@@ -152,7 +152,7 @@ Run the focused model and owner gates from the repository root:
 bash test/run_lilygo_simulator_storage_bus_test.sh
 python3 scripts/run_simulator_e2e_parallel.py \
   --board lilygo-t5s3-pro \
-  --firmware apps/panda-os/device/build-sim-lilygo-storage-owner/murphy_os.elf \
+  --firmware apps/panda-os/device/build-sim-lilygo-storage-owner/panda_os.elf \
   --case-root test/simulator_board_e2e/lilygo-t5s3-pro \
   --groups storage \
   --jobs 1

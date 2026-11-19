@@ -87,7 +87,8 @@ struct IntegrationRegistry {
 #[serde(rename_all = "camelCase")]
 struct IntegrationBoard {
     id: String,
-    murphy_board: String,
+    #[serde(rename = "murphyBoard")]
+    firmware_board: String,
     firmware: String,
 }
 
@@ -200,19 +201,19 @@ fn board_firmware_path(profile: &BoardProfile) -> Result<PathBuf, String> {
     simulator_resolver::project_path(&mapping.firmware, project_root.as_deref(), "firmware")
 }
 
-fn murphy_build_hint(profile: &BoardProfile) -> String {
+fn panda_build_hint(profile: &BoardProfile) -> String {
     let Ok(mapping) = integration_board(profile) else {
         return "choose an explicit firmware file, or set PANDA_SIMULATOR_INTEGRATION and PANDA_SIMULATOR_PROJECT_ROOT".to_string();
     };
-    let board_env = if mapping.murphy_board == "default" {
+    let board_env = if mapping.firmware_board == "default" {
         "BOARD=default".to_string()
     } else {
-        format!("BOARD={}", mapping.murphy_board)
+        format!("BOARD={}", mapping.firmware_board)
     };
-    let build_dir = if mapping.murphy_board == "default" {
+    let build_dir = if mapping.firmware_board == "default" {
         "apps/panda-os/device/build".to_string()
     } else {
-        format!("apps/panda-os/device/build-{}", mapping.murphy_board)
+        format!("apps/panda-os/device/build-{}", mapping.firmware_board)
     };
     format!("{board_env} PANDA_BUILD_DIR={build_dir} apps/panda-os/tools/build-device.sh")
 }
@@ -890,7 +891,7 @@ fn start_sim_locked(
             "Firmware fixture for board '{}' not found at {}. Build Panda AI OS first: `{}`.",
             board.id,
             firmware.display(),
-            murphy_build_hint(&board)
+            panda_build_hint(&board)
         ));
     }
 
