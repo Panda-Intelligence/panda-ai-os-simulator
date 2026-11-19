@@ -800,9 +800,9 @@ static void disas_xtensa_insn(CPUXtensaState* env, DisasContext* dc) {
   if (mofei_pc_match(dc->pc, mofei_sim_addrs.renderActivitySync_addr)) {
     gen_helper_mofei_trace_activity(tcg_env, tcg_constant_i32(dc->pc), tcg_constant_i32(3));
   }
-  if (mofei_pc_match(dc->pc, mofei_sim_addrs.murphySimulatorTraceActivity_addr)) {
-    gen_helper_mofei_trace_murphy_activity(tcg_env, tcg_constant_i32(dc->pc), cpu_R[10], cpu_R[11], cpu_R[12],
-                                           cpu_R[13], cpu_R[14]);
+  if (mofei_pc_match(dc->pc, mofei_sim_addrs.pandaSimulatorTraceActivity_addr)) {
+    gen_helper_mofei_trace_panda_activity(tcg_env, tcg_constant_i32(dc->pc), cpu_R[10], cpu_R[11], cpu_R[12], cpu_R[13],
+                                          cpu_R[14]);
   }
   if (mofei_pc_match(dc->pc, mofei_sim_addrs.dashboardRender_addr)) {
     gen_helper_mofei_trace_activity(tcg_env, tcg_constant_i32(dc->pc), tcg_constant_i32(1));
@@ -3377,7 +3377,7 @@ static bool mofei_try_translate_retw_intercept(DisasContext* dc, bool before_und
     return true;
   }
 
-  if (mofei_pc_match(pc, mofei_sim_addrs.murphySimulatorPublishFramebuffer_retw)) {
+  if (mofei_pc_match(pc, mofei_sim_addrs.pandaSimulatorPublishFramebuffer_retw)) {
     if (before_underflow) {
       return false;
     }
@@ -3417,8 +3417,8 @@ static bool mofei_try_translate_retw_intercept(DisasContext* dc, bool before_und
   if (!is_patched && (mofei_pc_match(pc, mofei_sim_addrs.vTaskStartScheduler_addr + 3) ||
                       mofei_pc_match(pc, mofei_sim_addrs.xPortStartScheduler_addr + 3))) {
     gen_helper_mofei_jump_to_app_main(tcg_env);
-    const uint32_t entry_addr = mofei_sim_addrs.murphySimulatorMain_addr ? mofei_sim_addrs.murphySimulatorMain_addr
-                                                                         : mofei_sim_addrs.app_main_addr;
+    const uint32_t entry_addr = mofei_sim_addrs.pandaSimulatorMain_addr ? mofei_sim_addrs.pandaSimulatorMain_addr
+                                                                        : mofei_sim_addrs.app_main_addr;
     gen_jump(dc, tcg_constant_i32(entry_addr));
     return true;
   }

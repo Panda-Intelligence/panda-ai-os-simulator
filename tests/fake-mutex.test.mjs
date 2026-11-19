@@ -19,7 +19,7 @@ function fn(source, name) {
 
 test("issued fake mutex ownership runs real IDF pthread and Queue holder semantics", {skip: missingInputs("ESP-IDF", [join(idfPath(), "components/pthread/pthread.c")])}, () => {
   const helper = source("target_xtensa_exc_helper.c");
-  const state = helper.slice(helper.indexOf("/* Serialized simulator queue metadata;"), helper.indexOf("static uint32_t mofei_murphy_or_app_main_entry"));
+  const state = helper.slice(helper.indexOf("/* Serialized simulator queue metadata;"), helper.indexOf("static uint32_t mofei_panda_or_app_main_entry"));
   const idf = idfPath();
   const pthread = readFileSync(join(idf, "components/pthread/pthread.c"), "utf8");
   const queue = readFileSync(join(idf, "components/freertos/FreeRTOS-Kernel/queue.c"), "utf8");
