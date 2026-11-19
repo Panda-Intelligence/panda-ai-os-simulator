@@ -74,3 +74,9 @@ test("INT and TERM end the script and a failed configure wipes its partial build
   assert.doesNotMatch(text,/trap stop_container EXIT INT TERM/);
   assert.match(text,/wipe_incomplete_configure; die "qemu-wasm configure failed/);
 });
+
+test("one-shot builds use a per-run container name so concurrent runs cannot remove each other",()=>{
+  assert.match(text,/QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build-\$\$\}/);
+  assert.match(text,/KEEP_BUILD.*== "1" \]\]; then\n  QEMU_WASM_CONTAINER="\$\{QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build\}"/);
+  assert.ok(text.indexOf("QEMU_WASM_KEEP_BUILD=\"${QEMU_WASM_KEEP_BUILD:-0}\"")<text.indexOf("murphy-qemu-wasm-build-$$"));
+});

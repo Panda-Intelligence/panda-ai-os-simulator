@@ -21,7 +21,6 @@ QEMU_WASM_SRC_DIR="${QEMU_WASM_SRC_DIR:-${QEMU_WASM_CACHE_DIR}/qemu-wasm}"
 QEMU_WASM_OFFLINE="${QEMU_WASM_OFFLINE:-0}"
 QEMU_WASM_BUILD_DIR="${QEMU_WASM_BUILD_DIR:-/build}"
 QEMU_WASM_SCRIPT_MOUNT="${QEMU_WASM_SCRIPT_MOUNT:-/murphy-scripts}"
-QEMU_WASM_CONTAINER="${QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build}"
 QEMU_WASM_IMAGE="${QEMU_WASM_IMAGE:-murphy-qemu-wasm:${QEMU_WASM_IMAGE_TAG}}"
 QEMU_WASM_BASE_IMAGE="${QEMU_WASM_BASE_IMAGE:-${QEMU_WASM_IMAGE}-base}"
 NATIVE_QEMU_DIR="${NATIVE_QEMU_DIR:-${SIM_ROOT}/.qemu-cache/qemu}"
@@ -34,6 +33,13 @@ QEMU_WASM_PROFILE_REVISION="${QEMU_WASM_PROFILE_REVISION:-}"
 QEMU_WASM_OTA_NAMESPACE="${QEMU_WASM_OTA_NAMESPACE:-${QEMU_WASM_PROFILE}}"
 QEMU_WASM_MALLOC="${QEMU_WASM_MALLOC:-emmalloc}"
 QEMU_WASM_KEEP_BUILD="${QEMU_WASM_KEEP_BUILD:-0}"
+# One-shot builds get a container name of their own: with a fixed name a second concurrent run (another worktree, a readiness
+# gate next to a producer) ran `docker rm -f` on the first run's container. Incremental builds keep the fixed, owned name.
+if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
+  QEMU_WASM_CONTAINER="${QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build}"
+else
+  QEMU_WASM_CONTAINER="${QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build-$$}"
+fi
 if [ "${BOARD}" = "default" ]; then
   FIRMWARE_SUFFIX=""
 else
