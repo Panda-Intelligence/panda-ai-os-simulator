@@ -51,9 +51,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(SSD1677State, SSD1677_GDEQ0426)
 #define EPD_FB_BYTES ((EPD_WIDTH * EPD_HEIGHT) / 8) /* 48000 */
 #define EPD_ROW_STRIDE_BYTES (EPD_WIDTH / 8)        /* 100 */
 
-#define MURPHY_LOGICAL_WIDTH 480
-#define MURPHY_LOGICAL_HEIGHT 800
-#define MURPHY_LOGICAL_ROW_STRIDE_BYTES (MURPHY_LOGICAL_WIDTH / 8) /* 60 */
+#define PANDA_LOGICAL_WIDTH 480
+#define PANDA_LOGICAL_HEIGHT 800
+#define PANDA_LOGICAL_ROW_STRIDE_BYTES (PANDA_LOGICAL_WIDTH / 8) /* 60 */
 
 /* IPC channel tags — keep in sync with apps/simulator/src-tauri/src/ipc.rs */
 #define IPC_CHANNEL_FRAMEBUFFER 0x01
@@ -197,11 +197,11 @@ static void ssd1677_set_pixel(uint8_t* fb, int x, int y, bool white) {
   }
 }
 
-static void copy_murphy_logical_framebuffer_to_panel_ram(SSD1677State* s, const uint8_t* guest_fb) {
+static void copy_panda_logical_framebuffer_to_panel_ram(SSD1677State* s, const uint8_t* guest_fb) {
   memset(s->fb, 0xFF, EPD_FB_BYTES);
-  for (int y = 0; y < MURPHY_LOGICAL_HEIGHT; ++y) {
-    for (int x = 0; x < MURPHY_LOGICAL_WIDTH; ++x) {
-      const bool white = framebuffer_bit_is_white(guest_fb, MURPHY_LOGICAL_ROW_STRIDE_BYTES, x, y);
+  for (int y = 0; y < PANDA_LOGICAL_HEIGHT; ++y) {
+    for (int x = 0; x < PANDA_LOGICAL_WIDTH; ++x) {
+      const bool white = framebuffer_bit_is_white(guest_fb, PANDA_LOGICAL_ROW_STRIDE_BYTES, x, y);
       /* Store logical portrait (x,y) at panel RAM row x / column y. push_framebuffer()
        * flips rows, and the host rotates the 800x480 payload back to portrait. */
       ssd1677_set_pixel(s->fb, y, x, white);
@@ -923,7 +923,7 @@ static SampleGuestFrameResult sample_guest_framebuffer(bool allow_low_content_fr
       if (has_content || allow_low_content_frame) {
         for (int row = 0; row < EPD_HEIGHT; row++) {
           if (g_fb_data_guest_addr != 0 && !mofei_sim_board_is_molink() && !mofei_sim_board_is_x4pro()) {
-            copy_murphy_logical_framebuffer_to_panel_ram(g_ssd1677, guest_fb);
+            copy_panda_logical_framebuffer_to_panel_ram(g_ssd1677, guest_fb);
             break;
           }
           memcpy(&g_ssd1677->fb[(EPD_HEIGHT - 1 - row) * EPD_ROW_STRIDE_BYTES], &guest_fb[row * EPD_ROW_STRIDE_BYTES],
@@ -1025,9 +1025,9 @@ void ssd1677_publish_gray4_framebuffer(const uint8_t* payload, uint32_t len, boo
       const uint32_t x = EPD_HEIGHT - 1u - row;
       const uint32_t shift = x % 2u == 0 ? 4u : 0u;
       for (uint32_t y = 0; y < EPD_WIDTH; y += 2u) {
-        const uint32_t src = y * (MURPHY_LOGICAL_WIDTH / 2u) + x / 2u;
+        const uint32_t src = y * (PANDA_LOGICAL_WIDTH / 2u) + x / 2u;
         const uint8_t first = (payload[src] >> shift) & 0x0fu;
-        const uint8_t second = (payload[src + MURPHY_LOGICAL_WIDTH / 2u] >> shift) & 0x0fu;
+        const uint8_t second = (payload[src + PANDA_LOGICAL_WIDTH / 2u] >> shift) & 0x0fu;
         landscape[(row * EPD_WIDTH + y) / 2u] = (first << 4u) | second;
       }
     }

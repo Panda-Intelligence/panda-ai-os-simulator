@@ -51,8 +51,8 @@
 #include "qemu/timer.h"
 
 static struct XtensaConfigList* xtensa_cores;
-static uint32_t mofei_murphy_last_framebuffer_object;
-static uint32_t mofei_murphy_last_framebuffer_data;
+static uint32_t mofei_panda_last_framebuffer_object;
+static uint32_t mofei_panda_last_framebuffer_data;
 
 static bool mofei_guest_addr_in_sim_ram(uint32_t guest_addr);
 static bool mofei_guest_range_in_sim_ram(uint32_t guest_addr, uint32_t len);
@@ -147,7 +147,7 @@ static void mofei_sdmmc_shadow_write_u32(uint32_t addr, uint32_t value) {
   mofei_sdmmc_shadow_write(addr, bytes, sizeof(bytes));
 }
 
-static bool mofei_murphy_context_pointer_plausible(uint32_t addr) {
+static bool mofei_panda_context_pointer_plausible(uint32_t addr) {
   return (addr >= 0x3c800000u && addr < 0x3d000000u) || (addr >= 0x3fc80000u && addr < 0x3fda0000u);
 }
 
@@ -209,27 +209,27 @@ static bool mofei_write_guest_data_u32(CPUXtensaState* env, uint32_t guest_addr,
          MEMTX_OK;
 }
 
-static void mofei_repair_murphy_input_chain(CPUXtensaState* env, uint32_t runner, uint32_t input, uint32_t window,
-                                            uint32_t now_ms) {
+static void mofei_repair_panda_input_chain(CPUXtensaState* env, uint32_t runner, uint32_t input, uint32_t window,
+                                           uint32_t now_ms) {
   if (runner == 0 || input == 0 || window == 0 || now_ms == 0) {
     return;
   }
 
-  const uint32_t input_esp = mofei_sim_addrs.murphyDeviceInput_addr;
-  const uint32_t mapped_input = mofei_sim_addrs.murphyDeviceMappedInput_addr;
-  const uint32_t sleep_input = mofei_sim_addrs.murphyDeviceSleepInput_addr;
-  const uint32_t remote_input = mofei_sim_addrs.murphyDeviceRemoteInput_addr;
-  const uint32_t debug_input = mofei_sim_addrs.murphyDeviceDebugInput_addr;
-  const uint32_t input_esp_vptr = mofei_sim_addrs.murphyInputEspVtable_addr + 8u;
-  const uint32_t mapped_input_vptr = mofei_sim_addrs.murphyPortraitInputVtable_addr + 8u;
-  const uint32_t sleep_input_vptr = mofei_sim_addrs.murphySleepHoldInputVtable_addr + 8u;
-  const uint32_t remote_input_vptr = mofei_sim_addrs.murphyRemoteInputVtable_addr + 8u;
-  const uint32_t synthetic_input_vptr = mofei_sim_addrs.murphySyntheticInputVtable_addr + 8u;
+  const uint32_t input_esp = mofei_sim_addrs.pandaDeviceInput_addr;
+  const uint32_t mapped_input = mofei_sim_addrs.pandaDeviceMappedInput_addr;
+  const uint32_t sleep_input = mofei_sim_addrs.pandaDeviceSleepInput_addr;
+  const uint32_t remote_input = mofei_sim_addrs.pandaDeviceRemoteInput_addr;
+  const uint32_t debug_input = mofei_sim_addrs.pandaDeviceDebugInput_addr;
+  const uint32_t input_esp_vptr = mofei_sim_addrs.pandaInputEspVtable_addr + 8u;
+  const uint32_t mapped_input_vptr = mofei_sim_addrs.pandaPortraitInputVtable_addr + 8u;
+  const uint32_t sleep_input_vptr = mofei_sim_addrs.pandaSleepHoldInputVtable_addr + 8u;
+  const uint32_t remote_input_vptr = mofei_sim_addrs.pandaRemoteInputVtable_addr + 8u;
+  const uint32_t synthetic_input_vptr = mofei_sim_addrs.pandaSyntheticInputVtable_addr + 8u;
 
-  if (input_esp != 0 && mofei_sim_addrs.murphyInputEspVtable_addr != 0) {
+  if (input_esp != 0 && mofei_sim_addrs.pandaInputEspVtable_addr != 0) {
     cpu_stl_data(env, input_esp + 0u, input_esp_vptr);
   }
-  if (mapped_input != 0 && mofei_sim_addrs.murphyPortraitInputVtable_addr != 0) {
+  if (mapped_input != 0 && mofei_sim_addrs.pandaPortraitInputVtable_addr != 0) {
     cpu_stl_data(env, mapped_input + 0u, mapped_input_vptr);
     cpu_stl_data(env, mapped_input + 4u, input_esp);
     cpu_stl_data(env, mapped_input + 8u, 800u);
@@ -237,16 +237,16 @@ static void mofei_repair_murphy_input_chain(CPUXtensaState* env, uint32_t runner
     cpu_stl_data(env, mapped_input + 16u, 800u);
     cpu_stl_data(env, mapped_input + 20u, 480u);
   }
-  if (sleep_input != 0 && mofei_sim_addrs.murphySleepHoldInputVtable_addr != 0) {
+  if (sleep_input != 0 && mofei_sim_addrs.pandaSleepHoldInputVtable_addr != 0) {
     cpu_stl_data(env, sleep_input + 0u, sleep_input_vptr);
     cpu_stl_data(env, sleep_input + 4u, mapped_input ? mapped_input : input_esp);
     cpu_stl_data(env, sleep_input + 8u, now_ms);
   }
-  if (remote_input != 0 && mofei_sim_addrs.murphyRemoteInputVtable_addr != 0) {
+  if (remote_input != 0 && mofei_sim_addrs.pandaRemoteInputVtable_addr != 0) {
     cpu_stl_data(env, remote_input + 0u, remote_input_vptr);
     cpu_stl_data(env, remote_input + 4u, sleep_input ? sleep_input : (mapped_input ? mapped_input : input_esp));
   }
-  if (debug_input != 0 && mofei_sim_addrs.murphySyntheticInputVtable_addr != 0) {
+  if (debug_input != 0 && mofei_sim_addrs.pandaSyntheticInputVtable_addr != 0) {
     cpu_stl_data(env, debug_input + 0u, synthetic_input_vptr);
     cpu_stl_data(env, debug_input + 4u, remote_input ? remote_input : (sleep_input ? sleep_input : input_esp));
     cpu_stl_data(env, debug_input + 8u, now_ms);
@@ -257,8 +257,8 @@ static void mofei_repair_murphy_input_chain(CPUXtensaState* env, uint32_t runner
   cpu_stl_data(env, runner + 8u, now_ms);
 }
 
-static void mofei_log_murphy_runner_layout(CPUXtensaState* env, uint32_t runner, uint32_t input, uint32_t window,
-                                           uint32_t now_ms) {
+static void mofei_log_panda_runner_layout(CPUXtensaState* env, uint32_t runner, uint32_t input, uint32_t window,
+                                          uint32_t now_ms) {
   static unsigned log_count;
   if (log_count >= 4) {
     return;
@@ -287,59 +287,59 @@ static bool mofei_vptr_matches(uint32_t vptr, uint32_t table_addr) {
   return vptr == table_addr || vptr == table_addr + 8u;
 }
 
-static const char* mofei_murphy_activity_for_vptr(uint32_t vptr) {
-  struct MurphyActivityVtable {
+static const char* mofei_panda_activity_for_vptr(uint32_t vptr) {
+  struct PandaActivityVtable {
     uint32_t table;
     const char* activity;
   } entries[] = {
-      {mofei_sim_addrs.murphyVtableHomeScene_addr, "Dashboard"},
-      {mofei_sim_addrs.murphyVtableSettingsScene_addr, "Settings"},
-      {mofei_sim_addrs.murphyVtableWifiSelectionScene_addr, "WifiSelection"},
-      {mofei_sim_addrs.murphyVtableFileBrowserScene_addr, "FileBrowser"},
-      {mofei_sim_addrs.murphyVtableLibraryScene_addr, "Library"},
-      {mofei_sim_addrs.murphyVtableRecentBooksScene_addr, "RecentBooks"},
-      {mofei_sim_addrs.murphyVtableArcadeHubScene_addr, "ArcadeHub"},
-      {mofei_sim_addrs.murphyVtableGame2048Scene_addr, "Game2048"},
-      {mofei_sim_addrs.murphyVtableWeatherScene_addr, "Weather"},
-      {mofei_sim_addrs.murphyVtableCalendarScene_addr, "Calendar"},
-      {mofei_sim_addrs.murphyVtableTodayScene_addr, "Today"},
-      {mofei_sim_addrs.murphyVtableGridOrderScene_addr, "HomeGrid"},
-      {mofei_sim_addrs.murphyVtableStudyHubScene_addr, "Study"},
-      {mofei_sim_addrs.murphyVtableCardsTodayScene_addr, "StudyCardsToday"},
-      {mofei_sim_addrs.murphyVtableStudyQueueScene_addr, "StudyQueue"},
-      {mofei_sim_addrs.murphyVtableStudyReviewQueueScene_addr, "ReviewQueue"},
-      {mofei_sim_addrs.murphyVtableStudyImportStatusScene_addr, "DeckImportStatus"},
-      {mofei_sim_addrs.murphyVtableStudyQuizScene_addr, "StudyQuiz"},
-      {mofei_sim_addrs.murphyVtableStudyReportScene_addr, "LearningReport"},
-      {mofei_sim_addrs.murphyVtableStudyRecoveryScene_addr, "StudyRecovery"},
-      {mofei_sim_addrs.murphyVtableKeyboardScene_addr, "KeyboardEntry"},
-      {mofei_sim_addrs.murphyVtableConfirmationScene_addr, "Confirmation"},
-      {mofei_sim_addrs.murphyVtableReaderScene_addr, "Reader"},
-      {mofei_sim_addrs.murphyVtableSleepScene_addr, "SleepWallpaper"},
-      {mofei_sim_addrs.murphyVtablePandaHubScene_addr, "Applets"},
-      {mofei_sim_addrs.murphyVtablePandaLuaAppScene_addr, "LuaApp"},
-      {mofei_sim_addrs.murphyVtableButtonRemapScene_addr, "ButtonRemap"},
-      {mofei_sim_addrs.murphyVtableDiagnosticsScene_addr, "DeviceDiagnostics"},
-      {mofei_sim_addrs.murphyVtableFontPickerScene_addr, "TtfFontSelect"},
-      {mofei_sim_addrs.murphyVtableEnumEditorScene_addr, "TimeZoneSelect"},
-      {mofei_sim_addrs.murphyVtableToggleGroupScene_addr, "StatusBarSettings"},
-      {mofei_sim_addrs.murphyVtableSearchResultsScene_addr, "TxtSearchResults"},
-      {mofei_sim_addrs.murphyVtableBookmarkListScene_addr, "TxtBookmarks"},
-      {mofei_sim_addrs.murphyVtableChapterListScene_addr, "EpubReaderChapterSelection"},
-      {mofei_sim_addrs.murphyVtablePercentJumpScene_addr, "EpubReaderPercentSelection"},
-      {mofei_sim_addrs.murphyVtableDictionaryScene_addr, "Dictionary"},
-      {mofei_sim_addrs.murphyVtableSudokuScene_addr, "Sudoku"},
-      {mofei_sim_addrs.murphyVtableVirtualPetScene_addr, "VirtualPet"},
-      {mofei_sim_addrs.murphyVtableSokobanScene_addr, "Sokoban"},
-      {mofei_sim_addrs.murphyVtableDailyMazeScene_addr, "DailyMaze"},
-      {mofei_sim_addrs.murphyVtableArcadeChallengesScene_addr, "ArcadeChallenges"},
-      {mofei_sim_addrs.murphyVtableWordPuzzleScene_addr, "WordPuzzle"},
-      {mofei_sim_addrs.murphyVtablePaperBoyMinesweeperScene_addr, "PaperBoyMinesweeper"},
-      {mofei_sim_addrs.murphyVtablePaperboyGbScene_addr, "PaperboyGbScene"},
-      {mofei_sim_addrs.murphyVtablePaperboyNesScene_addr, "PaperboyNesScene"},
-      {mofei_sim_addrs.murphyVtableElectronicSandScene_addr, "ElectronicSand"},
-      {mofei_sim_addrs.murphyVtableWallpaperPickerScene_addr, "SleepWallpaper"},
-      {mofei_sim_addrs.murphyVtableSleepAppearancePreviewScene_addr, "SleepAppearancePreview"},
+      {mofei_sim_addrs.pandaVtableHomeScene_addr, "Dashboard"},
+      {mofei_sim_addrs.pandaVtableSettingsScene_addr, "Settings"},
+      {mofei_sim_addrs.pandaVtableWifiSelectionScene_addr, "WifiSelection"},
+      {mofei_sim_addrs.pandaVtableFileBrowserScene_addr, "FileBrowser"},
+      {mofei_sim_addrs.pandaVtableLibraryScene_addr, "Library"},
+      {mofei_sim_addrs.pandaVtableRecentBooksScene_addr, "RecentBooks"},
+      {mofei_sim_addrs.pandaVtableArcadeHubScene_addr, "ArcadeHub"},
+      {mofei_sim_addrs.pandaVtableGame2048Scene_addr, "Game2048"},
+      {mofei_sim_addrs.pandaVtableWeatherScene_addr, "Weather"},
+      {mofei_sim_addrs.pandaVtableCalendarScene_addr, "Calendar"},
+      {mofei_sim_addrs.pandaVtableTodayScene_addr, "Today"},
+      {mofei_sim_addrs.pandaVtableGridOrderScene_addr, "HomeGrid"},
+      {mofei_sim_addrs.pandaVtableStudyHubScene_addr, "Study"},
+      {mofei_sim_addrs.pandaVtableCardsTodayScene_addr, "StudyCardsToday"},
+      {mofei_sim_addrs.pandaVtableStudyQueueScene_addr, "StudyQueue"},
+      {mofei_sim_addrs.pandaVtableStudyReviewQueueScene_addr, "ReviewQueue"},
+      {mofei_sim_addrs.pandaVtableStudyImportStatusScene_addr, "DeckImportStatus"},
+      {mofei_sim_addrs.pandaVtableStudyQuizScene_addr, "StudyQuiz"},
+      {mofei_sim_addrs.pandaVtableStudyReportScene_addr, "LearningReport"},
+      {mofei_sim_addrs.pandaVtableStudyRecoveryScene_addr, "StudyRecovery"},
+      {mofei_sim_addrs.pandaVtableKeyboardScene_addr, "KeyboardEntry"},
+      {mofei_sim_addrs.pandaVtableConfirmationScene_addr, "Confirmation"},
+      {mofei_sim_addrs.pandaVtableReaderScene_addr, "Reader"},
+      {mofei_sim_addrs.pandaVtableSleepScene_addr, "SleepWallpaper"},
+      {mofei_sim_addrs.pandaVtablePandaHubScene_addr, "Applets"},
+      {mofei_sim_addrs.pandaVtablePandaLuaAppScene_addr, "LuaApp"},
+      {mofei_sim_addrs.pandaVtableButtonRemapScene_addr, "ButtonRemap"},
+      {mofei_sim_addrs.pandaVtableDiagnosticsScene_addr, "DeviceDiagnostics"},
+      {mofei_sim_addrs.pandaVtableFontPickerScene_addr, "TtfFontSelect"},
+      {mofei_sim_addrs.pandaVtableEnumEditorScene_addr, "TimeZoneSelect"},
+      {mofei_sim_addrs.pandaVtableToggleGroupScene_addr, "StatusBarSettings"},
+      {mofei_sim_addrs.pandaVtableSearchResultsScene_addr, "TxtSearchResults"},
+      {mofei_sim_addrs.pandaVtableBookmarkListScene_addr, "TxtBookmarks"},
+      {mofei_sim_addrs.pandaVtableChapterListScene_addr, "EpubReaderChapterSelection"},
+      {mofei_sim_addrs.pandaVtablePercentJumpScene_addr, "EpubReaderPercentSelection"},
+      {mofei_sim_addrs.pandaVtableDictionaryScene_addr, "Dictionary"},
+      {mofei_sim_addrs.pandaVtableSudokuScene_addr, "Sudoku"},
+      {mofei_sim_addrs.pandaVtableVirtualPetScene_addr, "VirtualPet"},
+      {mofei_sim_addrs.pandaVtableSokobanScene_addr, "Sokoban"},
+      {mofei_sim_addrs.pandaVtableDailyMazeScene_addr, "DailyMaze"},
+      {mofei_sim_addrs.pandaVtableArcadeChallengesScene_addr, "ArcadeChallenges"},
+      {mofei_sim_addrs.pandaVtableWordPuzzleScene_addr, "WordPuzzle"},
+      {mofei_sim_addrs.pandaVtablePaperBoyMinesweeperScene_addr, "PaperBoyMinesweeper"},
+      {mofei_sim_addrs.pandaVtablePaperboyGbScene_addr, "PaperboyGbScene"},
+      {mofei_sim_addrs.pandaVtablePaperboyNesScene_addr, "PaperboyNesScene"},
+      {mofei_sim_addrs.pandaVtableElectronicSandScene_addr, "ElectronicSand"},
+      {mofei_sim_addrs.pandaVtableWallpaperPickerScene_addr, "SleepWallpaper"},
+      {mofei_sim_addrs.pandaVtableSleepAppearancePreviewScene_addr, "SleepAppearancePreview"},
   };
   for (int i = 0; i < (int)(sizeof(entries) / sizeof(entries[0])); ++i) {
     if (mofei_vptr_matches(vptr, entries[i].table)) {
@@ -349,8 +349,8 @@ static const char* mofei_murphy_activity_for_vptr(uint32_t vptr) {
   return NULL;
 }
 
-static bool mofei_find_murphy_stack_context(CPUXtensaState* env, uint32_t sp, uint32_t* context_out,
-                                            uint32_t* runner_out, uint32_t* fb_out, uint32_t* display_out) {
+static bool mofei_find_panda_stack_context(CPUXtensaState* env, uint32_t sp, uint32_t* context_out,
+                                           uint32_t* runner_out, uint32_t* fb_out, uint32_t* display_out) {
   const uint32_t fixed_context = sp + 164u;
   uint32_t fixed_runner = 0;
   uint32_t fixed_fb = 0;
@@ -358,8 +358,8 @@ static bool mofei_find_murphy_stack_context(CPUXtensaState* env, uint32_t sp, ui
   mofei_read_guest_memory(fixed_context + 0u, (uint8_t*)&fixed_runner, sizeof(fixed_runner));
   mofei_read_guest_memory(fixed_context + 4u, (uint8_t*)&fixed_fb, sizeof(fixed_fb));
   mofei_read_guest_memory(fixed_context + 8u, (uint8_t*)&fixed_display, sizeof(fixed_display));
-  if (mofei_murphy_context_pointer_plausible(fixed_runner) && mofei_murphy_context_pointer_plausible(fixed_fb) &&
-      mofei_murphy_context_pointer_plausible(fixed_display)) {
+  if (mofei_panda_context_pointer_plausible(fixed_runner) && mofei_panda_context_pointer_plausible(fixed_fb) &&
+      mofei_panda_context_pointer_plausible(fixed_display)) {
     *context_out = fixed_context;
     *runner_out = fixed_runner;
     *fb_out = fixed_fb;
@@ -377,8 +377,8 @@ static bool mofei_find_murphy_stack_context(CPUXtensaState* env, uint32_t sp, ui
     mofei_read_guest_memory(addr + 0u, (uint8_t*)&runner, sizeof(runner));
     mofei_read_guest_memory(addr + 4u, (uint8_t*)&fb, sizeof(fb));
     mofei_read_guest_memory(addr + 8u, (uint8_t*)&display, sizeof(display));
-    if (mofei_murphy_context_pointer_plausible(runner) && mofei_murphy_context_pointer_plausible(fb) &&
-        mofei_murphy_context_pointer_plausible(display)) {
+    if (mofei_panda_context_pointer_plausible(runner) && mofei_panda_context_pointer_plausible(fb) &&
+        mofei_panda_context_pointer_plausible(display)) {
       *context_out = addr;
       *runner_out = runner;
       *fb_out = fb;
@@ -2162,7 +2162,7 @@ static uint32_t mofei_bump_alloc(uint32_t size, uint32_t caps) {
             mofei_pool_free_bytes(pool));
   }
   if (requested_size == 48000u && (caps & MOFEI_MALLOC_CAP_SPIRAM) != 0) {
-    mofei_murphy_last_framebuffer_data = result;
+    mofei_panda_last_framebuffer_data = result;
   }
   return result;
 }
@@ -2868,16 +2868,16 @@ uint32_t HELPER(mofei_queue_intercept)(CPUXtensaState* env, uint32_t target, uin
   return 1;
 }
 
-static uint32_t mofei_murphy_or_app_main_entry(void) {
-  if (mofei_sim_addrs.murphySimulatorMain_addr) {
-    return mofei_sim_addrs.murphySimulatorMain_addr;
+static uint32_t mofei_panda_or_app_main_entry(void) {
+  if (mofei_sim_addrs.pandaSimulatorMain_addr) {
+    return mofei_sim_addrs.pandaSimulatorMain_addr;
   }
   return mofei_sim_addrs.app_main_addr;
 }
 
-static const char* mofei_murphy_or_app_main_entry_name(void) {
-  if (mofei_sim_addrs.murphySimulatorMain_addr) {
-    return "murphySimulatorMain";
+static const char* mofei_panda_or_app_main_entry_name(void) {
+  if (mofei_sim_addrs.pandaSimulatorMain_addr) {
+    return mofei_sim_addrs.simulator_main_symbol_name;
   }
   return "app_main";
 }
@@ -2944,10 +2944,10 @@ static void mofei_prepare_boot_firmware_frame(CPUXtensaState* env) {
   if (!mofei_initialize_main_tls(env)) {
     cpu_abort(env_cpu(env), "Invalid or unreadable firmware TLS metadata");
   }
-  if (mofei_sim_addrs.murphySimulatorHooksEnabled_addr) {
-    cpu_stb_data(env, mofei_sim_addrs.murphySimulatorHooksEnabled_addr, 1);
-    fprintf(stderr, "[BOOT-FRAME] Murphy OS simulator hooks enabled at 0x%08x\n",
-            mofei_sim_addrs.murphySimulatorHooksEnabled_addr);
+  if (mofei_sim_addrs.pandaSimulatorHooksEnabled_addr) {
+    cpu_stb_data(env, mofei_sim_addrs.pandaSimulatorHooksEnabled_addr, 1);
+    fprintf(stderr, "[BOOT-FRAME] Panda AI OS simulator hooks enabled at 0x%08x\n",
+            mofei_sim_addrs.pandaSimulatorHooksEnabled_addr);
   }
 
   const uint32_t stack_top = mofei_main_stack_top();
@@ -2975,17 +2975,17 @@ static void mofei_prepare_boot_firmware_frame(CPUXtensaState* env) {
   cpu_stl_data(env, stack_top - 4, 0);
 
   fprintf(stderr, "[BOOT-FRAME] %s fake call8 WB=%u WS=0x%x PS=0x%x SP=0x%08x A8=0x%08x\n",
-          mofei_murphy_or_app_main_entry_name(), env->sregs[WINDOW_BASE], env->sregs[WINDOW_START], env->sregs[PS],
+          mofei_panda_or_app_main_entry_name(), env->sregs[WINDOW_BASE], env->sregs[WINDOW_START], env->sregs[PS],
           env->regs[1], env->regs[8]);
 }
 
-static bool mofei_publish_murphy_boot_frame(CPUXtensaState* env) {
-  if (!mofei_sim_addrs.murphySimulatorFramebuffer_addr || !mofei_sim_addrs.murphySimulatorFramebufferStorage_addr) {
+static bool mofei_publish_panda_boot_frame(CPUXtensaState* env) {
+  if (!mofei_sim_addrs.pandaSimulatorFramebuffer_addr || !mofei_sim_addrs.pandaSimulatorFramebufferStorage_addr) {
     return false;
   }
 
-  cpu_stl_data(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr,
-               mofei_sim_addrs.murphySimulatorFramebufferStorage_addr);
+  cpu_stl_data(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr,
+               mofei_sim_addrs.pandaSimulatorFramebufferStorage_addr);
   HELPER(mofei_inject_framebuffer)(env);
   return true;
 }
@@ -3000,7 +3000,7 @@ void HELPER(mofei_jump_to_app_main)(CPUXtensaState* env) {
           env->sregs[WINDOW_START], env->sregs[PS], env->regs[1], env->regs[0]);
 
   extern MofeiSimAddrs mofei_sim_addrs;
-  env->pc = mofei_murphy_or_app_main_entry();
+  env->pc = mofei_panda_or_app_main_entry();
   if (!env->pc) {
     fprintf(stderr, "[REDIRECT] WARNING: firmware UI entry not resolved, using fallback\n");
     env->pc = 0x4037d000; /* safe halt */
@@ -3009,8 +3009,8 @@ void HELPER(mofei_jump_to_app_main)(CPUXtensaState* env) {
   mofei_prepare_boot_firmware_frame(env);
 }
 
-uint32_t HELPER(mofei_enter_murphy_run_loop)(CPUXtensaState* env, uint32_t callinc) {
-  const uint32_t target = mofei_sim_addrs.murphyDeviceShellRunSimulatorLoop_addr;
+uint32_t HELPER(mofei_enter_panda_run_loop)(CPUXtensaState* env, uint32_t callinc) {
+  const uint32_t target = mofei_sim_addrs.pandaDeviceShellRunSimulatorLoop_addr;
   const uint32_t shell_reg = ((callinc << 2) + 2u) & 0xfu;
   const uint32_t context_reg = ((callinc << 2) + 3u) & 0xfu;
   const uint32_t shell = env->regs[shell_reg];
@@ -3019,8 +3019,8 @@ uint32_t HELPER(mofei_enter_murphy_run_loop)(CPUXtensaState* env, uint32_t calli
     fprintf(stderr, "[MURPHY] run-loop entry missing; staying at marker\n");
     return env->pc;
   }
-  if (!mofei_murphy_context_pointer_plausible(context) && mofei_sim_addrs.murphySimulatorShellContext_addr) {
-    context = mofei_sim_addrs.murphySimulatorShellContext_addr;
+  if (!mofei_panda_context_pointer_plausible(context) && mofei_sim_addrs.pandaSimulatorShellContext_addr) {
+    context = mofei_sim_addrs.pandaSimulatorShellContext_addr;
   }
   memset(env->regs, 0, sizeof(env->regs));
   memset(env->phys_regs, 0, sizeof(env->phys_regs));
@@ -3040,7 +3040,7 @@ uint32_t HELPER(mofei_enter_murphy_run_loop)(CPUXtensaState* env, uint32_t calli
   return target;
 }
 
-uint32_t HELPER(mofei_start_murphy_simulator_loop)(CPUXtensaState* env) {
+uint32_t HELPER(mofei_start_panda_simulator_loop)(CPUXtensaState* env) {
   const uint32_t callinc = (env->sregs[PS] & PS_CALLINC) >> PS_CALLINC_SHIFT;
   const uint32_t arg_base = callinc << 2;
   uint32_t shell = env->regs[(arg_base + 2) & 0xf];
@@ -3050,11 +3050,11 @@ uint32_t HELPER(mofei_start_murphy_simulator_loop)(CPUXtensaState* env) {
     context = env->regs[11];
   }
   bool used_static_shell = false;
-  if (shell == 0 && mofei_sim_addrs.murphyDeviceShell_addr) {
-    shell = mofei_sim_addrs.murphyDeviceShell_addr;
+  if (shell == 0 && mofei_sim_addrs.pandaDeviceShell_addr) {
+    shell = mofei_sim_addrs.pandaDeviceShell_addr;
     used_static_shell = true;
   }
-  const uint32_t target = mofei_sim_addrs.murphyDeviceShellRunSimulatorLoop_addr;
+  const uint32_t target = mofei_sim_addrs.pandaDeviceShellRunSimulatorLoop_addr;
   if (!target || shell == 0) {
     fprintf(stderr, "[MURPHY] start loop missing shell/context callinc=%u target=0x%08x shell=0x%08x context=0x%08x\n",
             callinc, target, shell, context);
@@ -3077,10 +3077,10 @@ uint32_t HELPER(mofei_start_murphy_simulator_loop)(CPUXtensaState* env) {
   return target;
 }
 
-uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) {
-  const uint32_t method = mofei_sim_addrs.murphyDeviceShellRunSimulatorLoop_addr;
+uint32_t HELPER(mofei_prepare_panda_simulator_loop_frame)(CPUXtensaState* env) {
+  const uint32_t method = mofei_sim_addrs.pandaDeviceShellRunSimulatorLoop_addr;
   const uint32_t target = method;
-  const uint32_t shell = mofei_sim_addrs.murphyDeviceShell_addr;
+  const uint32_t shell = mofei_sim_addrs.pandaDeviceShell_addr;
   if (!method || !target || !shell) {
     fprintf(stderr, "[MURPHY] simulator loop frame missing method=0x%08x target=0x%08x shell=0x%08x\n", method, target,
             shell);
@@ -3094,7 +3094,7 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
   const unsigned callinc = 2;
   const uint32_t marked_ret = (callinc << 30) | (safe_ret & 0x3fffffffu);
   const uint32_t caller_sp = env->regs[1];
-  const uint32_t exported_context = mofei_sim_addrs.murphySimulatorShellContext_addr;
+  const uint32_t exported_context = mofei_sim_addrs.pandaSimulatorShellContext_addr;
 
   uint32_t stack_context = 0;
   uint32_t stack_runner = 0;
@@ -3108,35 +3108,34 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
     stack_runner = mofei_read_guest_data_u32(env, exported_context + 0u);
     stack_fb = mofei_read_guest_data_u32(env, exported_context + 4u);
     stack_display = mofei_read_guest_data_u32(env, exported_context + 8u);
-    if (mofei_murphy_context_pointer_plausible(stack_runner) && mofei_murphy_context_pointer_plausible(stack_fb) &&
-        mofei_murphy_context_pointer_plausible(stack_display)) {
+    if (mofei_panda_context_pointer_plausible(stack_runner) && mofei_panda_context_pointer_plausible(stack_fb) &&
+        mofei_panda_context_pointer_plausible(stack_display)) {
       stack_context = exported_context;
       found_stack_context = true;
     }
   }
   if (!found_stack_context) {
     found_stack_context =
-        mofei_find_murphy_stack_context(env, caller_sp, &stack_context, &stack_runner, &stack_fb, &stack_display);
+        mofei_find_panda_stack_context(env, caller_sp, &stack_context, &stack_runner, &stack_fb, &stack_display);
   }
   if (!found_stack_context) {
-    exported_runner = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorRunner_addr);
-    exported_fb = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr);
-    exported_display = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorDisplay_addr);
-    if (mofei_murphy_context_pointer_plausible(exported_runner) &&
-        mofei_murphy_context_pointer_plausible(exported_fb) &&
-        mofei_murphy_context_pointer_plausible(exported_display)) {
+    exported_runner = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorRunner_addr);
+    exported_fb = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr);
+    exported_display = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorDisplay_addr);
+    if (mofei_panda_context_pointer_plausible(exported_runner) && mofei_panda_context_pointer_plausible(exported_fb) &&
+        mofei_panda_context_pointer_plausible(exported_display)) {
       stack_runner = exported_runner;
       stack_fb = exported_fb;
       stack_display = exported_display;
       found_stack_context = true;
     }
   }
-  if (!found_stack_context && mofei_murphy_context_pointer_plausible(mofei_sim_addrs.murphyDeviceRunner_addr) &&
-      mofei_murphy_context_pointer_plausible(mofei_sim_addrs.murphyDeviceFramebuffer_addr) &&
-      mofei_murphy_context_pointer_plausible(mofei_sim_addrs.murphyDeviceDisplay_addr)) {
-    stack_runner = mofei_sim_addrs.murphyDeviceRunner_addr;
-    stack_fb = mofei_sim_addrs.murphyDeviceFramebuffer_addr;
-    stack_display = mofei_sim_addrs.murphyDeviceDisplay_addr;
+  if (!found_stack_context && mofei_panda_context_pointer_plausible(mofei_sim_addrs.pandaDeviceRunner_addr) &&
+      mofei_panda_context_pointer_plausible(mofei_sim_addrs.pandaDeviceFramebuffer_addr) &&
+      mofei_panda_context_pointer_plausible(mofei_sim_addrs.pandaDeviceDisplay_addr)) {
+    stack_runner = mofei_sim_addrs.pandaDeviceRunner_addr;
+    stack_fb = mofei_sim_addrs.pandaDeviceFramebuffer_addr;
+    stack_display = mofei_sim_addrs.pandaDeviceDisplay_addr;
     found_stack_context = true;
   }
   fprintf(stderr,
@@ -3155,39 +3154,39 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
   }
 
   if (stack_runner == 0) {
-    stack_runner = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorRunner_addr)
-                       ?: mofei_sim_addrs.murphyDeviceRunner_addr;
+    stack_runner = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorRunner_addr)
+                       ?: mofei_sim_addrs.pandaDeviceRunner_addr;
   }
   if (stack_fb == 0) {
-    stack_fb = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr)
-                   ?: mofei_sim_addrs.murphyDeviceFramebuffer_addr;
+    stack_fb = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr)
+                   ?: mofei_sim_addrs.pandaDeviceFramebuffer_addr;
   }
   if (stack_display == 0) {
-    stack_display = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorDisplay_addr)
-                        ?: mofei_sim_addrs.murphyDeviceDisplay_addr;
+    stack_display = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorDisplay_addr)
+                        ?: mofei_sim_addrs.pandaDeviceDisplay_addr;
   }
   if (stack_fb != 0) {
-    mofei_murphy_last_framebuffer_object = stack_fb;
+    mofei_panda_last_framebuffer_object = stack_fb;
   }
-  if (stack_fb != 0 && mofei_murphy_last_framebuffer_data != 0) {
+  if (stack_fb != 0 && mofei_panda_last_framebuffer_data != 0) {
     const uint32_t fb_width = mofei_read_guest_data_u32(env, stack_fb + 0u);
     const uint32_t fb_height = mofei_read_guest_data_u32(env, stack_fb + 4u);
     const uint32_t fb_stride = mofei_read_guest_data_u32(env, stack_fb + 8u);
     const uint32_t fb_bits = mofei_read_guest_data_u32(env, stack_fb + 12u);
     fprintf(stderr, "[MURPHY] framebuffer candidate object=0x%08x data=0x%08x size=%ux%u stride=%u bits=0x%08x\n",
-            stack_fb, mofei_murphy_last_framebuffer_data, fb_width, fb_height, fb_stride, fb_bits);
+            stack_fb, mofei_panda_last_framebuffer_data, fb_width, fb_height, fb_stride, fb_bits);
     if (fb_bits == 0 && ((fb_width == 800u && fb_height == 480u && fb_stride == 100u) ||
                          (fb_width == 0u && fb_height == 0u && fb_stride == 0u))) {
       cpu_stl_data(env, stack_fb + 0u, 800u);
       cpu_stl_data(env, stack_fb + 4u, 480u);
       cpu_stl_data(env, stack_fb + 8u, 100u);
-      cpu_stl_data(env, stack_fb + 12u, mofei_murphy_last_framebuffer_data);
-      cpu_stl_data(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr, mofei_murphy_last_framebuffer_data);
+      cpu_stl_data(env, stack_fb + 12u, mofei_panda_last_framebuffer_data);
+      cpu_stl_data(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr, mofei_panda_last_framebuffer_data);
       for (uint32_t i = 0; i < 48000u; ++i) {
-        cpu_stb_data(env, mofei_murphy_last_framebuffer_data + i, 0xffu);
+        cpu_stb_data(env, mofei_panda_last_framebuffer_data + i, 0xffu);
       }
       fprintf(stderr, "[MURPHY] repaired framebuffer bits object=0x%08x data=0x%08x size=%ux%u stride=%u\n", stack_fb,
-              mofei_murphy_last_framebuffer_data, fb_width, fb_height, fb_stride);
+              mofei_panda_last_framebuffer_data, fb_width, fb_height, fb_stride);
     }
   }
 
@@ -3195,23 +3194,22 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
     cpu_stl_data(env, stack_context + 0u, stack_runner);
     cpu_stl_data(env, stack_context + 4u, stack_fb);
     cpu_stl_data(env, stack_context + 8u, stack_display);
-    const uint32_t sleep_input = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorSleepInput_addr)
-                                     ?: mofei_sim_addrs.murphyDeviceSleepInput_addr;
-    const uint32_t power = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorPower_addr)
-                               ?: mofei_sim_addrs.murphyDevicePower_addr;
-    const uint32_t frontlight = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFrontlight_addr)
-                                    ?: mofei_sim_addrs.murphyDeviceFrontlight_addr;
-    const uint32_t storage = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorStorage_addr)
-                                 ?: mofei_sim_addrs.murphyDeviceStorage_addr;
-    const uint32_t cast_store = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorCastStore_addr)
-                                    ?: mofei_sim_addrs.murphyDeviceCastStore_addr;
+    const uint32_t sleep_input = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorSleepInput_addr)
+                                     ?: mofei_sim_addrs.pandaDeviceSleepInput_addr;
+    const uint32_t power = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorPower_addr)
+                               ?: mofei_sim_addrs.pandaDevicePower_addr;
+    const uint32_t frontlight = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFrontlight_addr)
+                                    ?: mofei_sim_addrs.pandaDeviceFrontlight_addr;
+    const uint32_t storage = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorStorage_addr)
+                                 ?: mofei_sim_addrs.pandaDeviceStorage_addr;
+    const uint32_t cast_store = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorCastStore_addr)
+                                    ?: mofei_sim_addrs.pandaDeviceCastStore_addr;
     cpu_stl_data(env, stack_context + 12u, sleep_input);
     cpu_stl_data(env, stack_context + 16u, power);
     cpu_stl_data(env, stack_context + 20u, frontlight);
     cpu_stl_data(env, stack_context + 24u, storage);
-    cpu_stl_data(env, stack_context + 28u, mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorUiFont_addr));
-    cpu_stl_data(env, stack_context + 32u,
-                 mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorBodyFont_addr));
+    cpu_stl_data(env, stack_context + 28u, mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorUiFont_addr));
+    cpu_stl_data(env, stack_context + 32u, mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorBodyFont_addr));
     cpu_stl_data(env, stack_context + 36u, cast_store);
     cpu_stl_data(env, stack_context + 40u, 0);
     cpu_stl_data(env, stack_context + 44u, 0);
@@ -3241,23 +3239,22 @@ uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)(CPUXtensaState* env) 
   mofei_read_guest_memory(stack_context + 0, (uint8_t*)&ctx_runner, sizeof(ctx_runner));
   mofei_read_guest_memory(stack_context + 4, (uint8_t*)&ctx_fb, sizeof(ctx_fb));
   mofei_read_guest_memory(stack_context + 8, (uint8_t*)&ctx_display, sizeof(ctx_display));
-  const uint32_t exported_runner_input = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorRunnerInput_addr)
-                                             ?: mofei_sim_addrs.murphyDeviceDebugInput_addr;
+  const uint32_t exported_runner_input = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorRunnerInput_addr)
+                                             ?: mofei_sim_addrs.pandaDeviceDebugInput_addr;
   const uint32_t exported_runner_window =
-      mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorRunnerWindow_addr)
-          ?: mofei_sim_addrs.murphyDeviceWindow_addr;
-  const uint32_t exported_runner_now = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorRunnerNowMs_addr)
-                                           ?: mofei_sim_addrs.murphyDeviceNowMs_addr;
+      mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorRunnerWindow_addr)
+          ?: mofei_sim_addrs.pandaDeviceWindow_addr;
+  const uint32_t exported_runner_now = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorRunnerNowMs_addr)
+                                           ?: mofei_sim_addrs.pandaDeviceNowMs_addr;
   if (ctx_runner != 0 && exported_runner_input != 0 && exported_runner_window != 0 && exported_runner_now != 0) {
-    mofei_repair_murphy_input_chain(env, ctx_runner, exported_runner_input, exported_runner_window,
-                                    exported_runner_now);
+    mofei_repair_panda_input_chain(env, ctx_runner, exported_runner_input, exported_runner_window, exported_runner_now);
   }
   if (ctx_runner != 0) {
     mofei_read_guest_memory(ctx_runner + 0, (uint8_t*)&runner_input, sizeof(runner_input));
     mofei_read_guest_memory(ctx_runner + 4, (uint8_t*)&runner_window, sizeof(runner_window));
     mofei_read_guest_memory(ctx_runner + 8, (uint8_t*)&runner_now, sizeof(runner_now));
   }
-  mofei_log_murphy_runner_layout(env, ctx_runner, runner_input, runner_window, runner_now);
+  mofei_log_panda_runner_layout(env, ctx_runner, runner_input, runner_window, runner_now);
 
   cpu_stl_data(env, frame_sp, marked_ret);
   cpu_stl_data(env, frame_sp + 4, stack_top);
@@ -3341,9 +3338,9 @@ void HELPER(mofei_maybe_jump_to_loop_task)(CPUXtensaState* env) {
 void HELPER(mofei_assert_redirect)(CPUXtensaState* env) {
   if (mofei_redirected_to_app_main) return;
 
-  fprintf(stderr, "[ASSERT-REDIRECT] Bootstrap assert → %s\n", mofei_murphy_or_app_main_entry_name());
+  fprintf(stderr, "[ASSERT-REDIRECT] Bootstrap assert → %s\n", mofei_panda_or_app_main_entry_name());
   mofei_redirected_to_app_main = 1;
-  env->pc = mofei_murphy_or_app_main_entry();
+  env->pc = mofei_panda_or_app_main_entry();
   if (!env->pc) {
     fprintf(stderr, "[ASSERT-REDIRECT] WARNING: firmware UI entry not resolved\n");
     env->pc = 0x4037d000; /* safe halt */
@@ -4820,7 +4817,7 @@ static bool mofei_read_direct_framebuffer_layout(CPUXtensaState* env, uint32_t o
 
 static bool mofei_try_publish_gray4_framebuffer(CPUXtensaState* env, uint8_t* pixels) {
   extern void ssd1677_publish_gray4_framebuffer(const uint8_t* payload, uint32_t len, bool portrait);
-  const uint32_t slot = mofei_sim_addrs.murphySimulatorGray4Export_addr;
+  const uint32_t slot = mofei_sim_addrs.pandaSimulatorGray4Export_addr;
   if (!mofei_guest_range_in_sim_ram(slot, sizeof(uint32_t))) {
     return false;
   }
@@ -4889,11 +4886,11 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
     static uint32_t lilygo_publish_count;
     uint32_t exported_bits = 0;
     uint32_t framebuffer_object = 0;
-    if (mofei_sim_addrs.murphySimulatorFramebuffer_addr) {
-      exported_bits = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
+    if (mofei_sim_addrs.pandaSimulatorFramebuffer_addr) {
+      exported_bits = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
     }
-    if (mofei_sim_addrs.murphySimulatorFramebufferObject_addr) {
-      framebuffer_object = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr);
+    if (mofei_sim_addrs.pandaSimulatorFramebufferObject_addr) {
+      framebuffer_object = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr);
     }
 
     MofeiDirectFramebufferLayout layout = {0};
@@ -4934,8 +4931,8 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
               "[LILYGO-FB] publish=%u exported=0x%08x object=0x%08x object_bits=0x%08x selected=0x%08x "
               "read=%u non_white=%u/%u sample=%02x%02x%02x%02x\n",
               lilygo_publish_count + 1u,
-              mofei_sim_addrs.murphySimulatorFramebuffer_addr
-                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr)
+              mofei_sim_addrs.pandaSimulatorFramebuffer_addr
+                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr)
                   : 0,
               framebuffer_object, layout.bits, layout.bits, read_ok ? 1u : 0u, non_white_bytes, publish_bytes,
               read_ok ? direct_framebuffer[0] : 0, read_ok ? direct_framebuffer[1] : 0,
@@ -4948,24 +4945,24 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
     return;
   }
 
-  if (mofei_sim_addrs.murphySimulatorFramebuffer_addr) {
-    uint32_t framebuffer_addr = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
-    if (framebuffer_addr == 0 && mofei_sim_addrs.murphySimulatorShellContext_addr) {
+  if (mofei_sim_addrs.pandaSimulatorFramebuffer_addr) {
+    uint32_t framebuffer_addr = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
+    if (framebuffer_addr == 0 && mofei_sim_addrs.pandaSimulatorShellContext_addr) {
       const uint32_t framebuffer_object =
-          mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorShellContext_addr + 4u);
+          mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorShellContext_addr + 4u);
       if (framebuffer_object != 0) {
         framebuffer_addr = mofei_read_guest_data_u32(env, framebuffer_object + 12u);
       }
     }
-    if (framebuffer_addr == 0 && mofei_sim_addrs.murphySimulatorFramebufferObject_addr) {
+    if (framebuffer_addr == 0 && mofei_sim_addrs.pandaSimulatorFramebufferObject_addr) {
       const uint32_t framebuffer_object =
-          mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr);
+          mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr);
       if (framebuffer_object != 0) {
         framebuffer_addr = mofei_read_guest_data_u32(env, framebuffer_object + 12u);
       }
     }
-    if (framebuffer_addr == 0 && mofei_murphy_last_framebuffer_object != 0) {
-      framebuffer_addr = mofei_read_guest_data_u32(env, mofei_murphy_last_framebuffer_object + 12u);
+    if (framebuffer_addr == 0 && mofei_panda_last_framebuffer_object != 0) {
+      framebuffer_addr = mofei_read_guest_data_u32(env, mofei_panda_last_framebuffer_object + 12u);
     }
     if (framebuffer_addr != 0 && framebuffer_addr != wired_framebuffer_addr) {
       if (mofei_sim_board_is_s37uc()) {
@@ -4975,34 +4972,34 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
         ssd1677_set_fb_guest_addr(0);
         ssd1677_set_fb_data_guest_addr(framebuffer_addr);
       }
-      fprintf(stderr, "[%s] inject: updated Murphy OS framebuffer data to 0x%08x via 0x%08x\n",
+      fprintf(stderr, "[%s] inject: updated Panda AI OS framebuffer data to 0x%08x via 0x%08x\n",
               mofei_sim_board_is_s37uc() ? "UC8253C" : "SSD1677", framebuffer_addr,
-              mofei_sim_addrs.murphySimulatorFramebuffer_addr);
+              mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
       wired_framebuffer_addr = framebuffer_addr;
       injection_wired = true;
     }
   }
 
   if (!injection_wired) {
-    if (mofei_sim_addrs.murphySimulatorFramebuffer_addr) {
+    if (mofei_sim_addrs.pandaSimulatorFramebuffer_addr) {
       uint32_t framebuffer_addr = 0;
-      framebuffer_addr = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
-      if (framebuffer_addr == 0 && mofei_sim_addrs.murphySimulatorShellContext_addr) {
+      framebuffer_addr = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
+      if (framebuffer_addr == 0 && mofei_sim_addrs.pandaSimulatorShellContext_addr) {
         const uint32_t framebuffer_object =
-            mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorShellContext_addr + 4u);
+            mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorShellContext_addr + 4u);
         if (framebuffer_object != 0) {
           framebuffer_addr = mofei_read_guest_data_u32(env, framebuffer_object + 12u);
         }
       }
-      if (framebuffer_addr == 0 && mofei_sim_addrs.murphySimulatorFramebufferObject_addr) {
+      if (framebuffer_addr == 0 && mofei_sim_addrs.pandaSimulatorFramebufferObject_addr) {
         const uint32_t framebuffer_object =
-            mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr);
+            mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr);
         if (framebuffer_object != 0) {
           framebuffer_addr = mofei_read_guest_data_u32(env, framebuffer_object + 12u);
         }
       }
-      if (framebuffer_addr == 0 && mofei_murphy_last_framebuffer_object != 0) {
-        framebuffer_addr = mofei_read_guest_data_u32(env, mofei_murphy_last_framebuffer_object + 12u);
+      if (framebuffer_addr == 0 && mofei_panda_last_framebuffer_object != 0) {
+        framebuffer_addr = mofei_read_guest_data_u32(env, mofei_panda_last_framebuffer_object + 12u);
       }
       if (framebuffer_addr != 0) {
         if (mofei_sim_board_is_s37uc()) {
@@ -5012,36 +5009,36 @@ void HELPER(mofei_inject_framebuffer)(CPUXtensaState* env) {
           ssd1677_set_fb_guest_addr(0);
           ssd1677_set_fb_data_guest_addr(framebuffer_addr);
         }
-        fprintf(stderr, "[%s] inject: wired Murphy OS framebuffer data at 0x%08x via 0x%08x\n",
+        fprintf(stderr, "[%s] inject: wired Panda AI OS framebuffer data at 0x%08x via 0x%08x\n",
                 mofei_sim_board_is_s37uc() ? "UC8253C" : "SSD1677", framebuffer_addr,
-                mofei_sim_addrs.murphySimulatorFramebuffer_addr);
+                mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
         injection_wired = true;
       } else {
         static unsigned null_log_count;
         if (null_log_count < 4) {
-          const uint32_t exported_ptr = mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebuffer_addr);
+          const uint32_t exported_ptr = mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
           const uint32_t ctx_object =
-              mofei_sim_addrs.murphySimulatorShellContext_addr
-                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorShellContext_addr + 4u)
+              mofei_sim_addrs.pandaSimulatorShellContext_addr
+                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorShellContext_addr + 4u)
                   : 0;
           const uint32_t ctx_bits = ctx_object ? mofei_read_guest_data_u32(env, ctx_object + 12u) : 0;
           const uint32_t global_object =
-              mofei_sim_addrs.murphySimulatorFramebufferObject_addr
-                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.murphySimulatorFramebufferObject_addr)
+              mofei_sim_addrs.pandaSimulatorFramebufferObject_addr
+                  ? mofei_read_guest_data_u32(env, mofei_sim_addrs.pandaSimulatorFramebufferObject_addr)
                   : 0;
           const uint32_t global_bits = global_object ? mofei_read_guest_data_u32(env, global_object + 12u) : 0;
-          const uint32_t last_bits = mofei_murphy_last_framebuffer_object
-                                         ? mofei_read_guest_data_u32(env, mofei_murphy_last_framebuffer_object + 12u)
+          const uint32_t last_bits = mofei_panda_last_framebuffer_object
+                                         ? mofei_read_guest_data_u32(env, mofei_panda_last_framebuffer_object + 12u)
                                          : 0;
           fprintf(stderr,
-                  "[%s] inject: Murphy framebuffer candidates exported_ptr=0x%08x ctx_object=0x%08x "
+                  "[%s] inject: Panda AI OS framebuffer candidates exported_ptr=0x%08x ctx_object=0x%08x "
                   "ctx_bits=0x%08x global_object=0x%08x global_bits=0x%08x last_object=0x%08x last_bits=0x%08x\n",
                   mofei_sim_board_is_s37uc() ? "UC8253C" : "SSD1677", exported_ptr, ctx_object, ctx_bits, global_object,
-                  global_bits, mofei_murphy_last_framebuffer_object, last_bits);
+                  global_bits, mofei_panda_last_framebuffer_object, last_bits);
           null_log_count++;
         }
-        fprintf(stderr, "[%s] inject: Murphy OS framebuffer pointer is null at 0x%08x\n",
-                mofei_sim_board_is_s37uc() ? "UC8253C" : "SSD1677", mofei_sim_addrs.murphySimulatorFramebuffer_addr);
+        fprintf(stderr, "[%s] inject: Panda AI OS framebuffer pointer is null at 0x%08x\n",
+                mofei_sim_board_is_s37uc() ? "UC8253C" : "SSD1677", mofei_sim_addrs.pandaSimulatorFramebuffer_addr);
       }
     } else if (mofei_sim_addrs.gfxSimulatorFrameBuffer_addr) {
       if (mofei_sim_board_is_s37uc()) {
@@ -5221,8 +5218,8 @@ void HELPER(mofei_trace_activity)(CPUXtensaState* env, uint32_t pc, uint32_t kin
   fprintf(stderr, "[MOFEI-TRACE] %-24s pc=0x%08x\n", label, pc);
 }
 
-void HELPER(mofei_trace_murphy_activity)(CPUXtensaState* env, uint32_t pc, uint32_t scene, uint32_t mode,
-                                         uint32_t total_cards, uint32_t active_cards, uint32_t active_window_start) {
+void HELPER(mofei_trace_panda_activity)(CPUXtensaState* env, uint32_t pc, uint32_t scene, uint32_t mode,
+                                        uint32_t total_cards, uint32_t active_cards, uint32_t active_window_start) {
   enum {
     MOFEI_FONT_FALLBACK_TRACE_MODE = 0xFE,
     MOFEI_FONT_FALLBACK_SAME_PIXEL_SIZE = 1U << 0,
@@ -5254,7 +5251,7 @@ void HELPER(mofei_trace_murphy_activity)(CPUXtensaState* env, uint32_t pc, uint3
     return;
   }
   const uint32_t vptr = mofei_read_guest_data_u32(env, scene);
-  const char* activity = mofei_murphy_activity_for_vptr(vptr);
+  const char* activity = mofei_panda_activity_for_vptr(vptr);
   if (activity == NULL) {
     static unsigned unknown_count;
     if (unknown_count < 16) {

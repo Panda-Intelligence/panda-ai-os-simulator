@@ -46,7 +46,7 @@ test("actual serialized main TLS copies template, zeroes BSS and owns its existi
   const reset = fn(helper, "void mofei_sim_reset_serialized_task(");
   const top = fn(helper, "static uint32_t mofei_main_stack_top(");
   const boot = fn(helper, "static void mofei_prepare_boot_firmware_frame(");
-  const continuation = fn(helper, "uint32_t HELPER(mofei_enter_murphy_run_loop)(");
+  const continuation = fn(helper, "uint32_t HELPER(mofei_enter_panda_run_loop)(");
   const code = `${preamble}
 #define HELPER(name) helper_##name
 #define g_malloc0(n) calloc(1,n)
@@ -82,8 +82,8 @@ static MemTxResult address_space_write(void* space,uint32_t addr,int attrs,const
 static void cpu_stb_data(CPUXtensaState* env,uint32_t addr,uint8_t value) {(void)env;*at(addr,1)=value;}
 static void cpu_stl_data(CPUXtensaState* env,uint32_t addr,uint32_t value) {(void)env;memcpy(at(addr,4),&value,4);}
 static void xtensa_sync_phys_from_window(CPUXtensaState* env) {memcpy(env->phys_regs,env->regs,sizeof(env->regs));}
-static const char* mofei_murphy_or_app_main_entry_name(void) {return "test_main";}
-static bool mofei_murphy_context_pointer_plausible(uint32_t p) {return p!=0;}
+static const char* mofei_panda_or_app_main_entry_name(void) {return "test_main";}
+static bool mofei_panda_context_pointer_plausible(uint32_t p) {return p!=0;}
 static CPUXtensaState* env_cpu(CPUXtensaState* env) {return env;}
 static void cpu_abort(CPUXtensaState* cpu,const char* message) {(void)cpu;(void)message;abort();}
 ${reset}
@@ -94,7 +94,7 @@ ${continuation}
 static void metadata(void) {
  mofei_sim_addrs=(MofeiSimAddrs){.tls_data_start_addr=0x3c400000,.tls_data_end_addr=0x3c400010,
    .tls_bss_start_addr=0x3c400010,.tls_bss_end_addr=0x3c400045,.tls_section_alignment=4,
-   .murphyDeviceShellRunSimulatorLoop_addr=0x42002000};
+   .pandaDeviceShellRunSimulatorLoop_addr=0x42002000};
 }
 int main(void) {
  CPUXtensaState env={0};metadata();
@@ -114,7 +114,7 @@ int main(void) {
  mofei_prepare_boot_firmware_frame(&env);
  assert(reads==old_reads && writes==old_writes && *at(base+4,1)==0x4b && *at(base+60,1)==0xa1);
  env.regs[10]=0x3fd01000;env.regs[11]=0x3fd02000;
- assert(helper_mofei_enter_murphy_run_loop(&env,2)==0x42002000);
+ assert(helper_mofei_enter_panda_run_loop(&env,2)==0x42002000);
  assert(env.regs[1]==base-80 && env.uregs[THREADPTR]==base-8 && *at(base+60,1)==0xa1);
  mofei_redirected_to_app_main=1;mofei_loop_task_entered=1;
  mofei_sim_reset_serialized_task();
@@ -151,8 +151,8 @@ int main(void) {
 
 test("all serialized main frame ceilings use the TLS reservation; kernel reset discards prior ownership", { skip: missingInputs("ESP-IDF", [join(idfPath(), "components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c")]) }, () => {
   const helper = read("target_xtensa_exc_helper.c"), machine = read("hw_xtensa_esp32s3.c");
-  for (const name of ["static void mofei_prepare_boot_firmware_frame(", "uint32_t HELPER(mofei_enter_murphy_run_loop)(",
-    "uint32_t HELPER(mofei_prepare_murphy_simulator_loop_frame)("]) {
+  for (const name of ["static void mofei_prepare_boot_firmware_frame(", "uint32_t HELPER(mofei_enter_panda_run_loop)(",
+    "uint32_t HELPER(mofei_prepare_panda_simulator_loop_frame)("]) {
     const body = fn(helper, name);
     assert.match(body, /mofei_main_stack_top\(\)/);
     assert.doesNotMatch(body, /MOFEI_SIM_FAKE_APP_STACK_TOP/);
