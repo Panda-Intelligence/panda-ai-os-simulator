@@ -55,18 +55,18 @@ export function createPosConsoleClient(host: Pick<PosDevHost, "subscribeSerialLo
       buffered = lines.pop() ?? "";
       for (const line of lines) {
         const prefix = `POS_APP:${requestId}:`;
-        const position = line.indexOf(prefix);
-        if (position < 0) continue;
-        try {
-          const result = JSON.parse(line.slice(position + prefix.length)) as PosConsoleResult;
-          if (result.schemaVersion !== 1 || result.requestId !== requestId || typeof result.ok !== "boolean") continue;
-          // 来宾启动时可能一次排出多条旧 status；已确认的实际终态不能被其覆盖。
-          if (result.operation === operation && (result.terminal || result.state === "completed" || result.state === "failed")) {
-            terminalResult ??= result;
-          }
-          latest = result;
-          generation++;
-        } catch { /* 控制台其他输出不能冒充完成响应。 */ }
+        for (let position = line.indexOf(prefix); position >= 0; position = line.indexOf(prefix, position + prefix.length)) {
+          try {
+            const result = JSON.parse(line.slice(position + prefix.length)) as PosConsoleResult;
+            if (result.schemaVersion !== 1 || result.requestId !== requestId || typeof result.ok !== "boolean") continue;
+            // 来宾启动时可能一次排出多条旧 status；已确认的实际终态不能被其覆盖。
+            if (result.operation === operation && (result.terminal || result.state === "completed" || result.state === "failed")) {
+              terminalResult ??= result;
+            }
+            latest = result;
+            generation++;
+          } catch { /* 控制台其他输出不能冒充完成响应。 */ }
+        }
       }
     });
     try {
