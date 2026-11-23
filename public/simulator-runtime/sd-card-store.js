@@ -119,6 +119,8 @@ export async function readSdImage(openDb,storeName,key){
   });
 }
 
+const sdImageWriteTails=new Map();
+
 export async function writeSdImage(openDb,storeName,key,value){
   if(!(value.bytes instanceof Uint8Array)||value.bytes.byteLength<1||value.bytes.byteLength>MAX_BYTES||
      value.byteLength!==value.bytes.byteLength)throw new Error("browser_sd_write_size_invalid");
@@ -127,6 +129,16 @@ export async function writeSdImage(openDb,storeName,key,value){
   const generation=crypto.randomUUID();
   const chunks=[];
   for(let offset=0;offset<value.bytes.length;offset+=CHUNK_BYTES)chunks.push(value.bytes.slice(offset,offset+CHUNK_BYTES).buffer);
+  const db=await openDb();
+  const identity=JSON.stringify([db.name,storeName,key]);
+  db.close();
+  const write=(sdImageWriteTails.get(identity)??Promise.resolve()).catch(()=>undefined)
+    .then(()=>writeSdImageSnapshot(openDb,storeName,key,value,chunks,generation));
+  sdImageWriteTails.set(identity,write);
+  try{await write;}finally{if(sdImageWriteTails.get(identity)===write)sdImageWriteTails.delete(identity);}
+}
+
+async function writeSdImageSnapshot(openDb,storeName,key,value,chunks,generation){
   const runTransaction=async(mode,action)=>{
     const db=await openDb();
     return new Promise((resolve,reject)=>{
@@ -148,22 +160,39 @@ export async function writeSdImage(openDb,storeName,key,value){
       tx.onerror=tx.onabort=()=>{db.close();reject(tx.error||new Error("browser_sd_metadata_read_failed"));};
     });
   };
-  const prior=await readMeta();
-  if(prior && !validMeta(prior))throw new Error("browser_sd_chunk_metadata_invalid");
-  // Only a v3 record of the same geometry carries digests; anything else is rewritten in full once.
   const digests=await Promise.all(chunks.map(chunkDigest));
-  const reusable=prior && prior.format==="chunks-v3" && prior.chunkCount===chunks.length && prior.byteLength===value.byteLength;
-  const chunkGenerations=chunks.map((_,index)=>reusable && prior.chunkDigests[index]===digests[index]?prior.chunkGenerations[index]:generation);
-  // 每个变化的大 chunk 独立提交；新 meta 最后提交，旧快照始终可读。未变化的 chunk 不重写。
-  for(let index=0;index<chunks.length;index++){
-    if(chunkGenerations[index]===generation)await runTransaction("readwrite",store=>store.put(chunks[index],chunkKey(key,generation,index)));
-  }
-  await runTransaction("readwrite",store=>store.put({format:"chunks-v3",chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,chunkGenerations,chunkDigests:digests,
-    byteLength:value.byteLength,templateFingerprint:value.templateFingerprint,savedAt:value.savedAt??Date.now()},metaKey(key)));
-  // 清理被替换的旧 chunk 不影响新快照可读性；单个清理失败时保留旧孤儿块，下一次写入仍可重试。
-  if(prior)for(let index=0;index<prior.chunkCount;index++){
-    const old=chunkGeneration(prior,index);
-    if(chunkGenerations[index]===old)continue;
-    try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,old,index)));}catch{}
+  while(true){
+    const prior=await readMeta();
+    if(prior && !validMeta(prior))throw new Error("browser_sd_chunk_metadata_invalid");
+    // Only a v3 record of the same geometry carries digests; anything else is rewritten in full once.
+    const reusable=prior && prior.format==="chunks-v3" && prior.chunkCount===chunks.length && prior.byteLength===value.byteLength;
+    const chunkGenerations=chunks.map((_,index)=>reusable && prior.chunkDigests[index]===digests[index]?prior.chunkGenerations[index]:generation);
+    // 每个变化的大 chunk 独立提交；新 meta 最后提交，旧快照始终可读。未变化的 chunk 不重写。
+    for(let index=0;index<chunks.length;index++){
+      if(chunkGenerations[index]===generation)await runTransaction("readwrite",store=>store.put(chunks[index],chunkKey(key,generation,index)));
+    }
+    let metadataChanged=false;
+    await runTransaction("readwrite",store=>{
+      const request=store.get(metaKey(key));
+      request.onsuccess=()=>{
+        if(JSON.stringify(request.result)!==JSON.stringify(prior)){metadataChanged=true;return;}
+        store.put({format:"chunks-v3",chunkBytes:CHUNK_BYTES,chunkCount:chunks.length,chunkGenerations,chunkDigests:digests,
+          byteLength:value.byteLength,templateFingerprint:value.templateFingerprint,savedAt:value.savedAt??Date.now()},metaKey(key));
+      };
+    });
+    if(metadataChanged){
+      for(let index=0;index<chunks.length;index++){
+        if(chunkGenerations[index]!==generation)continue;
+        try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,generation,index)));}catch{}
+      }
+      continue;
+    }
+    // 清理被替换的旧 chunk 不影响新快照可读性；单个清理失败时保留旧孤儿块，下一次写入仍可重试。
+    if(prior)for(let index=0;index<prior.chunkCount;index++){
+      const old=chunkGeneration(prior,index);
+      if(chunkGenerations[index]===old)continue;
+      try{await runTransaction("readwrite",store=>store.delete(chunkKey(key,old,index)));}catch{}
+    }
+    return;
   }
 }
