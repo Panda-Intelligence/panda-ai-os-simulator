@@ -25,7 +25,7 @@ test("real direct capture respects framebuffer bounds and emits the board's wire
   const direct = body(source, "if (direct_fb_bytes > 0 && direct_fb_bytes <= MOFEI_DIRECT_FRAMEBUFFER_MAX_BYTES)");
   const gray4 = body(source, "static bool mofei_try_publish_gray4_framebuffer(");
   const simRam = body(source, "static bool mofei_guest_range_in_sim_ram(uint32_t guest_addr, uint32_t len) {");
-  const constants = ssd1677.match(/^#define (?:EPD_WIDTH|EPD_HEIGHT|MURPHY_LOGICAL_WIDTH|IPC_CHANNEL_FRAMEBUFFER|IPC_FLAG_FB_(?:FULL|GRAY16)) .+$/gm);
+  const constants = ssd1677.match(/^#define (?:EPD_WIDTH|EPD_HEIGHT|PANDA_LOGICAL_WIDTH|IPC_CHANNEL_FRAMEBUFFER|IPC_FLAG_FB_(?:FULL|GRAY16)) .+$/gm);
   const sendDirect = body(ssd1677, "void ssd1677_publish_direct_framebuffer(const uint8_t* payload, uint32_t len) {");
   const sendGray4 = body(ssd1677, "void ssd1677_publish_gray4_framebuffer(const uint8_t* payload, uint32_t len, bool portrait) {");
   const header = fileURLToPath(new URL("../qemu-peripherals/mofei-sim-addrs.h", import.meta.url));
@@ -96,9 +96,9 @@ static void setup(MofeiSimBoardKind board,uint32_t width,uint32_t height,uint32_
  exported_bits=PIXELS;object_pointer=OBJECT;failed_metadata=0;gray4_pointer=0;failed_pixel_read=false;
  reads=last_read=publishes=published_bytes=0;
  published_flags=0xFF;
- mofei_sim_addrs.murphySimulatorFramebuffer_addr=EXPORTED;
- mofei_sim_addrs.murphySimulatorFramebufferObject_addr=OBJECT_SLOT;
- mofei_sim_addrs.murphySimulatorGray4Export_addr=0;
+ mofei_sim_addrs.pandaSimulatorFramebuffer_addr=EXPORTED;
+ mofei_sim_addrs.pandaSimulatorFramebufferObject_addr=OBJECT_SLOT;
+ mofei_sim_addrs.pandaSimulatorGray4Export_addr=0;
 }
 static void accepted(CPUXtensaState* env,uint32_t input,uint32_t output) {
  capture(env);assert(reads==1 && last_read==input && publishes==1 && published_bytes==output);
@@ -119,7 +119,7 @@ static uint8_t gray4_pixel(const uint8_t* packed,unsigned width,unsigned x,unsig
 }
 static void gray4_setup(MofeiSimBoardKind board,uint32_t width,uint32_t height) {
  setup(board,width,height,1);
- mofei_sim_addrs.murphySimulatorGray4Export_addr=GRAY4_SLOT;
+ mofei_sim_addrs.pandaSimulatorGray4Export_addr=GRAY4_SLOT;
  gray4_pointer=PIXELS;
 }
 static void gray4_portrait(CPUXtensaState* env,MofeiSimBoardKind board) {
@@ -192,7 +192,7 @@ int main(void) {
  gray4_setup(MOFEI_SIM_BOARD_MOFEI,480,800);failed_pixel_read=true;
  capture(&env);assert(reads==1 && publishes==0);
  setup(MOFEI_SIM_BOARD_EEGO_A4,552,768,0);
- mofei_sim_addrs.murphySimulatorGray4Export_addr=GRAY4_SLOT;
+ mofei_sim_addrs.pandaSimulatorGray4Export_addr=GRAY4_SLOT;
  accepted(&env,52992,52992);assert(published_flags==0);
  free(pixels);
  puts("direct framebuffer capacity/format/aliases/pixels/boundaries PASS");

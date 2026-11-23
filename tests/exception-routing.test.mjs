@@ -49,7 +49,7 @@ enum {EXC_KERNEL=10,EXC_USER=11,EXC_DOUBLE=12,EXC_MAX=14};
 typedef struct { unsigned cpu_index; bool halted; int exception_index; } CPUState;
 typedef struct { bool ndep,ndepc,relocatable; uint32_t vecbase,exception_vector[EXC_MAX]; } Config;
 typedef struct { uint32_t pc,regs[16],sregs[12],phys_regs[64],windowbase_next; const Config* config; CPUState* cpu; int yield_needed; } CPUXtensaState;
-static struct { uint32_t murphySimulatorHooksEnabled_addr; } mofei_sim_addrs;
+static struct { uint32_t pandaSimulatorHooksEnabled_addr; } mofei_sim_addrs;
 static bool mofei_initialize_main_tls(CPUXtensaState* env) {(void)env;return true;}
 static uint32_t mofei_main_stack_top(void) {return MOFEI_SIM_FAKE_APP_STACK_TOP;}
 static void cpu_abort(CPUState* cpu,const char* message) {(void)cpu;(void)message;assert(0);}
@@ -60,7 +60,7 @@ static void cpu_stl_data(CPUXtensaState* env,uint32_t addr,uint32_t value) {
  (void)env;assert(stack_count<4);stack_addresses[stack_count]=addr;stack_writes[stack_count++]=value;
 }
 static void xtensa_sync_phys_from_window(CPUXtensaState* env) {for(unsigned i=0;i<16;i++)env->phys_regs[i]=env->regs[i];}
-static const char* mofei_murphy_or_app_main_entry_name(void) {return "murphySimulatorMain";}
+static const char* mofei_panda_or_app_main_entry_name(void) {return "pandaSimulatorMain";}
 static unsigned exits;
 static CPUState* env_cpu(CPUXtensaState* env) {return env->cpu;}
 static void cpu_loop_exit(CPUState* cpu) {(void)cpu;++exits;}

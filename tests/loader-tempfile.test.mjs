@@ -73,7 +73,7 @@ const program = [
   "static unsigned arrived;",
   "static gboolean concurrent, fail_load, no_segments;",
   "static int address_space_memory;",
-  "static struct { uint32_t murphyDeviceShellRunSimulatorLoopWithContext_addr; } mofei_sim_addrs;",
+  "static struct { uint32_t pandaDeviceShellRunSimulatorLoopWithContext_addr; } mofei_sim_addrs;",
   "static struct { bool found; uint32_t addr, value; const char* name; } memset_patches[1];",
   "static void error_report(const char* format, ...) {",
   "  va_list args; va_start(args, format); vfprintf(stderr, format, args); va_end(args);",

@@ -108,8 +108,8 @@ static void __attribute__((constructor)) mofei_install_crash_handler(void) {
 #include "target/xtensa/cpu.h"
 
 #define MOFEI_DEFAULT_FIRMWARE_ELF_PATH "apps/panda-os/device/build/panda_os.elf"
-#define MOFEI_BROWSER_FIRMWARE_KERNEL_PATH "/murphy-os/murphy_os-kernel.img"
-#define MOFEI_BROWSER_FIRMWARE_SYMBOLS_PATH "/murphy-os/murphy_os-symbols.txt"
+#define MOFEI_BROWSER_FIRMWARE_KERNEL_PATH "/murphy-os/panda_os-kernel.img"
+#define MOFEI_BROWSER_FIRMWARE_SYMBOLS_PATH "/murphy-os/panda_os-symbols.txt"
 
 static char* mofei_resolve_rom_binary(void) {
   const char* mofei_rom = getenv("MOFEI_ROM_BINARY");
@@ -485,8 +485,8 @@ static void mofei_cpu_tick_timer_cb(void* opaque) {
     uint32_t serial_gnss = 0;
     uint8_t console_pending = 0;
     if (debug_tick != NULL && debug_tick[0] != '\0' && strcmp(debug_tick, "0") != 0) {
-      if (mofei_sim_addrs.murphySimulatorShellContext_addr != 0) {
-        address_space_read(&address_space_memory, mofei_sim_addrs.murphySimulatorShellContext_addr + 44,
+      if (mofei_sim_addrs.pandaSimulatorShellContext_addr != 0) {
+        address_space_read(&address_space_memory, mofei_sim_addrs.pandaSimulatorShellContext_addr + 44,
                            MEMTXATTRS_UNSPECIFIED, &serial_console, sizeof(serial_console));
       }
       if (mofei_sim_addrs.g_mofeiSimConsolePending_addr != 0) {
@@ -1403,6 +1403,19 @@ static uint32_t mofei_resolve_elf_symbol(const uint8_t* elf_data, gsize elf_len,
   return 0;
 }
 
+/* 先找当前固件符号，再回退到改名前的 ELF 名称。 */
+static uint32_t mofei_resolve_elf_symbol_alias(const uint8_t* elf_data, gsize elf_len, const char** resolved_name,
+                                               const char* legacy_name) {
+  uint32_t address = mofei_resolve_elf_symbol(elf_data, elf_len, *resolved_name);
+  if (!address) {
+    address = mofei_resolve_elf_symbol(elf_data, elf_len, legacy_name);
+    if (address) {
+      *resolved_name = legacy_name;
+    }
+  }
+  return address;
+}
+
 static void mofei_resolve_main_tls_metadata(const uint8_t* elf_data, gsize elf_len) {
   MofeiSimAddrs* a = &mofei_sim_addrs;
   a->tls_data_start_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "_thread_local_data_start");
@@ -1723,16 +1736,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_Z20setupDisplayAndFontsv", &a->setupDisplayAndFonts_addr},
             {"_Z4loopv", &a->loop_addr},
             {"app_main", &a->app_main_addr},
-            {"murphySimulatorMain", &a->murphySimulatorMain_addr},
-            {"murphySimulatorEnterRunLoop", &a->murphySimulatorEnterRunLoop_addr},
-            {"_ZN8murphyos11DeviceShell18startSimulatorLoopERKNS0_7ContextE",
-             &a->murphyDeviceShellStartSimulatorLoop_addr},
-            {"_ZN8murphyos11DeviceShell16runSimulatorLoopERKNS0_7ContextE",
-             &a->murphyDeviceShellRunSimulatorLoopContext_addr},
-            {"_ZN8murphyos11DeviceShell16runSimulatorLoopEv", &a->murphyDeviceShellRunSimulatorLoopMethod_addr},
-            {"_ZN8murphyos11DeviceShell27runSimulatorLoopWithContextERKNS0_7ContextE",
-             &a->murphyDeviceShellRunSimulatorLoopWithContext_addr},
-            {"murphyDeviceShellRunSimulatorLoop", &a->murphyDeviceShellRunSimulatorLoop_addr},
             {"_Z8loopTaskPv", &a->loopTask_addr},
             {"start_cpu0", &a->start_cpu0_addr},
             {"xTaskCreateUniversal", &a->xTaskCreateUniversal_addr},
@@ -1740,55 +1743,16 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"setjmp", &a->setjmp_addr},
             {"gfxSimulatorPublishFrameBuffer", &a->gfxSimulatorPublishFrameBuffer_addr},
             {"mofeiSimulatorPublishFramebuffer", &a->mofeiSimulatorPublishFramebuffer_addr},
-            {"murphySimulatorBootFirstFrame", &a->murphySimulatorBootFirstFrame_addr},
-            {"murphySimulatorPublishFramebuffer", &a->murphySimulatorPublishFramebuffer_addr},
-            {"murphySimulatorTraceActivity", &a->murphySimulatorTraceActivity_addr},
-            {"murphySimulatorHooksEnabled", &a->murphySimulatorHooksEnabled_addr},
             /* ActivityManager */
             {"_ZN15ActivityManager8goToBootEv", &a->goToBoot_addr},
             {"_ZN15ActivityManager6goHomeEv", &a->goHome_addr},
             {"_ZN15ActivityManager5beginEv", &a->activityManager_begin_addr},
             {"activityManager", &a->activityManager_addr},
-            {"_ZZL19runMurphyDeviceMainvE5shell", &a->murphyDeviceShell_addr},
-            {"_ZZL19runMurphyDeviceMainvE6runner", &a->murphyDeviceRunner_addr},
-            {"_ZZL19runMurphyDeviceMainvE2fb", &a->murphyDeviceFramebuffer_addr},
-            {"_ZZL19runMurphyDeviceMainvE7display", &a->murphyDeviceDisplay_addr},
-            {"_ZZL19runMurphyDeviceMainvE10sleepInput", &a->murphyDeviceSleepInput_addr},
-            {"_ZZL19runMurphyDeviceMainvE5power", &a->murphyDevicePower_addr},
-            {"_ZZL19runMurphyDeviceMainvE10frontlight", &a->murphyDeviceFrontlight_addr},
-            {"_ZZL19runMurphyDeviceMainvE7storage", &a->murphyDeviceStorage_addr},
-            {"_ZZL19runMurphyDeviceMainvE9castStore", &a->murphyDeviceCastStore_addr},
-            {"_ZZL19runMurphyDeviceMainvE5input", &a->murphyDeviceInput_addr},
-            {"_ZZL19runMurphyDeviceMainvE11mappedInput", &a->murphyDeviceMappedInput_addr},
-            {"_ZZL19runMurphyDeviceMainvE10debugInput", &a->murphyDeviceDebugInput_addr},
-            {"_ZZL19runMurphyDeviceMainvE11remoteInput", &a->murphyDeviceRemoteInput_addr},
-            {"_ZZL19runMurphyDeviceMainvE6window", &a->murphyDeviceWindow_addr},
-            {"_ZN12_GLOBAL__N_1L5nowMsEv", &a->murphyDeviceNowMs_addr},
-            {"_ZTVN8murphyos8InputEspE", &a->murphyInputEspVtable_addr},
-            {"_ZTVN8murphyos13PortraitInputE", &a->murphyPortraitInputVtable_addr},
-            {"_ZTVN8murphyos14SleepHoldInputE", &a->murphySleepHoldInputVtable_addr},
-            {"_ZTVN8murphyos11RemoteInputE", &a->murphyRemoteInputVtable_addr},
-            {"_ZTVN8murphyos14SyntheticInputE", &a->murphySyntheticInputVtable_addr},
-            {"murphySimulatorShellContext", &a->murphySimulatorShellContext_addr},
-            {"murphySimulatorRunner", &a->murphySimulatorRunner_addr},
-            {"murphySimulatorFramebufferObject", &a->murphySimulatorFramebufferObject_addr},
-            {"murphySimulatorDisplay", &a->murphySimulatorDisplay_addr},
-            {"murphySimulatorSleepInput", &a->murphySimulatorSleepInput_addr},
-            {"murphySimulatorPower", &a->murphySimulatorPower_addr},
-            {"murphySimulatorFrontlight", &a->murphySimulatorFrontlight_addr},
-            {"murphySimulatorStorage", &a->murphySimulatorStorage_addr},
-            {"murphySimulatorUiFont", &a->murphySimulatorUiFont_addr},
-            {"murphySimulatorBodyFont", &a->murphySimulatorBodyFont_addr},
-            {"murphySimulatorCastStore", &a->murphySimulatorCastStore_addr},
-            {"murphySimulatorRunnerInput", &a->murphySimulatorRunnerInput_addr},
-            {"murphySimulatorRunnerWindow", &a->murphySimulatorRunnerWindow_addr},
-            {"murphySimulatorRunnerNowMs", &a->murphySimulatorRunnerNowMs_addr},
+            {"_ZN12_GLOBAL__N_1L5nowMsEv", &a->pandaDeviceNowMs_addr},
             /* Display */
             {"display", &a->display_addr},
             {"renderer", &a->renderer_addr},
             {"simulatorFrameBuffer", &a->gfxSimulatorFrameBuffer_addr},
-            {"murphySimulatorFramebuffer", &a->murphySimulatorFramebuffer_addr},
-            {"murphySimulatorFramebufferStorage", &a->murphySimulatorFramebufferStorage_addr},
             /* SPI / MofeiDisplay */
             {"_ZN8SPIClass16beginTransactionE11SPISettings", &a->spi_beginTransaction_addr},
             {"_ZN8SPIClass14endTransactionEv", &a->spi_endTransaction_addr},
@@ -1797,9 +1761,6 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_ZNK12MofeiDisplay11sendCommandEh", &a->sendCommand_addr},
             {"_ZNK12MofeiDisplay8sendDataEh", &a->sendData_byte_addr},
             {"_ZNK12MofeiDisplay8sendDataEPKhm", &a->sendData_buf_addr},
-            {"_ZN8murphyos9EpdBusEsp12writeCommandEh", &a->epdBusWriteCommand_addr},
-            {"_ZN8murphyos9EpdBusEsp9writeDataEPKhj", &a->epdBusWriteData_addr},
-            {"_ZN8murphyos9EpdBusEsp8waitBusyEv", &a->epdBusWaitBusy_addr},
             {"_ZN12MofeiDisplay25resetDisplayUpdateControlEv", &mofei_sim_reset_display_update_control_addr},
             {"_ZN12MofeiDisplay12writeLutFullEv", &mofei_display_writeLutFull_addr},
             {"_ZN12MofeiDisplay12writeLutFastEv", &mofei_display_writeLutFast_addr},
@@ -2006,67 +1967,67 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_ZN18EpubReaderActivity6renderEO10RenderLock", &a->epubReaderRender_addr},
             {"_ZN17TxtReaderActivity6renderEO10RenderLock", &a->txtReaderRender_addr},
             {"_ZN17XtcReaderActivity6renderEO10RenderLock", &a->xtcReaderRender_addr},
-            {"_ZTVN5panda3app9HomeSceneE", &a->murphyVtableHomeScene_addr},
-            {"_ZTVN5panda3app13SettingsSceneE", &a->murphyVtableSettingsScene_addr},
-            {"_ZTVN5panda3app18WifiSelectionSceneE", &a->murphyVtableWifiSelectionScene_addr},
-            {"_ZTVN5panda3app16FileBrowserSceneE", &a->murphyVtableFileBrowserScene_addr},
-            {"_ZTVN5panda3app12LibrarySceneE", &a->murphyVtableLibraryScene_addr},
-            {"_ZTVN5panda3app16RecentBooksSceneE", &a->murphyVtableRecentBooksScene_addr},
-            {"_ZTVN5panda3app14ArcadeHubSceneE", &a->murphyVtableArcadeHubScene_addr},
-            {"_ZTVN5panda3app13Game2048SceneE", &a->murphyVtableGame2048Scene_addr},
-            {"_ZTVN5panda3app12_GLOBAL__N_112WeatherSceneE", &a->murphyVtableWeatherScene_addr},
-            {"_ZTVN5panda3app12_GLOBAL__N_113CalendarSceneE", &a->murphyVtableCalendarScene_addr},
-            {"_ZTVN5panda3app12_GLOBAL__N_110TodaySceneE", &a->murphyVtableTodayScene_addr},
-            {"_ZTVN5panda3app5study13StudyHubSceneE", &a->murphyVtableStudyHubScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_115CardsTodaySceneE", &a->murphyVtableCardsTodayScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_114QueueListSceneE", &a->murphyVtableStudyQueueScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_116ReviewQueueSceneE", &a->murphyVtableStudyReviewQueueScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_117ImportStatusSceneE", &a->murphyVtableStudyImportStatusScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_19QuizSceneE", &a->murphyVtableStudyQuizScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_111ReportSceneE", &a->murphyVtableStudyReportScene_addr},
-            {"_ZTVN5panda3app5study12_GLOBAL__N_113RecoverySceneE", &a->murphyVtableStudyRecoveryScene_addr},
-            {"_ZTVN5panda2ui13KeyboardSceneE", &a->murphyVtableKeyboardScene_addr},
-            {"_ZTVN5panda2ui17ConfirmationSceneE", &a->murphyVtableConfirmationScene_addr},
-            {"_ZTVN5panda3app11ReaderSceneE", &a->murphyVtableReaderScene_addr},
-            {"_ZTVN5panda3app10SleepSceneE", &a->murphyVtableSleepScene_addr},
-            {"_ZTVN5panda3app20WallpaperPickerSceneE", &a->murphyVtableWallpaperPickerScene_addr},
-            {"_ZTVN5panda3app13PandaHubSceneE", &a->murphyVtablePandaHubScene_addr},
-            {"_ZTVN5panda3app16PandaLuaAppSceneE", &a->murphyVtablePandaLuaAppScene_addr},
-            {"_ZTVN5panda3app16ButtonRemapSceneE", &a->murphyVtableButtonRemapScene_addr},
-            {"_ZTVN5panda3app16DiagnosticsSceneE", &a->murphyVtableDiagnosticsScene_addr},
-            {"_ZTVN5panda3app15FontPickerSceneE", &a->murphyVtableFontPickerScene_addr},
-            {"_ZTVN5panda3app15EnumEditorSceneE", &a->murphyVtableEnumEditorScene_addr},
-            {"_ZTVN5panda3app16ToggleGroupSceneE", &a->murphyVtableToggleGroupScene_addr},
-            {"_ZTVN5panda3app18SearchResultsSceneE", &a->murphyVtableSearchResultsScene_addr},
-            {"_ZTVN5panda3app17BookmarkListSceneE", &a->murphyVtableBookmarkListScene_addr},
-            {"_ZTVN5panda3app16ChapterListSceneE", &a->murphyVtableChapterListScene_addr},
-            {"_ZTVN5panda3app16PercentJumpSceneE", &a->murphyVtablePercentJumpScene_addr},
-            {"_ZTVN5panda3app27ReaderDictionaryResultSceneE", &a->murphyVtableDictionaryScene_addr},
-            {"_ZTVN5panda3app11SudokuSceneE", &a->murphyVtableSudokuScene_addr},
-            {"_ZTVN5panda3app15VirtualPetSceneE", &a->murphyVtableVirtualPetScene_addr},
-            {"_ZTVN5panda3app12SokobanSceneE", &a->murphyVtableSokobanScene_addr},
-            {"_ZTVN5panda3app14DailyMazeSceneE", &a->murphyVtableDailyMazeScene_addr},
-            {"_ZTVN5panda3app21ArcadeChallengesSceneE", &a->murphyVtableArcadeChallengesScene_addr},
-            {"_ZTVN5panda3app24PaperBoyMinesweeperSceneE", &a->murphyVtablePaperBoyMinesweeperScene_addr},
-            {"_ZTVN5panda3app15PaperboyGbSceneE", &a->murphyVtablePaperboyGbScene_addr},
-            {"_ZTVN5panda3app16PaperboyNesSceneE", &a->murphyVtablePaperboyNesScene_addr},
-            {"_ZTVN5panda3app19ElectronicSandSceneE", &a->murphyVtableElectronicSandScene_addr},
-            {"_ZTVN5panda3app27SleepAppearancePreviewSceneE", &a->murphyVtableSleepAppearancePreviewScene_addr},
-            {"_ZTVN5panda3app15WordPuzzleSceneE", &a->murphyVtableWordPuzzleScene_addr},
-            {"_ZTVN5panda3app22PandaCloudAccountSceneE", &a->murphyVtablePandaCloudAccountScene_addr},
-            {"_ZTVN5panda3app9GnssSceneE", &a->murphyVtableGnssScene_addr},
-            {"_ZTVN5panda3app14GridOrderSceneE", &a->murphyVtableGridOrderScene_addr},
-            {"_ZTVN5panda3app21RegionOnboardingSceneE", &a->murphyVtableRegionOnboardingScene_addr},
-            {"_ZTVN5panda3app15ClockFocusSceneE", &a->murphyVtableClockFocusScene_addr},
-            {"_ZTVN5panda3app15ClockFocusScene15TimerToolsSceneE", &a->murphyVtableTimerToolsScene_addr},
-            {"_ZTVN5panda3app27PomodoroDurationEditorSceneE", &a->murphyVtablePomodoroDurationEditorScene_addr},
-            {"_ZTVN5panda3app14AlarmListSceneE", &a->murphyVtableAlarmListScene_addr},
-            {"_ZTVN5panda3app12_GLOBAL__N_116AlarmEditorSceneE", &a->murphyVtableAlarmEditorScene_addr},
-            {"_ZTVN5panda3app12_GLOBAL__N_123AlarmWeekdayEditorSceneE", &a->murphyVtableAlarmWeekdayEditorScene_addr},
-            {"_ZTVN5panda3app18HanaAssistantSceneE", &a->murphyVtableHanaAssistantScene_addr},
-            {"_ZTVN5panda3app11WeReadSceneE", &a->murphyVtableWeReadScene_addr},
-            {"_ZTVN5panda3app14OtaStatusSceneE", &a->murphyVtableOtaStatusScene_addr},
-            {"_ZTVN5panda2ui12MessageSceneE", &a->murphyVtableMessageScene_addr},
+            {"_ZTVN5panda3app9HomeSceneE", &a->pandaVtableHomeScene_addr},
+            {"_ZTVN5panda3app13SettingsSceneE", &a->pandaVtableSettingsScene_addr},
+            {"_ZTVN5panda3app18WifiSelectionSceneE", &a->pandaVtableWifiSelectionScene_addr},
+            {"_ZTVN5panda3app16FileBrowserSceneE", &a->pandaVtableFileBrowserScene_addr},
+            {"_ZTVN5panda3app12LibrarySceneE", &a->pandaVtableLibraryScene_addr},
+            {"_ZTVN5panda3app16RecentBooksSceneE", &a->pandaVtableRecentBooksScene_addr},
+            {"_ZTVN5panda3app14ArcadeHubSceneE", &a->pandaVtableArcadeHubScene_addr},
+            {"_ZTVN5panda3app13Game2048SceneE", &a->pandaVtableGame2048Scene_addr},
+            {"_ZTVN5panda3app12_GLOBAL__N_112WeatherSceneE", &a->pandaVtableWeatherScene_addr},
+            {"_ZTVN5panda3app12_GLOBAL__N_113CalendarSceneE", &a->pandaVtableCalendarScene_addr},
+            {"_ZTVN5panda3app12_GLOBAL__N_110TodaySceneE", &a->pandaVtableTodayScene_addr},
+            {"_ZTVN5panda3app5study13StudyHubSceneE", &a->pandaVtableStudyHubScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_115CardsTodaySceneE", &a->pandaVtableCardsTodayScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_114QueueListSceneE", &a->pandaVtableStudyQueueScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_116ReviewQueueSceneE", &a->pandaVtableStudyReviewQueueScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_117ImportStatusSceneE", &a->pandaVtableStudyImportStatusScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_19QuizSceneE", &a->pandaVtableStudyQuizScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_111ReportSceneE", &a->pandaVtableStudyReportScene_addr},
+            {"_ZTVN5panda3app5study12_GLOBAL__N_113RecoverySceneE", &a->pandaVtableStudyRecoveryScene_addr},
+            {"_ZTVN5panda2ui13KeyboardSceneE", &a->pandaVtableKeyboardScene_addr},
+            {"_ZTVN5panda2ui17ConfirmationSceneE", &a->pandaVtableConfirmationScene_addr},
+            {"_ZTVN5panda3app11ReaderSceneE", &a->pandaVtableReaderScene_addr},
+            {"_ZTVN5panda3app10SleepSceneE", &a->pandaVtableSleepScene_addr},
+            {"_ZTVN5panda3app20WallpaperPickerSceneE", &a->pandaVtableWallpaperPickerScene_addr},
+            {"_ZTVN5panda3app13PandaHubSceneE", &a->pandaVtablePandaHubScene_addr},
+            {"_ZTVN5panda3app16PandaLuaAppSceneE", &a->pandaVtablePandaLuaAppScene_addr},
+            {"_ZTVN5panda3app16ButtonRemapSceneE", &a->pandaVtableButtonRemapScene_addr},
+            {"_ZTVN5panda3app16DiagnosticsSceneE", &a->pandaVtableDiagnosticsScene_addr},
+            {"_ZTVN5panda3app15FontPickerSceneE", &a->pandaVtableFontPickerScene_addr},
+            {"_ZTVN5panda3app15EnumEditorSceneE", &a->pandaVtableEnumEditorScene_addr},
+            {"_ZTVN5panda3app16ToggleGroupSceneE", &a->pandaVtableToggleGroupScene_addr},
+            {"_ZTVN5panda3app18SearchResultsSceneE", &a->pandaVtableSearchResultsScene_addr},
+            {"_ZTVN5panda3app17BookmarkListSceneE", &a->pandaVtableBookmarkListScene_addr},
+            {"_ZTVN5panda3app16ChapterListSceneE", &a->pandaVtableChapterListScene_addr},
+            {"_ZTVN5panda3app16PercentJumpSceneE", &a->pandaVtablePercentJumpScene_addr},
+            {"_ZTVN5panda3app27ReaderDictionaryResultSceneE", &a->pandaVtableDictionaryScene_addr},
+            {"_ZTVN5panda3app11SudokuSceneE", &a->pandaVtableSudokuScene_addr},
+            {"_ZTVN5panda3app15VirtualPetSceneE", &a->pandaVtableVirtualPetScene_addr},
+            {"_ZTVN5panda3app12SokobanSceneE", &a->pandaVtableSokobanScene_addr},
+            {"_ZTVN5panda3app14DailyMazeSceneE", &a->pandaVtableDailyMazeScene_addr},
+            {"_ZTVN5panda3app21ArcadeChallengesSceneE", &a->pandaVtableArcadeChallengesScene_addr},
+            {"_ZTVN5panda3app24PaperBoyMinesweeperSceneE", &a->pandaVtablePaperBoyMinesweeperScene_addr},
+            {"_ZTVN5panda3app15PaperboyGbSceneE", &a->pandaVtablePaperboyGbScene_addr},
+            {"_ZTVN5panda3app16PaperboyNesSceneE", &a->pandaVtablePaperboyNesScene_addr},
+            {"_ZTVN5panda3app19ElectronicSandSceneE", &a->pandaVtableElectronicSandScene_addr},
+            {"_ZTVN5panda3app27SleepAppearancePreviewSceneE", &a->pandaVtableSleepAppearancePreviewScene_addr},
+            {"_ZTVN5panda3app15WordPuzzleSceneE", &a->pandaVtableWordPuzzleScene_addr},
+            {"_ZTVN5panda3app22PandaCloudAccountSceneE", &a->pandaVtablePandaCloudAccountScene_addr},
+            {"_ZTVN5panda3app9GnssSceneE", &a->pandaVtableGnssScene_addr},
+            {"_ZTVN5panda3app14GridOrderSceneE", &a->pandaVtableGridOrderScene_addr},
+            {"_ZTVN5panda3app21RegionOnboardingSceneE", &a->pandaVtableRegionOnboardingScene_addr},
+            {"_ZTVN5panda3app15ClockFocusSceneE", &a->pandaVtableClockFocusScene_addr},
+            {"_ZTVN5panda3app15ClockFocusScene15TimerToolsSceneE", &a->pandaVtableTimerToolsScene_addr},
+            {"_ZTVN5panda3app27PomodoroDurationEditorSceneE", &a->pandaVtablePomodoroDurationEditorScene_addr},
+            {"_ZTVN5panda3app14AlarmListSceneE", &a->pandaVtableAlarmListScene_addr},
+            {"_ZTVN5panda3app12_GLOBAL__N_116AlarmEditorSceneE", &a->pandaVtableAlarmEditorScene_addr},
+            {"_ZTVN5panda3app12_GLOBAL__N_123AlarmWeekdayEditorSceneE", &a->pandaVtableAlarmWeekdayEditorScene_addr},
+            {"_ZTVN5panda3app18HanaAssistantSceneE", &a->pandaVtableHanaAssistantScene_addr},
+            {"_ZTVN5panda3app11WeReadSceneE", &a->pandaVtableWeReadScene_addr},
+            {"_ZTVN5panda3app14OtaStatusSceneE", &a->pandaVtableOtaStatusScene_addr},
+            {"_ZTVN5panda2ui12MessageSceneE", &a->pandaVtableMessageScene_addr},
             {"_ZNK11GfxRenderer8fillRectEiiiib", &a->fillRect_addr},
             {"_ZNK11GfxRenderer13displayBufferEN10HalDisplay11RefreshModeE", &a->displayBuffer_addr},
             {"_ZN12_GLOBAL__N_137SimulatorActivityManagerRenderBackend27renderActivitySynchronouslyEP8Activity",
@@ -2099,8 +2060,84 @@ static void esp32s3_machine_init(MachineState* machine) {
             {"_ZNK17BookMetadataCache21cleanupBuildArtifactsEv", &a->bmcCleanupBuildArtifacts_addr},
         };
 
+        struct {
+          const char* name;
+          const char* legacy_name;
+          uint32_t* out;
+        } panda_syms[] = {
+            {"pandaSimulatorMain", "murphySimulatorMain", &a->pandaSimulatorMain_addr},
+            {"pandaSimulatorEnterRunLoop", "murphySimulatorEnterRunLoop", &a->pandaSimulatorEnterRunLoop_addr},
+            {"_ZN7pandaos11DeviceShell18startSimulatorLoopERKNS0_7ContextE",
+             "_ZN8murphyos11DeviceShell18startSimulatorLoopERKNS0_7ContextE",
+             &a->pandaDeviceShellStartSimulatorLoop_addr},
+            {"_ZN7pandaos11DeviceShell16runSimulatorLoopERKNS0_7ContextE",
+             "_ZN8murphyos11DeviceShell16runSimulatorLoopERKNS0_7ContextE",
+             &a->pandaDeviceShellRunSimulatorLoopContext_addr},
+            {"_ZN7pandaos11DeviceShell16runSimulatorLoopEv", "_ZN8murphyos11DeviceShell16runSimulatorLoopEv",
+             &a->pandaDeviceShellRunSimulatorLoopMethod_addr},
+            {"_ZN7pandaos11DeviceShell27runSimulatorLoopWithContextERKNS0_7ContextE",
+             "_ZN8murphyos11DeviceShell27runSimulatorLoopWithContextERKNS0_7ContextE",
+             &a->pandaDeviceShellRunSimulatorLoopWithContext_addr},
+            {"pandaDeviceShellRunSimulatorLoop", "murphyDeviceShellRunSimulatorLoop",
+             &a->pandaDeviceShellRunSimulatorLoop_addr},
+            {"pandaSimulatorBootFirstFrame", "murphySimulatorBootFirstFrame", &a->pandaSimulatorBootFirstFrame_addr},
+            {"pandaSimulatorPublishFramebuffer", "murphySimulatorPublishFramebuffer",
+             &a->pandaSimulatorPublishFramebuffer_addr},
+            {"pandaSimulatorTraceActivity", "murphySimulatorTraceActivity", &a->pandaSimulatorTraceActivity_addr},
+            {"pandaSimulatorHooksEnabled", "murphySimulatorHooksEnabled", &a->pandaSimulatorHooksEnabled_addr},
+            {"_ZZL18runPandaDeviceMainvE5shell", "_ZZL19runMurphyDeviceMainvE5shell", &a->pandaDeviceShell_addr},
+            {"_ZZL18runPandaDeviceMainvE6runner", "_ZZL19runMurphyDeviceMainvE6runner", &a->pandaDeviceRunner_addr},
+            {"_ZZL18runPandaDeviceMainvE2fb", "_ZZL19runMurphyDeviceMainvE2fb", &a->pandaDeviceFramebuffer_addr},
+            {"_ZZL18runPandaDeviceMainvE7display", "_ZZL19runMurphyDeviceMainvE7display", &a->pandaDeviceDisplay_addr},
+            {"_ZZL18runPandaDeviceMainvE10sleepInput", "_ZZL19runMurphyDeviceMainvE10sleepInput",
+             &a->pandaDeviceSleepInput_addr},
+            {"_ZZL18runPandaDeviceMainvE5power", "_ZZL19runMurphyDeviceMainvE5power", &a->pandaDevicePower_addr},
+            {"_ZZL18runPandaDeviceMainvE10frontlight", "_ZZL19runMurphyDeviceMainvE10frontlight",
+             &a->pandaDeviceFrontlight_addr},
+            {"_ZZL18runPandaDeviceMainvE7storage", "_ZZL19runMurphyDeviceMainvE7storage", &a->pandaDeviceStorage_addr},
+            {"_ZZL18runPandaDeviceMainvE9castStore", "_ZZL19runMurphyDeviceMainvE9castStore",
+             &a->pandaDeviceCastStore_addr},
+            {"_ZZL18runPandaDeviceMainvE5input", "_ZZL19runMurphyDeviceMainvE5input", &a->pandaDeviceInput_addr},
+            {"_ZZL18runPandaDeviceMainvE11mappedInput", "_ZZL19runMurphyDeviceMainvE11mappedInput",
+             &a->pandaDeviceMappedInput_addr},
+            {"_ZZL18runPandaDeviceMainvE10debugInput", "_ZZL19runMurphyDeviceMainvE10debugInput",
+             &a->pandaDeviceDebugInput_addr},
+            {"_ZZL18runPandaDeviceMainvE11remoteInput", "_ZZL19runMurphyDeviceMainvE11remoteInput",
+             &a->pandaDeviceRemoteInput_addr},
+            {"_ZZL18runPandaDeviceMainvE6window", "_ZZL19runMurphyDeviceMainvE6window", &a->pandaDeviceWindow_addr},
+            {"_ZTVN7pandaos8InputEspE", "_ZTVN8murphyos8InputEspE", &a->pandaInputEspVtable_addr},
+            {"_ZTVN7pandaos13PortraitInputE", "_ZTVN8murphyos13PortraitInputE", &a->pandaPortraitInputVtable_addr},
+            {"_ZTVN7pandaos14SleepHoldInputE", "_ZTVN8murphyos14SleepHoldInputE", &a->pandaSleepHoldInputVtable_addr},
+            {"_ZTVN7pandaos11RemoteInputE", "_ZTVN8murphyos11RemoteInputE", &a->pandaRemoteInputVtable_addr},
+            {"_ZTVN7pandaos14SyntheticInputE", "_ZTVN8murphyos14SyntheticInputE", &a->pandaSyntheticInputVtable_addr},
+            {"pandaSimulatorShellContext", "murphySimulatorShellContext", &a->pandaSimulatorShellContext_addr},
+            {"pandaSimulatorRunner", "murphySimulatorRunner", &a->pandaSimulatorRunner_addr},
+            {"pandaSimulatorFramebufferObject", "murphySimulatorFramebufferObject",
+             &a->pandaSimulatorFramebufferObject_addr},
+            {"pandaSimulatorDisplay", "murphySimulatorDisplay", &a->pandaSimulatorDisplay_addr},
+            {"pandaSimulatorSleepInput", "murphySimulatorSleepInput", &a->pandaSimulatorSleepInput_addr},
+            {"pandaSimulatorPower", "murphySimulatorPower", &a->pandaSimulatorPower_addr},
+            {"pandaSimulatorFrontlight", "murphySimulatorFrontlight", &a->pandaSimulatorFrontlight_addr},
+            {"pandaSimulatorStorage", "murphySimulatorStorage", &a->pandaSimulatorStorage_addr},
+            {"pandaSimulatorUiFont", "murphySimulatorUiFont", &a->pandaSimulatorUiFont_addr},
+            {"pandaSimulatorBodyFont", "murphySimulatorBodyFont", &a->pandaSimulatorBodyFont_addr},
+            {"pandaSimulatorCastStore", "murphySimulatorCastStore", &a->pandaSimulatorCastStore_addr},
+            {"pandaSimulatorRunnerInput", "murphySimulatorRunnerInput", &a->pandaSimulatorRunnerInput_addr},
+            {"pandaSimulatorRunnerWindow", "murphySimulatorRunnerWindow", &a->pandaSimulatorRunnerWindow_addr},
+            {"pandaSimulatorRunnerNowMs", "murphySimulatorRunnerNowMs", &a->pandaSimulatorRunnerNowMs_addr},
+            {"pandaSimulatorFramebuffer", "murphySimulatorFramebuffer", &a->pandaSimulatorFramebuffer_addr},
+            {"pandaSimulatorFramebufferStorage", "murphySimulatorFramebufferStorage",
+             &a->pandaSimulatorFramebufferStorage_addr},
+            {"_ZN7pandaos9EpdBusEsp12writeCommandEh", "_ZN8murphyos9EpdBusEsp12writeCommandEh",
+             &a->epdBusWriteCommand_addr},
+            {"_ZN7pandaos9EpdBusEsp9writeDataEPKhj", "_ZN8murphyos9EpdBusEsp9writeDataEPKhj", &a->epdBusWriteData_addr},
+            {"_ZN7pandaos9EpdBusEsp8waitBusyEv", "_ZN8murphyos9EpdBusEsp8waitBusyEv", &a->epdBusWaitBusy_addr},
+        };
+
         /* 旧固件没有 Gray4 导出符号，继续使用原来的帧缓冲。 */
-        a->murphySimulatorGray4Export_addr = mofei_resolve_elf_symbol(elf_data, elf_len, "murphySimulatorGray4Export");
+        const char* gray4_name = "pandaSimulatorGray4Export";
+        a->pandaSimulatorGray4Export_addr =
+            mofei_resolve_elf_symbol_alias(elf_data, elf_len, &gray4_name, "murphySimulatorGray4Export");
         int resolved_count = 0;
         for (int i = 0; i < (int)(sizeof(syms) / sizeof(syms[0])); i++) {
           uint32_t val = mofei_resolve_elf_symbol(elf_data, elf_len, syms[i].name);
@@ -2110,6 +2147,20 @@ static void esp32s3_machine_init(MachineState* machine) {
             fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", syms[i].name, val);
           } else {
             fprintf(stderr, "[QEMU-SIM] WARNING: symbol not found: %s\n", syms[i].name);
+          }
+        }
+        for (int i = 0; i < (int)(sizeof(panda_syms) / sizeof(panda_syms[0])); i++) {
+          const char* name = panda_syms[i].name;
+          uint32_t val = mofei_resolve_elf_symbol_alias(elf_data, elf_len, &name, panda_syms[i].legacy_name);
+          if (val) {
+            *panda_syms[i].out = val;
+            if (panda_syms[i].out == &a->pandaSimulatorMain_addr) {
+              a->simulator_main_symbol_name = name;
+            }
+            resolved_count++;
+            fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", name, val);
+          } else {
+            fprintf(stderr, "[QEMU-SIM] WARNING: symbol not found: %s\n", name);
           }
         }
         if (mofei_sim_board_is_s37uc()) {
@@ -2187,34 +2238,35 @@ static void esp32s3_machine_init(MachineState* machine) {
           fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", "mofeiSimulatorPublishFramebuffer RETW",
                   a->mofeiSimulatorPublishFramebuffer_retw);
         }
-        if (a->murphySimulatorPublishFramebuffer_addr) {
-          a->murphySimulatorPublishFramebuffer_retw =
-              a->murphySimulatorPublishFramebuffer_addr + MOFEI_SIMULATOR_PUBLISH_RET_OFFSET;
-          fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", "murphySimulatorPublishFramebuffer RETW",
-                  a->murphySimulatorPublishFramebuffer_retw);
+        if (a->pandaSimulatorPublishFramebuffer_addr) {
+          a->pandaSimulatorPublishFramebuffer_retw =
+              a->pandaSimulatorPublishFramebuffer_addr + MOFEI_SIMULATOR_PUBLISH_RET_OFFSET;
+          fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", "pandaSimulatorPublishFramebuffer RETW",
+                  a->pandaSimulatorPublishFramebuffer_retw);
         }
         {
-          const char* run_device_main_sym = "_ZL19runMurphyDeviceMainv";
-          const uint32_t fn_start = mofei_resolve_elf_symbol(elf_data, elf_len, run_device_main_sym);
+          const char* run_device_main_sym = "_ZL18runPandaDeviceMainv";
+          const uint32_t fn_start =
+              mofei_resolve_elf_symbol_alias(elf_data, elf_len, &run_device_main_sym, "_ZL19runMurphyDeviceMainv");
           const uint32_t fn_end = mofei_resolve_elf_function_end(elf_data, elf_len, run_device_main_sym);
           if (fn_start && fn_end > fn_start) {
             const uint32_t scan_len = fn_end - fn_start;
             const uint32_t retw_pc = mofei_find_last_retw_in_elf_span(elf_data, elf_len, fn_start, fn_end, scan_len);
             if (retw_pc) {
-              a->murphyRunDeviceMain_retw = retw_pc;
-              fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", "runMurphyDeviceMain final RETW", retw_pc);
+              a->pandaRunDeviceMain_retw = retw_pc;
+              fprintf(stderr, "[QEMU-SIM] Resolved %-45s → 0x%08x\n", "runPandaDeviceMain final RETW", retw_pc);
             }
           }
-          if (!a->murphyRunDeviceMain_retw) {
-            fprintf(stderr, "[QEMU-SIM] WARNING: could not resolve runMurphyDeviceMain final RETW\n");
+          if (!a->pandaRunDeviceMain_retw) {
+            fprintf(stderr, "[QEMU-SIM] WARNING: could not resolve runPandaDeviceMain final RETW\n");
           }
         }
-        if (a->murphySimulatorHooksEnabled_addr) {
+        if (a->pandaSimulatorHooksEnabled_addr) {
           const uint8_t enabled = 1;
-          if (address_space_write(&address_space_memory, a->murphySimulatorHooksEnabled_addr, MEMTXATTRS_UNSPECIFIED,
+          if (address_space_write(&address_space_memory, a->pandaSimulatorHooksEnabled_addr, MEMTXATTRS_UNSPECIFIED,
                                   &enabled, sizeof(enabled)) == MEMTX_OK) {
-            fprintf(stderr, "[QEMU-SIM] Murphy OS simulator hooks enabled at 0x%08x\n",
-                    a->murphySimulatorHooksEnabled_addr);
+            fprintf(stderr, "[QEMU-SIM] Panda AI OS simulator hooks enabled at 0x%08x\n",
+                    a->pandaSimulatorHooksEnabled_addr);
           }
         }
 
@@ -2338,8 +2390,8 @@ static void esp32s3_machine_init(MachineState* machine) {
         fprintf(
             stderr,
             "[QEMU-SIM] Symbol resolution: %d/%d symbols, resolved=%s, alloc_patches=%d, call_null=%d, call_fail=%d\n",
-            resolved_count, (int)(sizeof(syms) / sizeof(syms[0])), a->resolved ? "YES" : "NO (partial)",
-            a->alloc_patch_count, a->call_null_count, a->call_fail_count);
+            resolved_count, (int)(sizeof(syms) / sizeof(syms[0]) + sizeof(panda_syms) / sizeof(panda_syms[0])),
+            a->resolved ? "YES" : "NO (partial)", a->alloc_patch_count, a->call_null_count, a->call_fail_count);
       }
 
       g_free(elf_data);
@@ -3913,12 +3965,12 @@ static void esp32s3_machine_init(MachineState* machine) {
                     "vaddr=0x%08x filesz=0x%x\n",
                     j, seg_vaddr, seg_filesz);
           }
-          if (mofei_sim_addrs.murphyDeviceShellRunSimulatorLoopWithContext_addr) {
-            uint32_t loop_resume = mofei_sim_addrs.murphyDeviceShellRunSimulatorLoopWithContext_addr + 0x5cu;
+          if (mofei_sim_addrs.pandaDeviceShellRunSimulatorLoopWithContext_addr) {
+            uint32_t loop_resume = mofei_sim_addrs.pandaDeviceShellRunSimulatorLoopWithContext_addr + 0x5cu;
             uint8_t loop_resume_bytes[6] = {0};
             address_space_read(&address_space_memory, loop_resume, MEMTXATTRS_UNSPECIFIED, loop_resume_bytes,
                                sizeof(loop_resume_bytes));
-            fprintf(stderr, "[QEMU-DBG] Murphy loop resume readback @ 0x%08x: %02x %02x %02x %02x %02x %02x\n",
+            fprintf(stderr, "[QEMU-DBG] Panda AI OS loop resume readback @ 0x%08x: %02x %02x %02x %02x %02x %02x\n",
                     loop_resume, loop_resume_bytes[0], loop_resume_bytes[1], loop_resume_bytes[2], loop_resume_bytes[3],
                     loop_resume_bytes[4], loop_resume_bytes[5]);
           }
