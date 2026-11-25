@@ -614,6 +614,12 @@ struct CaseStep {
     #[serde(default)]
     #[serde(rename = "holdUntilActivityChange")]
     hold_until_activity_change: bool,
+    /// Keep a held button down until the firmware has repainted this many
+    /// times since it read the press (the press's own repaint counts), then
+    /// release. For holds whose effect is a repaint, not an activity change.
+    #[serde(default)]
+    #[serde(rename = "holdUntilRepaints")]
+    hold_until_repaints: Option<u32>,
     #[serde(default)]
     #[serde(rename = "minDarkRatio")]
     min_dark_ratio: Option<f64>,
@@ -696,8 +702,7 @@ struct E2EContext {
     pending_input_activity_after: Option<usize>,
     pending_input_log_after: Option<usize>,
     /// Firmware-side button reads (`[MOFEI-SIM] button_read ...`), stamped when
-    /// the stderr line is parsed. QEMU's virtual clock follows host time
-    /// (no -icount), so this is the guest-observed edge time.
+    /// the stderr line is parsed (host time).
     button_reads: Vec<(StdInstant, u8, bool)>,
     /// QEMU console mailbox outcomes for serial command frames: the mailbox is a single slot and
     /// rejects a frame while the guest has not consumed the previous request or response.
@@ -3402,6 +3407,14 @@ impl E2EContext {
         self.transcript.push(line.to_string());
     }
 
+    fn repaints_since(&self, line_index: usize) -> u32 {
+        self.transcript
+            .iter()
+            .skip(line_index)
+            .filter(|line| line.starts_with("UIREFRESH "))
+            .count() as u32
+    }
+
     fn record_activity_event(&mut self, name: impl Into<String>) {
         let name = name.into();
         self.activity_events.push((StdInstant::now(), name.clone()));
@@ -4928,13 +4941,13 @@ async fn wait_for_firmware_button_read(
     }
 }
 
-/// Holds `button_id` for at least `hold_ms` of guest time. The press edge goes
-/// in, the firmware's own dequeue of it (`button_read`) is the ack, the hold is
-/// timed from that ack (QEMU virtual time follows host time), the optional
-/// `hold_until_activity_change` effect is awaited, and the run only continues once
-/// the firmware has also dequeued the release. A host-side
-/// sleep between press and release would let a stalled guest input task see
-/// press and release back to back and count a short press.
+/// Holds `button_id` down after the firmware read the press, for at least
+/// `hold_ms` of host time and then until the hold's observable effect has
+/// happened: an activity change (`hold_until_activity_change`) and/or
+/// `hold_until_repaints` firmware repaints since the press was read. The firmware
+/// times a hold on its own clock, which lags host time at device spec, so the
+/// host duration alone never proves the firmware saw a hold. The run only
+/// continues once the firmware has also dequeued the release.
 async fn hold_button_until_guest_time(
     ctx: &std::sync::Arc<tokio::sync::Mutex<E2EContext>>,
     injection_tx: &mpsc::UnboundedSender<InjectionCommand>,
@@ -4943,11 +4956,16 @@ async fn hold_button_until_guest_time(
     button_id: u8,
     hold_ms: u64,
     hold_until_activity_change: bool,
+    hold_until_repaints: Option<u32>,
     timeout: Duration,
 ) -> Result<()> {
-    let (reads_before, activity_at_press) = {
+    let (reads_before, activity_at_press, lines_before) = {
         let ctx = ctx.lock().await;
-        (ctx.button_reads.len(), ctx.current_activity.clone())
+        (
+            ctx.button_reads.len(),
+            ctx.current_activity.clone(),
+            ctx.transcript.len(),
+        )
     };
     injection_tx
         .send(InjectionCommand::ButtonEdge {
@@ -4960,9 +4978,6 @@ async fn hold_button_until_guest_time(
         wait_for_firmware_button_read(ctx, button_id, false, reads_before, timeout).await?;
     let release_at = pressed_at + Duration::from_millis(hold_ms);
     time::sleep_until(tokio::time::Instant::from_std(release_at)).await;
-    // A guest that was stalled mid-hold polls the release before its UI tick
-    // can see the elapsed hold; releasing on wall time alone then turns a long
-    // press into a short one. Keep holding until the effect is observable.
     if hold_until_activity_change {
         let deadline = tokio::time::Instant::now() + timeout;
         while ctx.lock().await.current_activity == activity_at_press {
@@ -4970,6 +4985,18 @@ async fn hold_button_until_guest_time(
                 return Err(anyhow!(
                     "held button {button_id} did not change the activity from {:?} within {}s",
                     activity_at_press,
+                    timeout.as_secs()
+                ));
+            }
+            time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+    if let Some(repaints) = hold_until_repaints {
+        let deadline = tokio::time::Instant::now() + timeout;
+        while ctx.lock().await.repaints_since(lines_before) < repaints {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "held button {button_id} saw fewer than {repaints} repaints within {}s",
                     timeout.as_secs()
                 ));
             }
@@ -4985,7 +5012,7 @@ async fn hold_button_until_guest_time(
         .map_err(|_| anyhow!("injection channel closed"))?;
     wait_for_injection(event_rx, last_fb, timeout, false).await?;
     wait_for_firmware_button_read(ctx, button_id, true, reads_before_release, timeout).await?;
-    eprintln!("[e2e] held button_id={button_id} for {hold_ms} ms of guest time after the firmware read the press");
+    eprintln!("[e2e] held button_id={button_id} for at least {hold_ms} ms after the firmware read the press");
     Ok(())
 }
 
@@ -7091,6 +7118,7 @@ async fn run_e2e_case(
                             button_id,
                             hold_ms,
                             step.hold_until_activity_change,
+                            step.hold_until_repaints,
                             step_timeout,
                         )
                         .await
@@ -9018,6 +9046,7 @@ mod tests {
             1,
             50,
             true,
+            None,
             Duration::from_secs(5),
         )
         .await
@@ -9031,6 +9060,83 @@ mod tests {
             released >= exited,
             "release must not precede the observed effect"
         );
+    }
+
+    #[tokio::test]
+    async fn hold_waits_for_the_repaints_not_the_wall_clock() {
+        let ctx = std::sync::Arc::new(tokio::sync::Mutex::new(E2EContext::new()));
+        let (injection_tx, mut injection_rx) = mpsc::unbounded_channel::<InjectionCommand>();
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel::<HeadlessEvent>();
+        let release_seen_at = std::sync::Arc::new(std::sync::Mutex::new(None::<StdInstant>));
+        let second_repaint_at = std::sync::Arc::new(std::sync::Mutex::new(None::<StdInstant>));
+
+        let guest_ctx = ctx.clone();
+        let guest_release = release_seen_at.clone();
+        let guest_repaint = second_repaint_at.clone();
+        let guest = tokio::spawn(async move {
+            while let Some(command) = injection_rx.recv().await {
+                let InjectionCommand::ButtonEdge { button_id, pressed } = command else {
+                    panic!("expected a button edge");
+                };
+                let _ = event_tx.send(HeadlessEvent::Injected);
+                let mut c = guest_ctx.lock().await;
+                c.push_line(&format!(
+                    "[MOFEI-SIM] button_read id={button_id} released={} depth=0 ptrs=1,2",
+                    if pressed { 0 } else { 1 }
+                ));
+                if pressed {
+                    let ctx = guest_ctx.clone();
+                    let repaint = guest_repaint.clone();
+                    tokio::spawn(async move {
+                        ctx.lock()
+                            .await
+                            .push_line("UIREFRESH activity=KeyboardEntry mode=full");
+                        time::sleep(Duration::from_millis(300)).await;
+                        *repaint.lock().unwrap() = Some(StdInstant::now());
+                        ctx.lock()
+                            .await
+                            .push_line("UIREFRESH activity=KeyboardEntry mode=full");
+                    });
+                } else {
+                    *guest_release.lock().unwrap() = Some(StdInstant::now());
+                }
+            }
+        });
+
+        let mut last_fb = None;
+        hold_button_until_guest_time(
+            &ctx,
+            &injection_tx,
+            &mut event_rx,
+            &mut last_fb,
+            1,
+            50,
+            false,
+            Some(2),
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        drop(injection_tx);
+        guest.await.unwrap();
+
+        let released = release_seen_at.lock().unwrap().expect("release delivered");
+        let repainted = second_repaint_at.lock().unwrap().expect("second repaint");
+        assert!(
+            released >= repainted,
+            "release must not precede the hold's repaint"
+        );
+    }
+
+    #[test]
+    fn counts_only_repaints_after_the_given_line() {
+        let mut ctx = E2EContext::new();
+        ctx.push_line("UIREFRESH activity=Reader mode=full");
+        let mark = ctx.transcript.len();
+        ctx.push_line("[I] SIMGRAY4: event=present");
+        ctx.push_line("UIREFRESH activity=KeyboardEntry mode=full");
+        ctx.push_line("UIREFRESH activity=KeyboardEntry mode=fast");
+        assert_eq!(ctx.repaints_since(mark), 2);
     }
 
     #[tokio::test]
@@ -9052,6 +9158,7 @@ mod tests {
             1,
             50,
             false,
+            None,
             Duration::from_millis(100),
         )
         .await

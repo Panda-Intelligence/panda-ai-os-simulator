@@ -23,7 +23,7 @@ function consoleHost(respond) {
     async sendSerialLine(line) {
       calls.push(line);
       await respond(line, (value, fragmented = false) => {
-        const message = `POS_APP:${value.requestId}:${JSON.stringify(value)}\n`;
+        const message = typeof value === "string" ? value : `POS_APP:${value.requestId}:${JSON.stringify(value)}\n`;
         for (const listener of listeners) {
           if (fragmented) { listener(message.slice(0, 17)); listener(message.slice(17)); }
           else listener(message);
@@ -51,6 +51,49 @@ test("console client waits for guest result and polls a queued operation by the 
 test("console send acknowledgement alone cannot be reported as successful installation", async () => {
   const host = consoleHost(async () => {});
   await assert.rejects(createPosConsoleClient(host, 35)("install", "/PandaDev/" + "a".repeat(64) + ".pap"), /install_timeout/);
+  assert.equal(host.listenerCount(), 0);
+});
+
+test("console client reads a complete reply after an interleaved prefix for the same request", async () => {
+  const host = consoleHost(async (line, emit) => {
+    const requestId = line.split(":")[2];
+    const result = { schemaVersion: 1, requestId, operation: "capabilities", state: "completed", terminal: true, ok: true, capabilities: { install: true, open: true } };
+    emit(`POS_APP:${requestId}:{"schemaVersionPOS_APP:${requestId}:${JSON.stringify(result)}\n`, true);
+  });
+  const result = await createPosConsoleClient(host, 100)("capabilities");
+  assert.deepEqual(result.capabilities, { install: true, open: true });
+  assert.equal(host.calls.length, 1);
+  assert.equal(host.listenerCount(), 0);
+});
+
+test("interleaved terminal guest failures propagate without waiting for the command deadline", async () => {
+  const host = consoleHost(async (line, emit) => {
+    const requestId = line.split(":")[2];
+    const result = { schemaVersion: 1, requestId, operation: "install", state: "failed", terminal: true, ok: false, error: "package_v2_device_verifier_unavailable" };
+    emit(`POS_APP:${requestId}:{"schemaVersion":1,"requestId":POS_APP:${requestId}:${JSON.stringify(result)}\n`);
+  });
+  await assert.rejects(createPosConsoleClient(host, 100)("install", "/PandaDev/" + "a".repeat(64) + ".pap"), /package_v2_device_verifier_unavailable/);
+  assert.equal(host.calls.length, 1);
+  assert.equal(host.listenerCount(), 0);
+});
+
+test("interleaved replies still require the matching request, operation, and terminal state", async () => {
+  const host = consoleHost(async (line, emit) => {
+    const [, , requestId, operation] = line.split(":");
+    const result = { schemaVersion: 1, requestId, operation: "install", state: "completed", terminal: true, ok: true };
+    const prefix = `POS_APP:${requestId}:{"schemaVersionPOS_APP:${requestId}:`;
+    if (operation === "install") {
+      emit(`${prefix}${JSON.stringify({ ...result, requestId: "other_request" })}\n`);
+      emit(`${prefix}${JSON.stringify({ ...result, operation: "open" })}\n`);
+      emit(`${prefix}${JSON.stringify({ ...result, state: "queued", terminal: false })}\n`);
+    } else emit(`${prefix}${JSON.stringify(result)}\n`);
+  });
+  const result = await createPosConsoleClient(host, 500)("install", "/PandaDev/" + "a".repeat(64) + ".pap");
+  assert.equal(result.operation, "install");
+  assert.equal(result.state, "completed");
+  assert.equal(host.calls.length, 2);
+  assert.equal(host.calls[0].split(":")[2], host.calls[1].split(":")[2]);
+  assert.match(host.calls[1], /:status$/);
   assert.equal(host.listenerCount(), 0);
 });
 
