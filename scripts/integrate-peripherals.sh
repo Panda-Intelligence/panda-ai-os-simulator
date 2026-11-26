@@ -77,6 +77,7 @@ ESP32_GPIO_DST="${QEMU_DIR}/hw/gpio/esp32_gpio.c"
 ESP32S3_GPIO_DST="${QEMU_DIR}/hw/gpio/esp32s3_gpio.c"
 ESP32_GPIO_HEADER_DST="${QEMU_DIR}/include/hw/gpio/esp32_gpio.h"
 SD_DST="${QEMU_DIR}/hw/sd/sd.c"
+SPI1_DST="${QEMU_DIR}/hw/ssi/esp32s3_spi.c"
 XTENSA_TRANSLATE_DST="${QEMU_DIR}/target/xtensa/translate.c"
 XTENSA_EXC_HELPER_DST="${QEMU_DIR}/target/xtensa/exc_helper.c"
 XTENSA_HELPER_DST="${QEMU_DIR}/target/xtensa/helper.h"
@@ -119,6 +120,8 @@ LILYGO_CONTROL_MESON_SENTINEL="lilygo_peripheral_control.c"
 LILYGO_SX1262_MESON_SENTINEL="lilygo_sx1262.c"
 
 REQUIRED_SOURCE_FILES=(
+  "${SRC_DIR}/esp32s3_spi.c"
+  "${SRC_DIR}/esp32s3-spi-dummy.patch"
   "${SRC_DIR}/esp32s3_gpspi2.c"
   "${SRC_DIR}/ssd1677_gdeq0426t82.c"
   "${SRC_DIR}/ft6336u.c"
@@ -189,6 +192,7 @@ check_qemu_targets() {
     "${XTENSA_KCONFIG}" \
     "${XTENSA_MESON}" \
     "${QEMU_DIR}/hw/xtensa/esp32s3.c" \
+    "${SPI1_DST}" \
     "${QEMU_DIR}/hw/gpio/esp32_gpio.c" \
     "${QEMU_DIR}/hw/gpio/esp32s3_gpio.c" \
     "${QEMU_DIR}/include/hw/gpio/esp32_gpio.h" \
@@ -337,6 +341,9 @@ sync_simulator_qemu_sources() {
   echo "[integrate] syncing SD model → hw/sd/"
   cp -f "${SRC_DIR}/sd.c" "${SD_DST}"
 
+  echo "[integrate] syncing canonical ESP32-S3 SPI controller → hw/ssi/"
+  cp -f "${SRC_DIR}/esp32s3_spi.c" "${SPI1_DST}"
+
   echo "[integrate] syncing canonical Xtensa translate/helper sources → target/xtensa/"
   cp -f "${SRC_DIR}/target_xtensa_translate.c" "${XTENSA_TRANSLATE_DST}"
   cp -f "${SRC_DIR}/target_xtensa_exc_helper.c" "${XTENSA_EXC_HELPER_DST}"
@@ -382,6 +389,7 @@ if [[ ${CHECK} -eq 1 ]]; then
   check_qemu_targets
   check_xtensa_reset_patch
   check_patch_against_clean_head "${SRC_DIR}/xtensa-local-memory-atomctl.patch" target/xtensa/op_helper.c
+  check_patch_against_clean_head "${SRC_DIR}/esp32s3-spi-dummy.patch" hw/ssi/esp32s3_spi.c
   check_soc_patch
   check_xtensa_window_vectors
   echo "[integrate] check complete (no files were modified)"
