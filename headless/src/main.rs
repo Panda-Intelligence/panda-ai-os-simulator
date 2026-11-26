@@ -21,6 +21,9 @@
 //     received, exits with code 2 and writes nothing.
 
 mod debug_transport;
+mod draw_readiness;
+#[cfg(test)]
+mod draw_readiness_tests;
 mod persistent_flash;
 mod runtime_apps;
 #[path = "../../src-tauri/src/simulator_resolver.rs"]
@@ -31,6 +34,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitStatus;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant as StdInstant;
@@ -600,6 +604,8 @@ struct CaseStep {
     after_input: bool,
     #[serde(default, rename = "waitForFrame")]
     wait_for_frame: bool,
+    #[serde(default, rename = "waitForGray4Present")]
+    wait_for_gray4_present: bool,
     /// `wait_idle`: how long the screen must stay unchanged (no new frame) before the step passes.
     #[serde(default, rename = "quietMs")]
     quiet_ms: Option<u64>,
@@ -702,6 +708,7 @@ struct E2EContext {
     activity_events: Vec<(StdInstant, String)>,
     pending_input_activity_after: Option<usize>,
     pending_input_log_after: Option<usize>,
+    gray4_draw: draw_readiness::Gray4DrawTracker,
     /// Firmware-side button reads (`[MOFEI-SIM] button_read ...`), stamped when
     /// the stderr line is parsed (host time).
     button_reads: Vec<(StdInstant, u8, bool)>,
@@ -976,6 +983,7 @@ impl SyntheticTouchEventType {
 struct CapturedFramebuffer {
     pixels: Vec<u8>,
     format: FramebufferFormat,
+    draw_generation: u64,
 }
 
 #[derive(Debug)]
@@ -2183,6 +2191,7 @@ async fn main() -> Result<()> {
         debug_writer.clone(),
         debug_broker.clone(),
         radio_peer,
+        Arc::new(AtomicU64::new(0)),
     ));
     continue_qemu(&monitor_socket)
         .await
@@ -2328,6 +2337,7 @@ async fn read_qemu_stderr(
             let mut ctx = ctx.lock().await;
             ctx.push_line(&line);
             ctx.parse_activity_transition(&line);
+            let _ = event_tx.send(HeadlessEvent::SerialLine);
         }
         for tap in &taps {
             let touch_read_marker = format!("[MOFEI-SIM] touch_read raw={},{}", tap.x, tap.y);
@@ -2404,6 +2414,7 @@ async fn read_loop(
     writer: debug_transport::HeadlessDebugWriter,
     debug_broker: debug_transport::DebugTransportBroker,
     radio_peer: Option<RadioPeerSender>,
+    draw_generation: Arc<AtomicU64>,
 ) -> Result<()> {
     let has_injections = injection_plan.has_injections();
     let (frame_tx, frame_rx) = mpsc::unbounded_channel();
@@ -2422,6 +2433,7 @@ async fn read_loop(
         debug_broker,
         radio_peer,
         has_injections.then_some(frame_tx),
+        draw_generation,
     );
     tokio::pin!(receiver);
     // 兩個 future 由同一層擁有；接收結束、注入失敗或外層取消都會同步取消另一方。
@@ -2574,6 +2586,7 @@ async fn receive_loop(
     debug_broker: debug_transport::DebugTransportBroker,
     radio_peer: Option<RadioPeerSender>,
     frame_tx: Option<mpsc::UnboundedSender<bool>>,
+    draw_generation: Arc<AtomicU64>,
 ) -> Result<()> {
     let mut header = [0u8; HEADER_LEN];
     loop {
@@ -2588,6 +2601,7 @@ async fn receive_loop(
             Err(e) => return Err(e.into()),
             Ok(_) => {}
         }
+        let frame_draw_generation = draw_generation.load(Ordering::Acquire);
         let channel = header[0];
         let flags = header[1];
         let payload_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
@@ -2611,6 +2625,7 @@ async fn receive_loop(
                     let frame = CapturedFramebuffer {
                         pixels: payload,
                         format,
+                        draw_generation: frame_draw_generation,
                     };
                     if event_tx.send(HeadlessEvent::Frame(frame)).is_err() {
                         return Ok(());
@@ -3446,6 +3461,7 @@ impl E2EContext {
             activity_events: Vec::new(),
             pending_input_activity_after: None,
             pending_input_log_after: None,
+            gray4_draw: draw_readiness::Gray4DrawTracker::default(),
             button_reads: Vec::new(),
             console_rejections: 0,
             console_accepts: 0,
@@ -3453,6 +3469,7 @@ impl E2EContext {
     }
 
     fn push_line(&mut self, line: &str) {
+        self.gray4_draw.record_line(self.transcript.len(), line);
         if line.contains("[MOFEI-SIM] console mailbox rejected") {
             self.console_rejections += 1;
         } else if line.contains("[MOFEI-SIM] console request len=") {
@@ -3476,10 +3493,13 @@ impl E2EContext {
     fn record_activity_event(&mut self, name: impl Into<String>) {
         let name = name.into();
         self.activity_events.push((StdInstant::now(), name.clone()));
+        self.gray4_draw
+            .observe_activity(self.transcript.len().saturating_sub(1), &name);
         self.current_activity = Some(name);
     }
 
     fn mark_input_activity_boundary(&mut self) {
+        self.gray4_draw.begin_input(self.transcript.len());
         self.pending_input_activity_after = Some(self.activity_events.len());
         self.pending_input_log_after = Some(self.transcript.len());
     }
@@ -5300,6 +5320,103 @@ fn drain_pending_e2e_events(
     frames_drained
 }
 
+async fn wait_for_gray4_present(
+    event_rx: &mut mpsc::UnboundedReceiver<HeadlessEvent>,
+    last_fb: &mut Option<CapturedFramebuffer>,
+    ctx: &Arc<tokio::sync::Mutex<E2EContext>>,
+    activity: &str,
+    debug_writer: &debug_transport::HeadlessDebugWriter,
+    request_id: u32,
+    timeout: Duration,
+) -> Result<()> {
+    if activity.trim().is_empty() {
+        return Err(anyhow!("waitForGray4Present requires an activity"));
+    }
+    if !ctx.lock().await.gray4_draw.has_input_boundary() {
+        return Err(anyhow!("waitForGray4Present requires a preceding input"));
+    }
+    let deadline = time::Instant::now() + timeout;
+    let expected_activity = activity.trim().to_ascii_lowercase();
+    let mut fence_sent = false;
+    let failure = loop {
+        if time::Instant::now() >= deadline {
+            break "timed out".to_string();
+        }
+        let completed = {
+            let ctx = ctx.lock().await;
+            ctx.gray4_draw.has_completed_present(activity)
+                && ctx
+                    .current_activity
+                    .as_ref()
+                    .is_some_and(|current| activity_matches(&expected_activity, current))
+        };
+        if completed && !fence_sent {
+            // contract: SIMGRAY4 follows synchronous IPC export; a later read-only query ACK fences those pixels.
+            let mut payload = vec![
+                PERIPHERAL_CONTROL_VERSION,
+                PERIPHERAL_CONTROL_QUERY,
+                PERIPHERAL_CONTROL_STORAGE_DEVICE,
+                0,
+            ];
+            payload.extend_from_slice(&request_id.to_le_bytes());
+            payload.extend_from_slice(&[0, 0]);
+            let query = debug_transport::OutFrame {
+                channel: CHANNEL_CONTROL,
+                flags: 0,
+                payload,
+            };
+            match time::timeout_at(deadline, debug_writer.send(query)).await {
+                Ok(true) => fence_sent = true,
+                Ok(false) => break "Gray4 IPC fence transport unavailable".to_string(),
+                Err(_) => break "timed out sending Gray4 IPC fence".to_string(),
+            }
+        }
+        match time::timeout_at(deadline, event_rx.recv()).await {
+            Ok(Some(HeadlessEvent::Frame(frame))) => *last_fb = Some(frame),
+            Ok(Some(HeadlessEvent::PeripheralControl(payload))) => {
+                log_peripheral_control_event(&payload);
+                if fence_sent {
+                    if let Some(result) = peripheral_control_ack_result(
+                        &payload,
+                        PERIPHERAL_CONTROL_STORAGE_DEVICE,
+                        request_id,
+                    ) {
+                        if let Err(error) = result {
+                            break format!("Gray4 IPC fence rejected: {error}");
+                        }
+                        let ctx = ctx.lock().await;
+                        let matching_frame = last_fb.as_ref().is_some_and(|frame| {
+                            ctx.gray4_draw.ready(
+                                frame.draw_generation,
+                                frame.format == FramebufferFormat::Gray16,
+                                activity,
+                            )
+                        });
+                        if matching_frame
+                            && ctx.current_activity.as_ref().is_some_and(|current| {
+                                activity_matches(&expected_activity, current)
+                            })
+                        {
+                            return Ok(());
+                        }
+                        break "Gray4 IPC fence acknowledged without a matching activity and framebuffer".to_string();
+                    }
+                }
+            }
+            Ok(Some(_)) => {}
+            Ok(None) => break "simulator event stream closed".to_string(),
+            Err(_) => break "timed out".to_string(),
+        }
+    };
+    let ctx = ctx.lock().await;
+    Err(anyhow!(
+        "{failure} waiting for completed Gray4 present and IPC fence for '{activity}': request={request_id} sent={fence_sent} current={:?} draw={:?} frame={:?}",
+        ctx.current_activity,
+        ctx.gray4_draw,
+        last_fb.as_ref().map(|frame| (frame.draw_generation, frame.format))
+    ))
+}
+
 const DEFAULT_WAIT_IDLE_QUIET_MS: u64 = 1500;
 
 /// Returns the number of frames seen once no frame arrived for `quiet`; errors when frames keep
@@ -6622,6 +6739,7 @@ async fn run_e2e_case(
         debug_writer.clone(),
         debug_broker.clone(),
         radio_peer,
+        ctx.lock().await.gray4_draw.frame_generation(),
     ));
     let start_time = StdInstant::now();
     let mut last_fb = None;
@@ -7343,7 +7461,36 @@ async fn run_e2e_case(
                 }
             }
             "assert_screenshot_region" => {
-                let frames_drained = drain_pending_e2e_events(&mut event_rx, &mut last_fb);
+                if step.wait_for_gray4_present {
+                    let request_id = next_control_request_id;
+                    next_control_request_id = next_control_request_id.wrapping_add(1).max(1);
+                    if let Err(error) = wait_for_gray4_present(
+                        &mut event_rx,
+                        &mut last_fb,
+                        &ctx,
+                        &step.activity,
+                        &debug_writer,
+                        request_id,
+                        Duration::from_secs(args.step_timeout),
+                    )
+                    .await
+                    {
+                        case_failed = true;
+                        failure_error = Some(format!("assert_screenshot_region failed: {error}"));
+                        step_results.push(StepResult {
+                            step_type: "assert_screenshot_region".to_string(),
+                            status: "FAIL".to_string(),
+                            elapsed_ms: step_start.elapsed().as_millis() as u64,
+                            error: Some(error.to_string()),
+                        });
+                        break;
+                    }
+                }
+                let frames_drained = if step.wait_for_gray4_present {
+                    0
+                } else {
+                    drain_pending_e2e_events(&mut event_rx, &mut last_fb)
+                };
                 let fb = match last_fb.as_ref() {
                     Some(fb) => fb,
                     None => {
@@ -7502,6 +7649,7 @@ async fn run_e2e_case(
     let fb = last_fb.unwrap_or_else(|| CapturedFramebuffer {
         pixels: vec![0xFFu8; board.geometry.fb_bytes()],
         format: board.geometry.framebuffer_format,
+        draw_generation: 0,
     });
 
     qemu.cleanup().await;
@@ -7786,6 +7934,7 @@ mod tests {
             writer,
             debug_transport::DebugTransportBroker::new(),
             None,
+            Arc::new(AtomicU64::new(0)),
         ));
         injection_tx
             .send(InjectionCommand::TouchTap { x: 120, y: 160 })
@@ -7844,6 +7993,7 @@ mod tests {
             debug_transport::DebugTransportBroker::new(),
             None,
             None,
+            Arc::new(AtomicU64::new(0)),
         ));
 
         for (flags, pixels) in [
@@ -9559,6 +9709,7 @@ mod tests {
             .send(HeadlessEvent::Frame(CapturedFramebuffer {
                 pixels: vec![0x11],
                 format: FramebufferFormat::Mono1,
+                draw_generation: 0,
             }))
             .unwrap();
         event_tx.send(HeadlessEvent::Injected).unwrap();
@@ -9566,6 +9717,7 @@ mod tests {
             .send(HeadlessEvent::Frame(CapturedFramebuffer {
                 pixels: vec![0x22],
                 format: FramebufferFormat::Gray16,
+                draw_generation: 0,
             }))
             .unwrap();
 
@@ -9580,6 +9732,7 @@ mod tests {
             Some(CapturedFramebuffer {
                 pixels: vec![0x22],
                 format: FramebufferFormat::Gray16,
+                draw_generation: 0,
             })
         );
     }
@@ -9592,12 +9745,14 @@ mod tests {
             .send(HeadlessEvent::Frame(CapturedFramebuffer {
                 pixels: vec![0x11],
                 format: FramebufferFormat::Mono1,
+                draw_generation: 0,
             }))
             .unwrap();
         event_tx
             .send(HeadlessEvent::Frame(CapturedFramebuffer {
                 pixels: vec![0x22],
                 format: FramebufferFormat::Gray16,
+                draw_generation: 0,
             }))
             .unwrap();
         let frames = wait_for_quiet_frames(
@@ -9614,6 +9769,7 @@ mod tests {
             Some(CapturedFramebuffer {
                 pixels: vec![0x22],
                 format: FramebufferFormat::Gray16,
+                draw_generation: 0,
             })
         );
 
@@ -9624,6 +9780,7 @@ mod tests {
                     .send(HeadlessEvent::Frame(CapturedFramebuffer {
                         pixels: vec![i],
                         format: FramebufferFormat::Mono1,
+                        draw_generation: 0,
                     }))
                     .is_err()
                 {
@@ -10254,6 +10411,7 @@ mod tests {
             .send(HeadlessEvent::Frame(CapturedFramebuffer {
                 pixels: vec![0xAA, 0x55],
                 format: FramebufferFormat::Mono1,
+                draw_generation: 0,
             }))
             .unwrap();
         event_tx
@@ -10281,6 +10439,7 @@ mod tests {
             Some(CapturedFramebuffer {
                 pixels: vec![0xAA, 0x55],
                 format: FramebufferFormat::Mono1,
+                draw_generation: 0,
             })
         );
     }
