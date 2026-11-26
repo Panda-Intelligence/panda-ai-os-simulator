@@ -3833,6 +3833,7 @@ static void esp32s3_machine_init(MachineState* machine) {
             {0x4004e290, "spi_flash_rom_init"},
             /* spi_flash_read_ops — the one that dereferences NULL at 0x3fceffc4 */
             {0x4004eab0, "spi_flash_read_ops"},
+            {0x4004f3f4, "cache_resume_icache_impl"},
             /* cache_resume_dcache_impl */
             {0x4004bb38, "cache_resume_dcache_impl"},
             /* cache_resume_impl */
@@ -3865,6 +3866,7 @@ static void esp32s3_machine_init(MachineState* machine) {
              * memset writes to DRAM using standard store
              * instructions, which works in QEMU. */
             /* { 0x400011e8, "memset(thunk)" }, */
+            {0x400018a8, "Cache_Resume_ICache(thunk)"},
             /* Cache_Resume_DCache thunk */
             {0x400018c0, "Cache_Resume_DCache(thunk)"},
             /* rom_config_instruction_cache_mode thunk */
