@@ -73,6 +73,7 @@ impl ReadLoopFixture {
             writer.clone(),
             broker,
             None,
+            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
         ));
         let writer_task = tokio::spawn(crate::write_loop(write_half, out_rx));
         Self {
