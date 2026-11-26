@@ -144,6 +144,88 @@ function nativeLayout(source) {
   return source.slice(start, end);
 }
 
+function nativeRomBootData(source) {
+  const start = source.indexOf("typedef struct MofeiNativeRomCacheTable {");
+  const end = source.indexOf("\ntypedef struct MofeiNativeCacheRange", start);
+  assert.ok(start >= 0 && end > start);
+  return source.slice(start, end);
+}
+
+test("native ROM boot data uses direct real-ROM callbacks and the actual MTD size", () => {
+  const directory = mkdtempSync(join(tmpdir(), "panda-native-rom-data-"));
+  try {
+    const source = join(directory, "boot-data.c");
+    const binary = join(directory, "boot-data");
+    writeFileSync(source, `
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
+#include "mofei-sim-addrs.h"
+#define MiB 1048576
+#define MEMTXATTRS_UNSPECIFIED 0
+#define MEMTX_OK 0
+typedef struct AddressSpace { uint8_t bytes[65536]; unsigned writes, fail_write; } AddressSpace;
+static int address_space_write(AddressSpace* space, uint32_t address, int attrs, const void* bytes, size_t count) {
+  (void)attrs; ++space->writes;
+  if(space->fail_write==space->writes) return 1;
+  assert(address>=MOFEI_SIM_ROM_SAFE_STUB_BASE);
+  assert((uint64_t)address+count<=MOFEI_SIM_ROM_SAFE_STUB_LIMIT);
+  memcpy(space->bytes+address-MOFEI_SIM_ROM_SAFE_STUB_BASE,bytes,count); return MEMTX_OK;
+}
+${nativeRomBootData(machine)}
+static uint32_t word(const AddressSpace* memory,uint32_t address) {
+  const uint8_t* p=memory->bytes+address-MOFEI_SIM_ROM_SAFE_STUB_BASE;
+  return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
+}
+int main(void) {
+  const uint32_t callbacks=0x3fce0a00, legacy=0x3fce1100;
+  const uint32_t abi[]={0x400015fc,0x40001608,0x40001638,0x40001644,0x40001674,0x40001680,
+    0x4000168c,0x40001698,0x4000180c,0x4000183c,0x40001818,0x40001848,0x400018cc,
+    0x4000171c,0x40001728,0x40001734,0x40001740,0x400018e4,0x400018f0,0x400018fc,0x40001908,0x400016a4};
+  AddressSpace memory;
+  for(unsigned megabytes=2;megabytes<=16;megabytes*=2) {
+    memset(&memory,0,sizeof(memory)); memset(memory.bytes,0xcc,sizeof(memory.bytes));
+    assert(mofei_initialize_native_rom_boot_data(&memory,megabytes*MiB,callbacks,legacy));
+    for(unsigned slot=0;slot<22;++slot) assert(word(&memory,callbacks+slot*4)==abi[slot]);
+    assert(word(&memory,0x3fceffc4)==callbacks);
+    assert(word(&memory,0x3fceffc8)==0 && word(&memory,0x3fceffcc)==0);
+    assert(word(&memory,0x3fceffe4)==legacy);
+    assert(word(&memory,legacy+4)==megabytes*MiB);
+    for(unsigned offset=0;offset<28;offset+=4) if(offset!=4) assert(word(&memory,legacy+offset)==0);
+    for(unsigned offset=0;offset<256;++offset) assert(memory.bytes[0xb00+offset]==0xcc);
+  }
+  const int64_t unsupported[]={-1,0,3*MiB,(int64_t)UINT32_MAX+1};
+  for(unsigned i=0;i<sizeof(unsupported)/sizeof(unsupported[0]);++i) {
+    memset(&memory,0,sizeof(memory));
+    assert(!mofei_initialize_native_rom_boot_data(&memory,unsupported[i],callbacks,legacy)); assert(memory.writes==0);
+  }
+  memset(&memory,0,sizeof(memory));
+  assert(!mofei_initialize_native_rom_boot_data(&memory,16*MiB,callbacks+1,legacy));
+  assert(!mofei_initialize_native_rom_boot_data(&memory,16*MiB,callbacks,callbacks+4));
+  assert(!mofei_initialize_native_rom_boot_data(&memory,16*MiB,MOFEI_SIM_ROM_SAFE_STUB_LIMIT-4,legacy));
+  assert(!mofei_initialize_native_rom_boot_data(&memory,16*MiB,callbacks,MOFEI_SIM_ROM_SAFE_STUB_LIMIT-4));
+  assert(memory.writes==0);
+  memory.fail_write=3;
+  assert(!mofei_initialize_native_rom_boot_data(&memory,16*MiB,callbacks,legacy));
+  return 0;
+}
+`);
+    const compile = spawnSync(process.env.CC || "cc", ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I", join(root, "qemu-peripherals"), source, "-o", binary], { encoding: "utf8" });
+    assert.equal(compile.status, 0, compile.stderr);
+    const run = spawnSync(binary, [], { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(nativeRomBootData(mirrored), nativeRomBootData(machine));
+    const gate = machine.match(/if \(g_strcmp0\(getenv\("MOFEI_SIM_NATIVE_NVS"\), "1"\) == 0 &&[\s\S]+?native NVS ROM boot metadata initialization failed/);
+    assert.ok(gate);
+    assert.match(gate[0], /blk \? blk_getlength\(blk\) : -1/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("native ELF cache layouts preserve load memory and heap while exposing the existing MMU window", () => {
   const directory = mkdtempSync(join(tmpdir(), "panda-native-layout-"));
   try {

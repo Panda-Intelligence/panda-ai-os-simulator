@@ -1,6 +1,6 @@
 --- a/hw/xtensa/esp32s3.c
 +++ b/hw/xtensa/esp32s3.c
-@@ -9,981 +9,4524 @@
+@@ -9,981 +9,4616 @@
   */
 
  #include "qemu/osdep.h"
@@ -2117,6 +2117,92 @@
 +         (strncmp(name, "nvs_", 4) == 0 || strcmp(name, "esp_partition_find") == 0 ||
 +          strcmp(name, "esp_partition_find_first") == 0 || strcmp(name, "esp_partition_next") == 0 ||
 +          strcmp(name, "esp_partition_verify") == 0 || strcmp(name, "esp_mmu_map_init") == 0);
++}
++
++typedef struct MofeiNativeRomCacheTable {
++  uint32_t icache_line_size;
++  uint32_t dcache_line_size;
++  uint32_t icache_addr;
++  uint32_t dcache_addr;
++  uint32_t invalidate_icache_items;
++  uint32_t invalidate_dcache_items;
++  uint32_t clean_items;
++  uint32_t writeback_items;
++  uint32_t lock_icache_items;
++  uint32_t lock_dcache_items;
++  uint32_t unlock_icache_items;
++  uint32_t unlock_dcache_items;
++  uint32_t occupy_items;
++  uint32_t suspend_icache_autoload;
++  uint32_t resume_icache_autoload;
++  uint32_t suspend_dcache_autoload;
++  uint32_t resume_dcache_autoload;
++  uint32_t freeze_icache_enable;
++  uint32_t freeze_icache_disable;
++  uint32_t freeze_dcache_enable;
++  uint32_t freeze_dcache_disable;
++  uint32_t op_addr;
++} MofeiNativeRomCacheTable;
++
++_Static_assert(sizeof(MofeiNativeRomCacheTable) == 88, "ESP32-S3 ROM cache callback table ABI changed");
++_Static_assert(offsetof(MofeiNativeRomCacheTable, dcache_addr) == 12, "ESP32-S3 ROM address callback offset changed");
++_Static_assert(offsetof(MofeiNativeRomCacheTable, op_addr) == 84, "ESP32-S3 ROM operation callback offset changed");
++
++static bool mofei_native_rom_word(AddressSpace* memory, uint32_t address, uint32_t value) {
++  const uint8_t bytes[] = {(uint8_t)value, (uint8_t)(value >> 8), (uint8_t)(value >> 16), (uint8_t)(value >> 24)};
++  return address_space_write(memory, address, MEMTXATTRS_UNSPECIFIED, bytes, sizeof(bytes)) == MEMTX_OK;
++}
++
++static bool mofei_initialize_native_rom_boot_data(AddressSpace* memory, int64_t flash_bytes, uint32_t cache_address,
++                                                  uint32_t legacy_address) {
++  if (flash_bytes != 2 * MiB && flash_bytes != 4 * MiB && flash_bytes != 8 * MiB && flash_bytes != 16 * MiB)
++    return false;
++  if ((cache_address & 3u) || (legacy_address & 3u) || cache_address < MOFEI_SIM_ROM_SAFE_STUB_BASE ||
++      legacy_address < MOFEI_SIM_ROM_SAFE_STUB_BASE ||
++      (uint64_t)cache_address + sizeof(MofeiNativeRomCacheTable) > MOFEI_SIM_ROM_SAFE_STUB_LIMIT ||
++      (uint64_t)legacy_address + 28u > MOFEI_SIM_ROM_SAFE_STUB_LIMIT ||
++      ((uint64_t)cache_address < (uint64_t)legacy_address + 28u &&
++       (uint64_t)legacy_address < (uint64_t)cache_address + sizeof(MofeiNativeRomCacheTable)))
++    return false;
++  const MofeiNativeRomCacheTable table = {
++      .icache_line_size = 0x400015fc,
++      .dcache_line_size = 0x40001608,
++      .icache_addr = 0x40001638,
++      .dcache_addr = 0x40001644,
++      .invalidate_icache_items = 0x40001674,
++      .invalidate_dcache_items = 0x40001680,
++      .clean_items = 0x4000168c,
++      .writeback_items = 0x40001698,
++      .lock_icache_items = 0x4000180c,
++      .lock_dcache_items = 0x4000183c,
++      .unlock_icache_items = 0x40001818,
++      .unlock_dcache_items = 0x40001848,
++      .occupy_items = 0x400018cc,
++      .suspend_icache_autoload = 0x4000171c,
++      .resume_icache_autoload = 0x40001728,
++      .suspend_dcache_autoload = 0x40001734,
++      .resume_dcache_autoload = 0x40001740,
++      .freeze_icache_enable = 0x400018e4,
++      .freeze_icache_disable = 0x400018f0,
++      .freeze_dcache_enable = 0x400018fc,
++      .freeze_dcache_disable = 0x40001908,
++      .op_addr = 0x400016a4,
++  };
++  for (size_t offset = 0; offset < sizeof(table); offset += sizeof(uint32_t)) {
++    uint32_t value = 0;
++    memcpy(&value, (const uint8_t*)&table + offset, sizeof(value));
++    if (!mofei_native_rom_word(memory, cache_address + offset, value)) return false;
++  }
++  for (size_t offset = 0; offset < 28u; offset += sizeof(uint32_t)) {
++    if (!mofei_native_rom_word(memory, legacy_address + offset, offset == 4u ? (uint32_t)flash_bytes : 0u))
++      return false;
++  }
++  if (!mofei_native_rom_word(memory, 0x3fceffc4, cache_address) || !mofei_native_rom_word(memory, 0x3fceffc8, 0) ||
++      !mofei_native_rom_word(memory, 0x3fceffcc, 0) || !mofei_native_rom_word(memory, 0x3fceffe4, legacy_address))
++    return false;
++  fprintf(stderr, "[QEMU-SIM] native ROM boot data: cache=0x%08x legacy=0x%08x flash_bytes=%u\n", cache_address,
++          legacy_address, (uint32_t)flash_bytes);
++  return true;
 +}
 +
 +typedef struct MofeiNativeCacheRange {
@@ -4948,6 +5034,12 @@
 +      for (int i = 0; i < (int)(sizeof(rom_ptrs) / sizeof(rom_ptrs[0])); i++) {
 +        address_space_write(&address_space_memory, rom_ptrs[i], MEMTXATTRS_UNSPECIFIED, &data_addr, 4);
 +      }
++      if (g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0 &&
++          !mofei_initialize_native_rom_boot_data(&address_space_memory, blk ? blk_getlength(blk) : -1, struct_addr,
++                                                 safe_func_addr + sizeof(safe_func))) {
++        error_report("native NVS ROM boot metadata initialization failed");
++        exit(1);
++      }
 +      fprintf(stderr, "[QEMU-DBG] ROM data ptrs initialized: vtable@0x%x data@0x%x safe_struct@0x%x\n", vtable_addr,
 +              data_addr, safe_struct_addr);
 +    }
@@ -5434,7 +5526,7 @@
  }
 
  static const TypeInfo esp32s3_info = {
-@@ -993,10 +4536,6 @@
+@@ -993,10 +4628,6 @@
      .class_init = esp32s3_machine_class_init,
  };
 
