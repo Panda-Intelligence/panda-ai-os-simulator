@@ -52,6 +52,20 @@ const program = `
 #include <pthread.h>
 #include <stdatomic.h>
 #include <sched.h>
+#ifdef PANDA_QUEUE_TSAN
+#include <sanitizer/tsan_interface.h>
+// contract: Keep GLib's real mutex and expose its synchronization from an uninstrumented DSO.
+static void observed_g_mutex_lock(GMutex *mutex) {
+  g_mutex_lock(mutex);
+  __tsan_acquire(mutex);
+}
+static void observed_g_mutex_unlock(GMutex *mutex) {
+  __tsan_release(mutex);
+  g_mutex_unlock(mutex);
+}
+#define g_mutex_lock observed_g_mutex_lock
+#define g_mutex_unlock observed_g_mutex_unlock
+#endif
 #define HELPER(name) helper_##name
 typedef struct CPUXtensaState {
   uint32_t regs[64];
@@ -203,20 +217,36 @@ int main(int argc, char **argv) {
 }
 `;
 
-let dir, edgeBinary, tsanBinary;
+let dir, edgeBinary, tsanBinary, unlockedBinary;
 before(() => {
   dir = mkdtempSync(join(tmpdir(), "panda-input-queue-"));
   const file = join(dir, "queue.c");
   writeFileSync(file, program);
+  const unlockedFile = join(dir, "queue-unlocked.c");
+  let unlockedProgram = program;
+  for (const signature of signatures.filter(value => value.startsWith("uint32_t HELPER("))) {
+    const body = functionBody(source, signature);
+    const unlocked = body.replace("g_mutex_lock(&g_input_queue_mutex);", "")
+      .replace("g_mutex_unlock(&g_input_queue_mutex);", "");
+    assert.notEqual(unlocked, body);
+    unlockedProgram = unlockedProgram.replace(body, unlocked);
+  }
+  writeFileSync(unlockedFile, unlockedProgram);
   const pkg = spawnSync("pkg-config", ["--cflags", "--libs", "glib-2.0"], { encoding: "utf8" });
   assert.equal(pkg.status, 0, pkg.stderr);
   const flags = pkg.stdout.trim().split(/\s+/);
-  for (const sanitizer of ["address,undefined", "thread"]) {
-    const binary = join(dir, sanitizer === "thread" ? "queue-tsan" : "queue-edges");
+  for (const [sanitizer, name, input] of [
+    ["address,undefined", "queue-edges", file],
+    ["thread", "queue-tsan", file],
+    ["thread", "queue-tsan-unlocked", unlockedFile],
+  ]) {
+    const binary = join(dir, name);
     const built = spawnSync(process.env.CC || "cc", ["-std=c11", "-g", "-O1", "-Wall", "-Wextra", "-Werror",
-      `-fsanitize=${sanitizer}`, "-fno-omit-frame-pointer", "-pthread", file, ...flags, "-o", binary], { encoding: "utf8" });
+      `-fsanitize=${sanitizer}`, "-fno-omit-frame-pointer", "-pthread", ...(sanitizer === "thread" ? ["-DPANDA_QUEUE_TSAN=1"] : []), input, ...flags, "-o", binary], { encoding: "utf8" });
     assert.equal(built.status, 0, built.stderr);
-    if (sanitizer === "thread") tsanBinary = binary; else edgeBinary = binary;
+    if (name === "queue-tsan-unlocked") unlockedBinary = binary;
+    else if (sanitizer === "thread") tsanBinary = binary;
+    else edgeBinary = binary;
   }
 });
 after(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
@@ -248,10 +278,18 @@ for (const queue of ["touch", "button"]) {
   test(`${queue} actual C producer/BQL and vCPU consumer stay FIFO and ThreadSanitizer clean`, () => {
     const result = spawnSync(tsanBinary, [queue, "concurrent"], {
       encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 15000,
-      env: { ...process.env, TSAN_OPTIONS: "halt_on_error=1:exitcode=66" },
+      env: { ...process.env, TSAN_OPTIONS: "halt_on_error=1:abort_on_error=0:exitcode=66" },
     });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotMatch(result.stderr, /ThreadSanitizer|data race/);
     assert.match(result.stdout, /actual concurrent FIFO 2000\/2000, max outstanding 8, no overflow PASS/);
+  });
+  test(`${queue} removing the actual consumer lock remains a ThreadSanitizer data race`, () => {
+    const result = spawnSync(unlockedBinary, [queue, "concurrent"], {
+      encoding: "utf8", maxBuffer: 8 * 1024 * 1024, timeout: 15000,
+      env: { ...process.env, TSAN_OPTIONS: "halt_on_error=1:abort_on_error=0:exitcode=66" },
+    });
+    assert.equal(result.status, 66, JSON.stringify({ status: result.status, signal: result.signal, error: result.error }) + "\n" + result.stdout + result.stderr);
+    assert.match(result.stderr, /WARNING: ThreadSanitizer: data race/);
   });
 }

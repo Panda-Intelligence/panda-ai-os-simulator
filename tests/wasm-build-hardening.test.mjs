@@ -80,3 +80,24 @@ test("one-shot builds use a per-run container name so concurrent runs cannot rem
   assert.match(text,/KEEP_BUILD.*== "1" \]\]; then\n  QEMU_WASM_CONTAINER="\$\{QEMU_WASM_CONTAINER:-murphy-qemu-wasm-build\}"/);
   assert.ok(text.indexOf("QEMU_WASM_KEEP_BUILD=\"${QEMU_WASM_KEEP_BUILD:-0}\"")<text.indexOf("murphy-qemu-wasm-build-$$"));
 });
+
+test("offline and no-origin cached checkouts select the requested commit instead of an unrelated HEAD",()=>{
+  for(const offline of ["0","1"]){
+    const root=mkdtempSync(join(tmpdir(),"wasm-cached-pin-"));
+    try{
+      const {repo,first}=upstream(root);
+      const src=join(root,"cache/src");mkdirSync(join(root,"cache"));
+      const cloned=spawnSync("git",["clone","-q",repo,src],{encoding:"utf8"});
+      assert.equal(cloned.status,0,cloned.stderr);
+      if(offline==="0")git(src,"remote","remove","origin");
+      assert.notEqual(git(src,"rev-parse","HEAD"),first);
+      const r=harness(root,"ensure_checkout",{
+        QEMU_WASM_CACHE_DIR:join(root,"cache"),QEMU_WASM_SRC_DIR:src,
+        QEMU_WASM_REPO_URL:"file:///must-not-fetch",QEMU_WASM_REF:first,
+        QEMU_WASM_OFFLINE:offline,QEMU_WASM_KEEP_BUILD:"0",
+      });
+      assert.equal(r.status,0,r.stderr+r.stdout);
+      assert.equal(git(src,"rev-parse","HEAD"),first);
+    }finally{rmSync(root,{recursive:true,force:true});}
+  }
+});

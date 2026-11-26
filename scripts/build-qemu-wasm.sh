@@ -52,6 +52,9 @@ QEMU_WASM_RUNTIME_REVISION="asyncify-stack-v4-papers3-sdspi"
 export QEMU_WASM_RUNTIME_REVISION
 CONTAINER_STARTED=0
 CONTAINER_ID=""
+SOURCE_LOCK_DIR=""
+SOURCE_LOCK_TOKEN=""
+SOURCE_LOCK_HELD=0
 
 RUNTIME_JS="${OUTPUT_DIR}/qemu-system-xtensa.js"
 RUNTIME_WASM="${OUTPUT_DIR}/qemu-system-xtensa.wasm"
@@ -70,14 +73,16 @@ RUNTIME_OTA_DATA_BIN="${OUTPUT_DIR}/ota_data_initial${FIRMWARE_SUFFIX}.bin"
 usage() {
   cat <<EOF
 Usage:
-  scripts/build-qemu-wasm.sh [--force] [--probe-only] [--no-build]
+  scripts/build-qemu-wasm.sh [--force] [--probe-only] [--no-build] [--print-config]
 
 Environment:
   QEMU_WASM_REF          ktock/qemu-wasm commit SHA or ref (default: pinned 36a7f43...; dev-wasm-j at the time)
   QEMU_WASM_OFFLINE      reuse the existing qemu-wasm checkout without fetching (default: 0)
-  QEMU_WASM_IMAGE        Docker image name (default: murphy-qemu-wasm:<ref>)
-  QEMU_WASM_CONTAINER    Docker container name (default: murphy-qemu-wasm-build)
+  QEMU_WASM_IMAGE_TAG    Docker image tag (default: dev-wasm-j; independent of the source commit)
+  QEMU_WASM_IMAGE        Docker image name (default: murphy-qemu-wasm:<image-tag>)
+  QEMU_WASM_CONTAINER    Owned Docker name (default: per-run; kept builds use murphy-qemu-wasm-build)
   QEMU_WASM_OUTPUT_DIR   Artifact output dir (default: public/simulator-runtime/qemu)
+  QEMU_WASM_SRC_DIR      Checkout path; its canonical sibling lock is held through container cleanup
   BOARD                  Panda AI OS board value for firmware naming (default: default)
                          Non-default boards write firmware-<board>.bin; default writes firmware.bin
   QEMU_WASM_FIRMWARE_BUILD_DIR
@@ -98,6 +103,7 @@ Environment:
   QEMU_WASM_KEEP_BUILD  Keep the owned stopped container and build objects for incremental retries (0 or 1)
   NATIVE_QEMU_DIR        Native espressif/qemu checkout used as ESP32-S3 source overlay
   --force                Rebuild qemu-wasm Docker images and runtime artifacts even when cached
+  --print-config         Print resolved engine source/image inputs without preparing or building
   --firmware-only        Refresh firmware[.<board>].bin, firmware[.<board>]-kernel.img,
                          firmware[.<board>]-symbols.txt, and qemu-wasm-artifacts.json without
                          rebuilding qemu-wasm
@@ -126,9 +132,11 @@ PROBE_ONLY=0
 NO_BUILD=0
 FIRMWARE_ONLY=0
 RUNTIME_ONLY=0
+PRINT_CONFIG=0
 for arg in "$@"; do
   case "${arg}" in
     --force) FORCE=1 ;;
+    --print-config) PRINT_CONFIG=1 ;;
     --firmware-only) FIRMWARE_ONLY=1 ;;
     --runtime-only) RUNTIME_ONLY=1 ;;
     --probe-only) PROBE_ONLY=1 ;;
@@ -159,6 +167,15 @@ validate_wasm_allocator() {
 }
 
 validate_wasm_allocator
+
+if [[ "${PRINT_CONFIG}" -eq 1 ]]; then
+  python3 - "${QEMU_WASM_REF}" "${QEMU_WASM_IMAGE}" "${QEMU_WASM_IMAGE_TAG}" "${QEMU_WASM_BASE_IMAGE}" <<'PY'
+import json
+import sys
+print(json.dumps(dict(zip(("ref", "image", "imageTag", "baseImage"), sys.argv[1:]))))
+PY
+  exit 0
+fi
 
 require_tool() {
   command -v "$1" >/dev/null 2>&1 || die "$1 is required"
@@ -572,6 +589,28 @@ target.write_text(f"{text}{separator}\n{chr(10).join(block).rstrip()}\n")
 PY
 }
 
+acquire_source_lock() {
+  QEMU_WASM_SRC_DIR="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "${QEMU_WASM_SRC_DIR}")"
+  SOURCE_LOCK_DIR="${QEMU_WASM_SRC_DIR}.panda-wasm-lock"
+  SOURCE_LOCK_TOKEN="$$-${RANDOM}-${RANDOM}"
+  mkdir -p "$(dirname "${SOURCE_LOCK_DIR}")"
+  if ! mkdir "${SOURCE_LOCK_DIR}" 2>/dev/null; then
+    die "source cache is owned or needs an inspected stale-lock cleanup: ${SOURCE_LOCK_DIR}"
+  fi
+  printf '%s\n' "${SOURCE_LOCK_TOKEN}" > "${SOURCE_LOCK_DIR}/owner"
+  SOURCE_LOCK_HELD=1
+}
+
+release_source_lock() {
+  [[ "${SOURCE_LOCK_HELD:-0}" -eq 1 ]] || return 0
+  if [[ "$(cat "${SOURCE_LOCK_DIR}/owner" 2>/dev/null || true)" != "${SOURCE_LOCK_TOKEN}" ]]; then
+    printf '[build-qemu-wasm] ERROR: source lock owner changed; preserving %s\n' "${SOURCE_LOCK_DIR}" >&2
+    return 1
+  fi
+  rm "${SOURCE_LOCK_DIR}/owner" && rmdir "${SOURCE_LOCK_DIR}" || return 1
+  SOURCE_LOCK_HELD=0
+}
+
 is_full_sha() { [[ "$1" =~ ^[0-9a-f]{40}$ ]]; }
 
 # Clone into a sibling temp dir and rename, so an interrupted clone never leaves a directory that looks like a checkout.
@@ -617,12 +656,14 @@ ensure_checkout() {
   fi
   if [[ "${QEMU_WASM_OFFLINE}" == "1" ]]; then
     step "offline mode enabled; resetting cached qemu-wasm checkout without fetching"
+    if is_full_sha "${QEMU_WASM_REF}"; then git -C "${QEMU_WASM_SRC_DIR}" checkout --detach "${QEMU_WASM_REF}"; fi
     git -C "${QEMU_WASM_SRC_DIR}" reset --hard HEAD
     git -C "${QEMU_WASM_SRC_DIR}" clean -fdx
     return
   fi
   if ! git -C "${QEMU_WASM_SRC_DIR}" remote get-url origin >/dev/null 2>&1; then
-    step "cached qemu-wasm checkout has no origin remote; resetting existing HEAD without fetching"
+    step "cached qemu-wasm checkout has no origin remote; resetting pinned checkout without fetching"
+    if is_full_sha "${QEMU_WASM_REF}"; then git -C "${QEMU_WASM_SRC_DIR}" checkout --detach "${QEMU_WASM_REF}"; fi
     git -C "${QEMU_WASM_SRC_DIR}" reset --hard HEAD
     git -C "${QEMU_WASM_SRC_DIR}" clean -fdx
     return
@@ -1519,23 +1560,22 @@ start_container() {
     if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
       [[ "$(docker inspect --format '{{index .Config.Labels "panda.qemu-wasm-cache"}}' "${QEMU_WASM_CONTAINER}")" == "${cache_identity}" ]] || die "incremental container identity mismatch"
       [[ "$(docker inspect --format '{{.State.Running}}' "${QEMU_WASM_CONTAINER}")" == "false" ]] || die "incremental container is already in use"
-      docker start "${QEMU_WASM_CONTAINER}" >/dev/null
       CONTAINER_ID="$(docker inspect --format '{{.Id}}' "${QEMU_WASM_CONTAINER}")"
+      docker start "${CONTAINER_ID}" >/dev/null
       CONTAINER_STARTED=1
       step "reusing owned stopped build container ${QEMU_WASM_CONTAINER}"
       return
     fi
-    docker rm -f "${QEMU_WASM_CONTAINER}" >/dev/null
+    die "container name already exists; choose a unique QEMU_WASM_CONTAINER"
   fi
   step "starting Docker container ${QEMU_WASM_CONTAINER}"
   local -a remove_args=()
   if [[ "${QEMU_WASM_KEEP_BUILD}" != "1" ]]; then remove_args=(--rm); fi
-  docker run ${remove_args[@]+"${remove_args[@]}"} -d --name "${QEMU_WASM_CONTAINER}" \
+  CONTAINER_ID="$(docker run ${remove_args[@]+"${remove_args[@]}"} -d --name "${QEMU_WASM_CONTAINER}" \
     --label "panda.qemu-wasm-cache=${cache_identity}" \
     -v "${QEMU_WASM_SRC_DIR}:/qemu" \
     -v "${SCRIPT_DIR}:${QEMU_WASM_SCRIPT_MOUNT}:ro" \
-    "${QEMU_WASM_IMAGE}" >/dev/null
-  CONTAINER_ID="$(docker inspect --format '{{.Id}}' "${QEMU_WASM_CONTAINER}")"
+    "${QEMU_WASM_IMAGE}")"
   CONTAINER_STARTED=1
 }
 
@@ -1548,15 +1588,64 @@ assert_source_mounted() {
 }
 
 stop_container() {
-  [[ "${CONTAINER_STARTED}" -eq 1 ]] || return 0
-  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx "${QEMU_WASM_CONTAINER}"; then
-    if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
-      docker stop "${QEMU_WASM_CONTAINER}" >/dev/null || true
-      step "preserved stopped build container ${QEMU_WASM_CONTAINER}"
-    else
-      docker rm -f "${QEMU_WASM_CONTAINER}" >/dev/null || true
+  local status=$? cleanup_status=0 containers=""
+  trap - EXIT INT TERM
+  if [[ "${CONTAINER_STARTED}" -eq 1 ]]; then
+    if ! containers="$(docker ps -a --no-trunc --format '{{.ID}}')"; then
+      cleanup_status=1
+    elif printf '%s\n' "${containers}" | grep -Fxq "${CONTAINER_ID}"; then
+      if [[ "${QEMU_WASM_KEEP_BUILD}" == "1" ]]; then
+        docker stop "${CONTAINER_ID}" >/dev/null || cleanup_status=1
+        step "preserved stopped build container ${QEMU_WASM_CONTAINER}"
+      else
+        docker rm -f "${CONTAINER_ID}" >/dev/null || cleanup_status=1
+      fi
     fi
   fi
+  if [[ "${cleanup_status}" -eq 0 ]]; then
+    release_source_lock || cleanup_status=1
+  else
+    printf '[build-qemu-wasm] ERROR: container cleanup failed; preserving source lock %s\n' "${SOURCE_LOCK_DIR}" >&2
+  fi
+  [[ "${status}" -ne 0 || "${cleanup_status}" -eq 0 ]] || status=1
+  exit "${status}"
+}
+
+emit_configure_diagnostics() {
+  step "preserving configure diagnostics before container cleanup"
+  if ! docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -c '
+    for path in "$1/config.log" "$1/meson-logs/meson-log.txt"; do
+      printf "\n=== configure diagnostic: %s ===\n" "$path"
+      if [ -f "$path" ]; then cat "$path"; else printf "[not created]\n"; fi
+    done
+  ' diagnostics "${QEMU_WASM_BUILD_DIR}"; then
+    printf '[build-qemu-wasm] WARNING: configure diagnostics could not be read\n' >&2
+  fi
+}
+
+# Meson false selects QEMU's supported spinlock fallback; record either valid result.
+record_atomic64_probe_result() {
+  docker exec "${QEMU_WASM_CONTAINER}" python3 -c '
+from pathlib import Path
+import json
+import re
+import sys
+
+path = Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(f"atomic64 configure result is missing: {path}")
+definitions = [line.strip() for line in path.read_text().splitlines()
+               if re.match(r"#\s*(?:define|undef)\s+CONFIG_ATOMIC64\b", line.strip())]
+if len(definitions) != 1:
+    raise SystemExit(f"atomic64 configure result is ambiguous: {definitions!r}")
+if re.fullmatch(r"#\s*define\s+CONFIG_ATOMIC64(?:\s+1)?", definitions[0]):
+    enabled = True
+elif re.fullmatch(r"#\s*undef\s+CONFIG_ATOMIC64", definitions[0]):
+    enabled = False
+else:
+    raise SystemExit(f"atomic64 configure result is invalid: {definitions!r}")
+print("[build-qemu-wasm] configure-result " + json.dumps({"CONFIG_ATOMIC64": enabled}))
+' "${QEMU_WASM_BUILD_DIR}/config-host.h"
 }
 
 patch_qemu_wasm_pty_link_input() {
@@ -1604,8 +1693,8 @@ configure_and_make() {
   wipe_incomplete_configure() {
     docker exec "${QEMU_WASM_CONTAINER}" /bin/sh -lc "rm -rf ${QEMU_WASM_BUILD_DIR}/qemu-system-xtensa* ${QEMU_WASM_BUILD_DIR}/config-host.mak ${QEMU_WASM_BUILD_DIR}/build.ninja ${QEMU_WASM_BUILD_DIR}/meson-private" >/dev/null 2>&1 || true
   }
-  trap 'wipe_incomplete_configure; exit 130' INT
-  trap 'wipe_incomplete_configure; exit 143' TERM
+  trap 'emit_configure_diagnostics; wipe_incomplete_configure; exit 130' INT
+  trap 'emit_configure_diagnostics; wipe_incomplete_configure; exit 143' TERM
   docker exec \
     -e "EXTRA_CFLAGS=${extra_cflags}" \
     -e "EMCC_CFLAGS=--js-library=${pty_library}" \
@@ -1623,12 +1712,18 @@ configure_and_make() {
       --extra-cflags="${extra_cflags}" \
       --extra-cxxflags="${extra_cflags}" \
       --extra-ldflags="${extra_cflags} -sEXPORTED_RUNTIME_METHODS=getTempRet0,setTempRet0,addFunction,removeFunction,TTY,FS,callMain -sEXPORTED_FUNCTIONS=_main,_malloc,_free,_mofei_wasm_inject_touch,_mofei_wasm_inject_button,_mofei_wasm_release_buttons,_mofei_wasm_i2c_control" ||
-    { wipe_incomplete_configure; die "qemu-wasm configure failed; its partial build directory was removed"; }
+    { emit_configure_diagnostics; wipe_incomplete_configure; die "qemu-wasm configure failed; its partial build directory was removed"; }
+  record_atomic64_probe_result ||
+    { emit_configure_diagnostics; wipe_incomplete_configure; die "qemu-wasm configure produced an invalid CONFIG_ATOMIC64 result; refusing compilation"; }
   trap 'exit 130' INT
   trap 'exit 143' TERM
 
   step "building qemu-system-xtensa"
-  docker exec -e "EMCC_CFLAGS=--js-library=${pty_library}" "${QEMU_WASM_CONTAINER}" emmake make -j "${JOBS}"
+  docker exec -e "EMCC_CFLAGS=--js-library=${pty_library}" "${QEMU_WASM_CONTAINER}" emmake make -j "${JOBS}" || {
+    local build_status=$?
+    emit_configure_diagnostics
+    return "${build_status}"
+  }
 }
 
 patch_qemu_wasm_runtime_env_bridge() {
@@ -1800,6 +1895,7 @@ trap stop_container EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+acquire_source_lock
 ensure_checkout
 patch_qemu_wasm_build_inputs
 assert_qemu_wasm_base
