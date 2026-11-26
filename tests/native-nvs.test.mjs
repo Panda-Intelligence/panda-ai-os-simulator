@@ -87,7 +87,7 @@ test("both ELF loader selection paths preserve native NVS function bodies", () =
   const selections = retwSelections(machine);
   assert.equal(selections.length, 2);
   const names = machine.match(/static const char\* retw_names\[\] = \{([\s\S]*?)\n        \};/)[1];
-  const preserved = [...names.matchAll(/"(?:nvs_[^"]+|esp_partition_find|esp_partition_find_first|esp_partition_next|esp_partition_verify)"/g)].length;
+  const preserved = [...names.matchAll(/"(?:nvs_[^"]+|esp_partition_find|esp_partition_find_first|esp_partition_next|esp_partition_verify|esp_mmu_map_init)"/g)].length;
   const predicate = machine.match(/static bool mofei_native_nvs_keeps_function\(const char\* name\) \{[\s\S]*?\n\}/)?.[0] || "";
   const directory = mkdtempSync(join(tmpdir(), "panda-native-nvs-loader-"));
   try {
@@ -112,6 +112,7 @@ static void selection${index}(void) {
       assert(strcmp(want, "esp_partition_find_first"));
       assert(strcmp(want, "esp_partition_next"));
       assert(strcmp(want, "esp_partition_verify"));
+      assert(strcmp(want, "esp_mmu_map_init"));
     }
     ++selected;
   }
@@ -131,6 +132,166 @@ int main(void) {
     assert.equal(run.status, 0, run.stderr);
     assert.deepEqual(retwSelections(mirrored), selections);
     assert.ok(mirrored.includes(predicate));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function nativeLayout(source) {
+  const start = source.indexOf("typedef struct MofeiNativeCacheRange {");
+  const end = source.indexOf("\nstatic void esp32s3_machine_init(", start);
+  assert.ok(start >= 0 && end > start);
+  return source.slice(start, end);
+}
+
+test("native ELF cache layouts preserve load memory and heap while exposing the existing MMU window", () => {
+  const directory = mkdtempSync(join(tmpdir(), "panda-native-layout-"));
+  try {
+    const source = join(directory, "layout.c");
+    const binary = join(directory, "layout");
+    const glib = spawnSync("pkg-config", ["--cflags", "--libs", "glib-2.0"], { encoding: "utf8" });
+    assert.equal(glib.status, 0, glib.stderr);
+    writeFileSync(source, `
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <glib.h>
+#include "mofei-sim-addrs.h"
+#define ELFMAG "\\177ELF"
+#define ELFCLASS32 1
+#define ELFDATA2LSB 1
+#define ELFDATA2MSB 2
+#define EV_CURRENT 1
+#define ET_EXEC 2
+#define EM_XTENSA 94
+#define PT_LOAD 1
+#define ESP32S3_PAGE_SIZE 0x10000u
+typedef void Object;
+typedef struct MemoryRegion { struct MemoryRegion* backing; uint32_t offset, size; } MemoryRegion;
+typedef struct Alias { MemoryRegion* container; MemoryRegion* region; uint32_t address; int priority; } Alias;
+static Alias aliases[32];
+static unsigned alias_count;
+static void memory_region_init_alias(MemoryRegion* region, Object* owner, const char* name, MemoryRegion* backing, uint32_t offset, uint32_t size) {
+  (void)owner; assert(name != NULL); *region = (MemoryRegion){backing, offset, size};
+}
+static void memory_region_add_subregion_overlap(MemoryRegion* container, uint32_t address, MemoryRegion* region, int priority) {
+  assert(alias_count < 32); aliases[alias_count++] = (Alias){container, region, address, priority};
+}
+${nativeLayout(machine)}
+static void put16(uint8_t* data, uint16_t value, bool be) {
+  data[be ? 1 : 0] = value; data[be ? 0 : 1] = value >> 8;
+}
+static void put32(uint8_t* data, uint32_t value, bool be) {
+  for (unsigned i = 0; i < 4; ++i) data[be ? 3-i : i] = value >> (i*8);
+}
+static void make_elf(uint8_t data[512], bool be) {
+  memset(data, 0, 512); memcpy(data, ELFMAG, 4); data[4]=1; data[5]=be ? 2 : 1; data[6]=1;
+  put16(data+16, ET_EXEC, be); put16(data+18, EM_XTENSA, be); put32(data+20, EV_CURRENT, be);
+  put32(data+28,52,be); put16(data+40,52,be); put16(data+42,32,be); put16(data+44,4,be);
+  const uint32_t vaddr[] = {0x3c000020,0x3c520020,0x42000020,0x3fc90000};
+  const uint32_t filesz[] = {0,16,16,16};
+  const uint32_t memsz[] = {0x66ffe0,0x14d5a2,0x51f582,32};
+  for(unsigned i=0;i<4;++i) {
+    uint8_t* ph=data+52+i*32; put32(ph,PT_LOAD,be); put32(ph+4,256,be); put32(ph+8,vaddr[i],be); put32(ph+12,vaddr[i],be);
+    put32(ph+16,filesz[i],be); put32(ph+20,memsz[i],be);
+  }
+}
+static void verify_layout(GArray* ranges, bool exact) {
+  assert(ranges != NULL);
+  if(exact) {
+    assert(ranges->len==3);
+    const MofeiNativeCacheRange* d=&g_array_index(ranges,MofeiNativeCacheRange,0);
+    const MofeiNativeCacheRange* h=&g_array_index(ranges,MofeiNativeCacheRange,1);
+    const MofeiNativeCacheRange* i=&g_array_index(ranges,MofeiNativeCacheRange,2);
+    assert(d->start==0x3c000000 && d->end==0x3c670000 && !d->instruction);
+    assert(h->start==MOFEI_SIM_ALLOC_HEAP_BASE && h->end==MOFEI_SIM_PSRAM_HEAP_LIMIT && !h->instruction);
+    assert(i->start==0x42000000 && i->end==0x42520000 && i->instruction);
+  }
+  MemoryRegion system={0}, cpu={0}, instruction={0}, data={0};
+  alias_count=0;
+  mofei_install_native_cache_ranges(NULL,&system,&cpu,&instruction,&data,ranges);
+  unsigned system_ranges=0,cpu_ranges=0,low_ranges=0,instruction_ranges=0;
+  for(unsigned i=0;i<ranges->len;++i) if(g_array_index(ranges,MofeiNativeCacheRange,i).instruction) ++instruction_ranges;
+  for(unsigned i=0;i<alias_count;++i) {
+    const Alias* alias=&aliases[i];
+    if(alias->container==&system) { assert(alias->priority==1); ++system_ranges; }
+    else { assert(alias->container==&cpu); if(alias->priority==2) ++cpu_ranges; }
+    if(alias->address>=MOFEI_SIM_DCACHE_BASE && alias->address<MOFEI_SIM_DCACHE_LIMIT) {
+      assert(alias->region->backing==&data);
+      assert(alias->region->offset==alias->address-MOFEI_SIM_DCACHE_BASE);
+      assert(alias->address+alias->region->size<=MOFEI_SIM_PSRAM_HEAP_LIMIT);
+    } else if(alias->address>=MOFEI_SIM_ICACHE_BASE) {
+      assert(alias->region->backing==&instruction);
+      assert(alias->region->offset==alias->address-MOFEI_SIM_ICACHE_BASE);
+    } else {
+      ++low_ranges;
+      assert(alias->container==&cpu && alias->priority==1 && alias->region->backing==&instruction);
+      assert(alias->region->offset==alias->address-0x02000000u);
+      bool matched=false;
+      for(unsigned i=0;i<ranges->len;++i) {
+        const MofeiNativeCacheRange* range=&g_array_index(ranges,MofeiNativeCacheRange,i);
+        if(range->instruction && alias->address==0x02000000u+range->start-MOFEI_SIM_ICACHE_BASE &&
+           alias->region->offset==range->start-MOFEI_SIM_ICACHE_BASE && alias->region->size==range->end-range->start) matched=true;
+      }
+      assert(matched);
+    }
+    g_free(alias->region);
+  }
+  assert(system_ranges==ranges->len && cpu_ranges==ranges->len);
+  assert(low_ranges==instruction_ranges);
+}
+int main(int argc, char** argv) {
+  uint8_t bytes[512]; const char* error=NULL; GArray* ranges;
+  for(unsigned endian=0;endian<2;++endian) {
+    make_elf(bytes,endian);
+    ranges=mofei_native_elf_cache_ranges(bytes,sizeof(bytes),"device",true,&error);
+    verify_layout(ranges,true); g_array_free(ranges,true);
+  }
+  make_elf(bytes,false);
+  assert(!mofei_native_elf_cache_ranges(bytes,sizeof(bytes),"device",false,&error));
+  assert(strstr(error,"MTD"));
+  assert(!mofei_native_elf_cache_ranges(bytes,sizeof(bytes),"TEST",true,&error));
+  assert(strstr(error,"test heap"));
+  assert(!mofei_native_elf_cache_ranges(NULL,0,"device",true,&error));
+  for(unsigned scenario=0;scenario<11;++scenario) {
+    make_elf(bytes,false);
+    switch(scenario) {
+      case 0: bytes[0]=0; break;
+      case 1: bytes[4]=2; break;
+      case 2: bytes[5]=0; break;
+      case 3: put32(bytes+28,0xfffffff0,false); break;
+      case 4: put16(bytes+42,1,false); break;
+      case 5: put16(bytes+44,0,false); break;
+      case 6: put32(bytes+52+16,513,false); break;
+      case 7: put32(bytes+52+8,0xfffffff0,false); put32(bytes+52+12,0xfffffff0,false); put32(bytes+52+20,32,false); break;
+      case 8: put32(bytes+52+8,0x3dfff000,false); put32(bytes+52+12,0x3dfff000,false); put32(bytes+52+20,0x2000,false); break;
+      case 9: put32(bytes+52+8,MOFEI_SIM_ALLOC_HEAP_BASE,false); put32(bytes+52+12,MOFEI_SIM_ALLOC_HEAP_BASE,false); put32(bytes+52+20,64,false); break;
+      case 10: put32(bytes+52+12,0x3c000024,false); break;
+    }
+    assert(!mofei_native_elf_cache_ranges(bytes,sizeof(bytes),"device",true,&error));
+    assert(error!=NULL);
+    if(scenario==6 || scenario==7) assert(strstr(error,"overflows"));
+    if(scenario==8) assert(strstr(error,"crosses"));
+    if(scenario==9) assert(strstr(error,"overlaps"));
+    if(scenario==10) assert(strstr(error,"unsupported"));
+  }
+  if(argc>1) {
+    gchar* actual=NULL; gsize length=0; assert(g_file_get_contents(argv[1],&actual,&length,NULL));
+    ranges=mofei_native_elf_cache_ranges((uint8_t*)actual,length,"device",true,&error);
+    verify_layout(ranges,false); g_array_free(ranges,true); g_free(actual);
+  }
+  return 0;
+}
+`);
+    const command = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-I", join(root, "qemu-peripherals"), source, ...glib.stdout.trim().split(/\s+/), "-o", binary];
+    const compile = spawnSync(process.env.CC || "cc", command, { encoding: "utf8" });
+    assert.equal(compile.status, 0, compile.stderr);
+    const args = process.env.NATIVE_NVS_TEST_GUEST_ELF ? [process.env.NATIVE_NVS_TEST_GUEST_ELF] : [];
+    const run = spawnSync(binary, args, { encoding: "utf8" });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(nativeLayout(mirrored), nativeLayout(machine));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

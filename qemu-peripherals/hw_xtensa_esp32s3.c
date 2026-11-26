@@ -1581,12 +1581,155 @@ static bool mofei_native_nvs_keeps_function(const char* name) {
   return g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0 &&
          (strncmp(name, "nvs_", 4) == 0 || strcmp(name, "esp_partition_find") == 0 ||
           strcmp(name, "esp_partition_find_first") == 0 || strcmp(name, "esp_partition_next") == 0 ||
-          strcmp(name, "esp_partition_verify") == 0);
+          strcmp(name, "esp_partition_verify") == 0 || strcmp(name, "esp_mmu_map_init") == 0);
+}
+
+typedef struct MofeiNativeCacheRange {
+  uint32_t start;
+  uint32_t end;
+  bool instruction;
+} MofeiNativeCacheRange;
+
+static uint16_t mofei_native_elf_u16(const uint8_t* p, bool be) {
+  return be ? ((uint16_t)p[0] << 8) | p[1] : ((uint16_t)p[1] << 8) | p[0];
+}
+
+static uint32_t mofei_native_elf_u32(const uint8_t* p, bool be) {
+  return be ? ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3]
+            : ((uint32_t)p[3] << 24) | ((uint32_t)p[2] << 16) | ((uint32_t)p[1] << 8) | p[0];
+}
+
+static gint mofei_native_cache_range_compare(gconstpointer lhs, gconstpointer rhs) {
+  const MofeiNativeCacheRange* a = lhs;
+  const MofeiNativeCacheRange* b = rhs;
+  return a->start < b->start ? -1 : a->start > b->start;
+}
+
+static GArray* mofei_native_layout_error(GArray* ranges, const char** error, const char* message) {
+  if (ranges) g_array_free(ranges, true);
+  if (error) *error = message;
+  return NULL;
+}
+
+static GArray* mofei_native_elf_cache_ranges(const uint8_t* data, size_t len, const char* heap_mode, bool has_mtd,
+                                             const char** error) {
+  if (!has_mtd) return mofei_native_layout_error(NULL, error, "native NVS requires an MTD drive");
+  if (heap_mode && g_ascii_strcasecmp(heap_mode, "test") == 0)
+    return mofei_native_layout_error(NULL, error, "native NVS does not support the test heap");
+  if (!data || len < 52 || memcmp(data, ELFMAG, 4) || data[4] != ELFCLASS32 ||
+      (data[5] != ELFDATA2LSB && data[5] != ELFDATA2MSB) || data[6] != EV_CURRENT)
+    return mofei_native_layout_error(NULL, error, "native NVS requires a valid ELF32 image");
+  const bool be = data[5] == ELFDATA2MSB;
+  const uint32_t phoff = mofei_native_elf_u32(data + 28, be);
+  const uint16_t phentsize = mofei_native_elf_u16(data + 42, be);
+  const uint16_t phnum = mofei_native_elf_u16(data + 44, be);
+  if (mofei_native_elf_u16(data + 16, be) != ET_EXEC || mofei_native_elf_u16(data + 18, be) != EM_XTENSA ||
+      mofei_native_elf_u32(data + 20, be) != EV_CURRENT || mofei_native_elf_u16(data + 40, be) != 52 || phoff < 52 ||
+      phentsize != 32 || phnum == 0 || (uint64_t)phoff + (uint64_t)phentsize * phnum > len)
+    return mofei_native_layout_error(NULL, error, "native NVS ELF program headers are invalid");
+  GArray* ranges = g_array_new(false, false, sizeof(MofeiNativeCacheRange));
+  bool has_load = false;
+  for (uint16_t index = 0; index < phnum; ++index) {
+    const uint8_t* ph = data + phoff + (size_t)index * phentsize;
+    if (mofei_native_elf_u32(ph, be) != PT_LOAD) continue;
+    const uint32_t offset = mofei_native_elf_u32(ph + 4, be);
+    const uint32_t start = mofei_native_elf_u32(ph + 8, be);
+    const uint32_t physical = mofei_native_elf_u32(ph + 12, be);
+    const uint32_t filesz = mofei_native_elf_u32(ph + 16, be);
+    const uint32_t memsz = mofei_native_elf_u32(ph + 20, be);
+    const uint64_t end = (uint64_t)start + memsz;
+    if (filesz > memsz || (uint64_t)offset + filesz > len || end > UINT32_MAX)
+      return mofei_native_layout_error(ranges, error, "native NVS ELF load range overflows");
+    if (memsz == 0) continue;
+    has_load = true;
+    const bool data_overlap = start < MOFEI_SIM_DCACHE_LIMIT && end > MOFEI_SIM_DCACHE_BASE;
+    const bool code_overlap = start < MOFEI_SIM_ICACHE_LIMIT && end > MOFEI_SIM_ICACHE_BASE;
+    if (!data_overlap && !code_overlap) continue;
+    if (physical != start)
+      return mofei_native_layout_error(ranges, error,
+                                       "native NVS ELF cached physical/virtual address split is unsupported");
+    const uint32_t base = code_overlap ? MOFEI_SIM_ICACHE_BASE : MOFEI_SIM_DCACHE_BASE;
+    const uint32_t limit = code_overlap ? MOFEI_SIM_ICACHE_LIMIT : MOFEI_SIM_DCACHE_LIMIT;
+    if (start < base || end > limit)
+      return mofei_native_layout_error(ranges, error, "native NVS ELF load range crosses a cache window");
+    MofeiNativeCacheRange range = {
+        .start = start & ~(ESP32S3_PAGE_SIZE - 1u),
+        .end = (uint32_t)((end + ESP32S3_PAGE_SIZE - 1u) & ~(uint64_t)(ESP32S3_PAGE_SIZE - 1u)),
+        .instruction = code_overlap,
+    };
+    if (!range.instruction && range.start < MOFEI_SIM_PSRAM_HEAP_LIMIT && range.end > MOFEI_SIM_ALLOC_HEAP_BASE)
+      return mofei_native_layout_error(ranges, error, "native NVS ELF load range overlaps the device PSRAM heap");
+    g_array_append_val(ranges, range);
+  }
+  if (!has_load) return mofei_native_layout_error(ranges, error, "native NVS ELF has no loadable memory");
+  MofeiNativeCacheRange heap = {
+      .start = MOFEI_SIM_ALLOC_HEAP_BASE, .end = MOFEI_SIM_PSRAM_HEAP_LIMIT, .instruction = false};
+  g_array_append_val(ranges, heap);
+  g_array_sort(ranges, mofei_native_cache_range_compare);
+  guint output = 0;
+  for (guint index = 0; index < ranges->len; ++index) {
+    const MofeiNativeCacheRange current = g_array_index(ranges, MofeiNativeCacheRange, index);
+    if (output > 0) {
+      MofeiNativeCacheRange* previous = &g_array_index(ranges, MofeiNativeCacheRange, output - 1);
+      if (previous->instruction == current.instruction && current.start <= previous->end) {
+        previous->end = MAX(previous->end, current.end);
+        continue;
+      }
+    }
+    g_array_index(ranges, MofeiNativeCacheRange, output++) = current;
+  }
+  g_array_set_size(ranges, output);
+  return ranges;
+}
+
+static void mofei_install_native_cache_ranges(Object* owner, MemoryRegion* system, MemoryRegion* cpu,
+                                              MemoryRegion* instructions, MemoryRegion* data, const GArray* ranges) {
+  for (guint index = 0; index < ranges->len; ++index) {
+    const MofeiNativeCacheRange* range = &g_array_index(ranges, MofeiNativeCacheRange, index);
+    MemoryRegion* backing = range->instruction ? instructions : data;
+    const uint32_t base = range->instruction ? MOFEI_SIM_ICACHE_BASE : MOFEI_SIM_DCACHE_BASE;
+    const uint32_t offset = range->start - base;
+    const uint32_t size = range->end - range->start;
+    MemoryRegion* system_alias = g_new(MemoryRegion, 1);
+    MemoryRegion* cpu_alias = g_new(MemoryRegion, 1);
+    char* system_name = g_strdup_printf("esp32s3.native.system.%u", index);
+    char* cpu_name = g_strdup_printf("esp32s3.native.cpu.%u", index);
+    memory_region_init_alias(system_alias, owner, system_name, backing, offset, size);
+    memory_region_init_alias(cpu_alias, owner, cpu_name, backing, offset, size);
+    memory_region_add_subregion_overlap(system, range->start, system_alias, 1);
+    memory_region_add_subregion_overlap(cpu, range->start, cpu_alias, 2);
+    g_free(system_name);
+    g_free(cpu_name);
+    if (range->instruction) {
+      MemoryRegion* low_alias = g_new(MemoryRegion, 1);
+      char* name = g_strdup_printf("esp32s3.native.icache-low.%u", index);
+      memory_region_init_alias(low_alias, owner, name, backing, offset, size);
+      memory_region_add_subregion_overlap(cpu, 0x02000000u + offset, low_alias, 1);
+      g_free(name);
+    }
+    fprintf(stderr, "[QEMU-SIM] native cache RAM range=0x%08x..0x%08x kind=%s\n", range->start, range->end,
+            range->instruction ? "instruction" : "data");
+  }
 }
 
 static void esp32s3_machine_init(MachineState* machine) {
   // 地址表在解析任何启动符号前重置，后续拦截初始化必须保留同步地址。
   memset(&mofei_sim_addrs, 0, sizeof(mofei_sim_addrs));
+  GArray* native_cache_ranges = NULL;
+  if (g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0) {
+    const char* filename = machine->kernel_filename ? machine->kernel_filename : machine->firmware;
+    gchar* bytes = NULL;
+    gsize length = 0;
+    if (filename) g_file_get_contents(filename, &bytes, &length, NULL);
+    const char* error = NULL;
+    native_cache_ranges = mofei_native_elf_cache_ranges((const uint8_t*)bytes, length, getenv("MOFEI_SIM_HEAP_MODE"),
+                                                        drive_get(IF_MTD, 0, 0) != NULL, &error);
+    g_free(bytes);
+    if (!native_cache_ranges) {
+      error_report("%s", error);
+      exit(1);
+    }
+  }
 
   /* Read Mofei sim config from environment variables */
   const char* env_ms = getenv("MOFEI_CPU1_DONE_MS");
@@ -2887,30 +3030,37 @@ static void esp32s3_machine_init(MachineState* machine) {
     MemoryRegion* dcache_ram = g_new(MemoryRegion, 1);
     memory_region_init_ram(icache_ram, NULL, "esp32s3.icache.ram", ESP32S3_EXTMEM_REGION_SIZE, &error_fatal);
     memory_region_init_ram(dcache_ram, NULL, "esp32s3.dcache.ram", ESP32S3_EXTMEM_REGION_SIZE, &error_fatal);
-    memory_region_add_subregion_overlap(sys_mem, esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base, icache_ram, 1);
-    memory_region_add_subregion_overlap(sys_mem, esp32s3_memmap[ESP32S3_MEMREGION_DCACHE].base, dcache_ram, 1);
-    fprintf(stderr, "[QEMU-DBG] ICACHE/DCACHE RAM overlays created at 0x%lx (%lu KB each)\n",
-            (unsigned long)esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base,
-            (unsigned long)(ESP32S3_EXTMEM_REGION_SIZE / 1024));
+    if (native_cache_ranges) {
+      mofei_install_native_cache_ranges(OBJECT(ss), sys_mem, &ss->cpu_specific_mem[0], icache_ram, dcache_ram,
+                                        native_cache_ranges);
+      g_array_free(native_cache_ranges, true);
+      native_cache_ranges = NULL;
+    } else {
+      memory_region_add_subregion_overlap(sys_mem, esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base, icache_ram, 1);
+      memory_region_add_subregion_overlap(sys_mem, esp32s3_memmap[ESP32S3_MEMREGION_DCACHE].base, dcache_ram, 1);
+      fprintf(stderr, "[QEMU-DBG] ICACHE/DCACHE RAM overlays created at 0x%lx (%lu KB each)\n",
+              (unsigned long)esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base,
+              (unsigned long)(ESP32S3_EXTMEM_REGION_SIZE / 1024));
 
-    MemoryRegion* icache_low_alias = g_new(MemoryRegion, 1);
-    memory_region_init_alias(icache_low_alias, OBJECT(ss), "esp32s3.icache-low", icache_ram, 0,
-                             ESP32S3_EXTMEM_REGION_SIZE);
-    memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], 0x02000000, icache_low_alias, 1);
-    fprintf(stderr, "[QEMU-DBG] ICACHE low-address alias at 0x02000000 (%lu KB)\n",
-            (unsigned long)(ESP32S3_EXTMEM_REGION_SIZE / 1024));
+      MemoryRegion* icache_low_alias = g_new(MemoryRegion, 1);
+      memory_region_init_alias(icache_low_alias, OBJECT(ss), "esp32s3.icache-low", icache_ram, 0,
+                               ESP32S3_EXTMEM_REGION_SIZE);
+      memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], 0x02000000, icache_low_alias, 1);
+      fprintf(stderr, "[QEMU-DBG] ICACHE low-address alias at 0x02000000 (%lu KB)\n",
+              (unsigned long)(ESP32S3_EXTMEM_REGION_SIZE / 1024));
 
-    MemoryRegion* icache_cpu_alias = g_new(MemoryRegion, 1);
-    MemoryRegion* dcache_cpu_alias = g_new(MemoryRegion, 1);
-    memory_region_init_alias(icache_cpu_alias, OBJECT(ss), "esp32s3.icache-cpu", icache_ram, 0,
-                             ESP32S3_EXTMEM_REGION_SIZE);
-    memory_region_init_alias(dcache_cpu_alias, OBJECT(ss), "esp32s3.dcache-cpu", dcache_ram, 0,
-                             ESP32S3_EXTMEM_REGION_SIZE);
-    memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base,
-                                        icache_cpu_alias, 2);
-    memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], esp32s3_memmap[ESP32S3_MEMREGION_DCACHE].base,
-                                        dcache_cpu_alias, 2);
-    fprintf(stderr, "[QEMU-DBG] ICACHE/DCACHE CPU-view aliases installed for firmware fetch/data overlays\n");
+      MemoryRegion* icache_cpu_alias = g_new(MemoryRegion, 1);
+      MemoryRegion* dcache_cpu_alias = g_new(MemoryRegion, 1);
+      memory_region_init_alias(icache_cpu_alias, OBJECT(ss), "esp32s3.icache-cpu", icache_ram, 0,
+                               ESP32S3_EXTMEM_REGION_SIZE);
+      memory_region_init_alias(dcache_cpu_alias, OBJECT(ss), "esp32s3.dcache-cpu", dcache_ram, 0,
+                               ESP32S3_EXTMEM_REGION_SIZE);
+      memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], esp32s3_memmap[ESP32S3_MEMREGION_ICACHE].base,
+                                          icache_cpu_alias, 2);
+      memory_region_add_subregion_overlap(&ss->cpu_specific_mem[0], esp32s3_memmap[ESP32S3_MEMREGION_DCACHE].base,
+                                          dcache_cpu_alias, 2);
+      fprintf(stderr, "[QEMU-DBG] ICACHE/DCACHE CPU-view aliases installed for firmware fetch/data overlays\n");
+    }
 
     /* Load ROM bootloader to IROM — it provides functions at 0x40000000+
      * (e.g. esp_rom_get_reset_reason, memset) that the firmware calls. */
