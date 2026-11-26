@@ -1577,6 +1577,13 @@ static gchar* esp32s3_write_patched_elf(const gchar* data, gsize len, GError** e
   return filename;
 }
 
+static bool mofei_native_nvs_keeps_function(const char* name) {
+  return g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0 &&
+         (strncmp(name, "nvs_", 4) == 0 || strcmp(name, "esp_partition_find") == 0 ||
+          strcmp(name, "esp_partition_find_first") == 0 || strcmp(name, "esp_partition_next") == 0 ||
+          strcmp(name, "esp_partition_verify") == 0);
+}
+
 static void esp32s3_machine_init(MachineState* machine) {
   // 地址表在解析任何启动符号前重置，后续拦截初始化必须保留同步地址。
   memset(&mofei_sim_addrs, 0, sizeof(mofei_sim_addrs));
@@ -2343,11 +2350,12 @@ static void esp32s3_machine_init(MachineState* machine) {
         /* Pre-compute callN target addresses that return NULL.
          * These are used at call-translation time (not RETW time). */
         {
+          const bool native_nvs = g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0;
           uint32_t null_fns[] = {
-              a->esp_partition_find_addr,
-              a->esp_partition_next_addr,
-              a->esp_partition_find_first_addr,
-              a->esp_partition_verify_addr,
+              native_nvs ? 0 : a->esp_partition_find_addr,
+              native_nvs ? 0 : a->esp_partition_next_addr,
+              native_nvs ? 0 : a->esp_partition_find_first_addr,
+              native_nvs ? 0 : a->esp_partition_verify_addr,
               a->esp_ota_get_running_partition_addr,
               a->esp_ota_get_next_update_partition_addr,
           };
@@ -2360,21 +2368,22 @@ static void esp32s3_machine_init(MachineState* machine) {
 
         /* Pre-compute callN target addresses that return ESP_FAIL */
         {
+          const bool native_nvs = g_strcmp0(getenv("MOFEI_SIM_NATIVE_NVS"), "1") == 0;
           uint32_t fail_fns[] = {
-              a->nvs_flash_init_addr,
-              a->nvs_flash_init_partition_addr,
-              a->nvs_open_addr,
-              a->nvs_open_from_partition_addr,
-              a->nvs_get_blob_addr,
-              a->nvs_get_i8_addr,
-              a->nvs_get_u8_addr,
-              a->nvs_get_u16_addr,
-              a->nvs_get_u32_addr,
-              a->nvs_set_blob_addr,
-              a->nvs_set_i8_addr,
-              a->nvs_set_u8_addr,
-              a->nvs_set_u16_addr,
-              a->nvs_set_u32_addr,
+              native_nvs ? 0 : a->nvs_flash_init_addr,
+              native_nvs ? 0 : a->nvs_flash_init_partition_addr,
+              native_nvs ? 0 : a->nvs_open_addr,
+              native_nvs ? 0 : a->nvs_open_from_partition_addr,
+              native_nvs ? 0 : a->nvs_get_blob_addr,
+              native_nvs ? 0 : a->nvs_get_i8_addr,
+              native_nvs ? 0 : a->nvs_get_u8_addr,
+              native_nvs ? 0 : a->nvs_get_u16_addr,
+              native_nvs ? 0 : a->nvs_get_u32_addr,
+              native_nvs ? 0 : a->nvs_set_blob_addr,
+              native_nvs ? 0 : a->nvs_set_i8_addr,
+              native_nvs ? 0 : a->nvs_set_u8_addr,
+              native_nvs ? 0 : a->nvs_set_u16_addr,
+              native_nvs ? 0 : a->nvs_set_u32_addr,
               a->esp_ota_get_app_partition_count_addr,
               a->esp_ota_begin_addr,
               a->esp_ota_end_addr,
@@ -3574,6 +3583,7 @@ static void esp32s3_machine_init(MachineState* machine) {
             int n_syms = symtab_size / 16;
             for (int ni = 0; ni < n_retw_names && n_retw < MAX_RETW_PATCHES; ni++) {
               const char* want = retw_names[ni];
+              if (mofei_native_nvs_keeps_function(want)) continue;
               int want_len = strlen(want);
               if (strcmp(want, "xQueueGenericCreate") == 0 || strcmp(want, "pvPortMalloc") == 0 ||
                   strcmp(want, "heap_caps_malloc") == 0) {
@@ -3681,6 +3691,7 @@ static void esp32s3_machine_init(MachineState* machine) {
             if (mofei_firmware_symbols) {
               for (int ni = 0; ni < n_retw_names && n_retw < MAX_RETW_PATCHES; ni++) {
                 const char* want = retw_names[ni];
+                if (mofei_native_nvs_keeps_function(want)) continue;
                 int is_success = 0;
                 for (int si2 = 0; si2 < n_retw_success; si2++) {
                   if (strcmp(want, retw_success_names[si2]) == 0) {
