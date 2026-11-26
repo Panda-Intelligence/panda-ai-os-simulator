@@ -110,6 +110,20 @@ void lilygo_peripheral_control_dispatch(const uint8_t* payload, uint32_t len) {
     return;
   }
 
+  if (device == LILYGO_PERIPHERAL_DEVICE_TRANSPORT) {
+    if (payload[1] != LILYGO_PERIPHERAL_OPERATION_QUERY) {
+      send_ack(request_id, device, false, LILYGO_PERIPHERAL_ERROR_UNKNOWN_OPERATION);
+      return;
+    }
+    if (len != LILYGO_PERIPHERAL_CONTROL_HEADER_SIZE || payload[3] != 0 || payload[8] != 0 || payload[9] != 0) {
+      send_ack(request_id, device, false, LILYGO_PERIPHERAL_ERROR_MALFORMED);
+      return;
+    }
+    /* Reply through the same display IPC writer as completed framebuffer exports. */
+    send_ack(request_id, device, true, LILYGO_PERIPHERAL_ERROR_NONE);
+    return;
+  }
+
   if (device == LILYGO_PERIPHERAL_DEVICE_I2C_PROBE && lilygo_i2c_probe_control(payload, len)) return;
   if (device == LILYGO_PERIPHERAL_DEVICE_GPSPI2 && esp32s3_gpspi2_control(payload, len)) return;
   if (device == LILYGO_PERIPHERAL_DEVICE_SD && lilygo_sd_control(payload, len)) return;

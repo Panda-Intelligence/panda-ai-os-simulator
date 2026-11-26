@@ -47,7 +47,7 @@ async fn fence_transport() -> (
 fn assert_query(query: &debug_transport::OutFrame) {
     assert_eq!(query.channel, CHANNEL_CONTROL);
     assert_eq!(query.flags, 0);
-    assert_eq!(query.payload, [1, 4, 3, 0, 0x67, 0x45, 0x23, 0x01, 0, 0]);
+    assert_eq!(query.payload, [1, 4, 0, 0, 0x67, 0x45, 0x23, 0x01, 0, 0]);
 }
 
 async fn take_query(queries: &mut mpsc::UnboundedReceiver<debug_transport::OutFrame>) {
@@ -59,7 +59,7 @@ async fn take_query(queries: &mut mpsc::UnboundedReceiver<debug_transport::OutFr
 }
 
 fn ack_payload() -> Vec<u8> {
-    vec![1, 0x80, 3, 1, 0x67, 0x45, 0x23, 0x01, 0, 0, 0, 0]
+    vec![1, 0x80, 0, 1, 0x67, 0x45, 0x23, 0x01, 0, 0, 0, 0]
 }
 
 async fn acknowledge(
@@ -417,7 +417,7 @@ async fn gray4_wait_ignores_wrong_binary_acks_and_requires_the_matching_ack() {
     let (writer, mut queries) = fence_transport().await;
     let producer = tokio::spawn(async move {
         take_query(&mut queries).await;
-        for (offset, value) in [(0, 2), (1, 0x81), (2, 4), (4, 0x68)] {
+        for (offset, value) in [(0, 2), (1, 0x81), (2, 3), (2, 4), (4, 0x68)] {
             let mut wrong = ack_payload();
             wrong[offset] = value;
             event_tx

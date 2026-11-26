@@ -261,13 +261,20 @@ static void ipc_send_frame(SSD1677State* s, uint8_t channel, uint8_t flags, cons
   header[6] = (uint8_t)((len >> 16) & 0xFF);
   header[7] = (uint8_t)((len >> 24) & 0xFF);
 
-  if (qemu_chr_fe_write_all(&s->chr, header, sizeof(header)) != sizeof(header)) {
-    qemu_log_mask(LOG_GUEST_ERROR, "ssd1677: ipc header short write\n");
+  /* TCG helpers and the main loop can emit concurrently. A single chardev
+   * write holds its write mutex across both the header and payload. */
+  if (len > INT_MAX - sizeof(header)) {
+    qemu_log_mask(LOG_GUEST_ERROR, "ssd1677: ipc packet too large\n");
     return;
   }
-  if (len > 0 && qemu_chr_fe_write_all(&s->chr, payload, len) != (int)len) {
-    qemu_log_mask(LOG_GUEST_ERROR, "ssd1677: ipc payload short write\n");
+  const size_t packet_len = sizeof(header) + len;
+  uint8_t* packet = g_malloc(packet_len);
+  memcpy(packet, header, sizeof(header));
+  if (len > 0) memcpy(packet + sizeof(header), payload, len);
+  if (qemu_chr_fe_write_all(&s->chr, packet, (int)packet_len) != (int)packet_len) {
+    qemu_log_mask(LOG_GUEST_ERROR, "ssd1677: ipc packet short write\n");
   }
+  g_free(packet);
 }
 
 static void ssd1677_send_control(const uint8_t* payload, uint32_t len) {
