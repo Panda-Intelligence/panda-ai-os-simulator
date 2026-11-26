@@ -212,6 +212,7 @@ const CHANNEL_SERIAL_COMMAND: u8 = 0x09;
 const PERIPHERAL_CONTROL_VERSION: u8 = 1;
 const PERIPHERAL_CONTROL_ACK: u8 = 0x80;
 const PERIPHERAL_CONTROL_TRACE: u8 = 0x81;
+const PERIPHERAL_CONTROL_TRANSPORT_DEVICE: u8 = 0;
 const PERIPHERAL_CONTROL_STORAGE_DEVICE: u8 = 3;
 const PERIPHERAL_CONTROL_BQ27220_DEVICE: u8 = 4;
 const PERIPHERAL_CONTROL_SX1262_DEVICE: u8 = 5;
@@ -5293,11 +5294,12 @@ async fn wait_for_gray4_present(
                     .is_some_and(|current| activity_matches(&expected_activity, current))
         };
         if completed && !fence_sent {
-            // contract: SIMGRAY4 follows synchronous IPC export; a later read-only query ACK fences those pixels.
+            // SIMGRAY4 follows synchronous IPC export. The reserved transport QUERY ACK
+            // fences those pixels on the same stream without requiring a storage device.
             let mut payload = vec![
                 PERIPHERAL_CONTROL_VERSION,
                 PERIPHERAL_CONTROL_QUERY,
-                PERIPHERAL_CONTROL_STORAGE_DEVICE,
+                PERIPHERAL_CONTROL_TRANSPORT_DEVICE,
                 0,
             ];
             payload.extend_from_slice(&request_id.to_le_bytes());
@@ -5320,7 +5322,7 @@ async fn wait_for_gray4_present(
                 if fence_sent {
                     if let Some(result) = peripheral_control_ack_result(
                         &payload,
-                        PERIPHERAL_CONTROL_STORAGE_DEVICE,
+                        PERIPHERAL_CONTROL_TRANSPORT_DEVICE,
                         request_id,
                     ) {
                         if let Err(error) = result {
