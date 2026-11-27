@@ -72,6 +72,38 @@ and rights gate; it does not certify third-party, guest, or ROM distribution.
 The simulator cannot qualify real e-ink ghosting, electrical, radio or USB behavior.
 Launch materials under `docs/launch` are embargoed preparation, not posted claims.
 
+## Retained native NVS qualification
+
+Added 2026-11-26 by Codex. Native headless runs can retain the guest's real NVS partition in an explicit flash image:
+
+```sh
+cargo run --locked --manifest-path headless/Cargo.toml --bin mofei-sim-headless -- \
+  --firmware <firmware.bin> --qemu <qemu-system-xtensa> \
+  --sd-root <sd-directory> --persistent-flash <flash-image> \
+  --case <case.json> --artifacts <run-directory>
+```
+
+The firmware and its matching ELF must include the native-NVS simulator option; the QEMU runtime must include the
+`MOFEI_SIM_NATIVE_NVS=1` dispatch option. Headless sets that environment variable when the flash path is supplied.
+The guest then uses ESP-IDF's NVS API and existing SPI flash model. Ordinary runs retain their existing isolated,
+erased-flash behavior. The browser and Tauri launchers do not opt in.
+
+The flash path must be outside the SD directory, must not be a symbolic link, and its parent must already exist.
+Only the default `nvs` partition is carried forward; firmware and boot artifacts are rebuilt from the supplied inputs. A mismatched partition table,
+wrong image size, invalid partition bounds or occupied NVS region is rejected without replacing the saved image.
+One process leases the image at a time. After an interrupted host process, inspect running QEMU processes before
+removing an abandoned sibling `.nvs.lock` file. Image preparation uses a sibling `.nvs.tmp` replacement; a failed
+write leaves the prior image intact. An abandoned temporary file is rejected rather than overwritten.
+`--case-dir` is incompatible with this explicit shared state.
+The child guard releases its lease only after confirming the guest has exited. An early-return path that can only
+request termination retains the marker and prints its path. Confirm the old guest is gone before removing that
+marker and launching another process with the image; a failed launch before child creation releases it normally.
+
+A qualifying reboot test must observe successful guest flash initialization, real passcode attempts and the penalty
+after a second QEMU process starts with the same image. Partition-copy and dispatcher unit tests alone do not prove
+NVS initialization, a committed attempt, the visible countdown or a successful unlock. Hardware HMAC and the
+passcode V2 writer rollout remain independent.
+
 ## Continued split and runtime evidence
 
 See `docs/continuation-verification-20260918.md` and `docs/OWNER_HANDOFF.md`.

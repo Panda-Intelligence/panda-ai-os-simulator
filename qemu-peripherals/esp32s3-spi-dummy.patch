@@ -1,0 +1,29 @@
+--- a/hw/ssi/esp32s3_spi.c
++++ b/hw/ssi/esp32s3_spi.c
+@@ -212,18 +212,14 @@
+ 
+ static inline void esp32s3_spi_get_dummy(ESP32S3SpiState *s, uint32_t* len)
+ {
+-    const uint32_t dummy_count = FIELD_EX32(s->mem_user1, SPI_MEM_USER1, USR_DUMMY_CYCLELEN);
+-
+-    /* Dummy cycles are interpreted as bytes by the emulated SPI Flash. As such, we shall convert
+-     * our dummy cycles count in bytes, rounding it up. For example:
+-     * 0 cycles = 0 byte
+-     * 1 cycle = 1 byte
+-     * ...
+-     * 8 cycles = 1 byte
+-     * 9 cycles = 2 bytes
+-     * etc..
+-     */
+-    *len = (dummy_count + 7) / 8;
++    const uint32_t cycles = FIELD_EX32(s->mem_user1, SPI_MEM_USER1, USR_DUMMY_CYCLELEN) + 1;
++    uint32_t lanes = 1;
++    if (FIELD_EX32(s->mem_ctrl, SPI_MEM_CTRL, FREAD_QIO)) {
++        lanes = 4;
++    } else if (FIELD_EX32(s->mem_ctrl, SPI_MEM_CTRL, FREAD_DIO)) {
++        lanes = 2;
++    }
++    *len = (cycles * lanes + 7) / 8;
+ }
+ 
+ static void esp32s3_spi_begin_transaction(ESP32S3SpiState *s)

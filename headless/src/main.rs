@@ -24,6 +24,7 @@ mod debug_transport;
 mod draw_readiness;
 #[cfg(test)]
 mod draw_readiness_tests;
+mod persistent_flash;
 mod runtime_apps;
 #[path = "../../src-tauri/src/simulator_resolver.rs"]
 mod simulator_resolver;
@@ -783,6 +784,13 @@ struct Args {
     #[arg(long)]
     sd_root: Option<PathBuf>,
 
+    #[arg(
+        long,
+        conflicts_with = "case_dir",
+        help = "Retain the real NVS partition in an explicit off-card flash image between runs; requires native-NVS firmware and QEMU"
+    )]
+    persistent_flash: Option<PathBuf>,
+
     /// Echo firmware UART output to stderr (off by default — keep CI quiet).
     #[arg(long)]
     serial: bool,
@@ -887,6 +895,7 @@ struct QemuChildGuard {
     child: Option<tokio::process::Child>,
     socket_path: PathBuf,
     monitor_socket_path: PathBuf,
+    flash_lease: Option<persistent_flash::Lease>,
 }
 
 #[derive(Clone)]
@@ -1035,11 +1044,13 @@ impl QemuChildGuard {
         child: tokio::process::Child,
         socket_path: PathBuf,
         monitor_socket_path: PathBuf,
+        flash_lease: Option<persistent_flash::Lease>,
     ) -> Self {
         Self {
             child: Some(child),
             socket_path,
             monitor_socket_path,
+            flash_lease,
         }
     }
 
@@ -1049,13 +1060,19 @@ impl QemuChildGuard {
         };
         let status = child.wait().await?;
         self.child = None;
+        self.flash_lease.take();
         Ok(status)
     }
 
     async fn cleanup(&mut self) {
-        if let Some(mut child) = self.child.take() {
+        if let Some(child) = self.child.as_mut() {
             let _ = child.kill().await;
-            let _ = child.wait().await;
+            if child.wait().await.is_ok() {
+                self.child = None;
+            }
+        }
+        if self.child.is_none() {
+            self.flash_lease.take();
         }
         cleanup_stale_socket(&self.socket_path);
         cleanup_stale_socket(&self.monitor_socket_path);
@@ -1067,6 +1084,9 @@ impl Drop for QemuChildGuard {
         if let Some(child) = self.child.as_mut() {
             // Drop cannot await; start_kill prevents orphaned QEMU on early-return paths.
             let _ = child.start_kill();
+            if let Some(lease) = self.flash_lease.as_mut() {
+                lease.retain();
+            }
         }
         cleanup_stale_socket(&self.socket_path);
         cleanup_stale_socket(&self.monitor_socket_path);
@@ -1223,6 +1243,11 @@ fn normalize_args_paths(args: &Args) -> Result<Args> {
         .transpose()?;
     normalized.sd_root = args
         .sd_root
+        .as_ref()
+        .map(|path| absolute_path(path))
+        .transpose()?;
+    normalized.persistent_flash = args
+        .persistent_flash
         .as_ref()
         .map(|path| absolute_path(path))
         .transpose()?;
@@ -1766,7 +1791,11 @@ fn patch_rom_spi_panic(rom: &mut [u8]) {
     }
 }
 
-fn build_flash_image(firmware_bin: &Path, output_path: Option<&Path>) -> Result<PathBuf> {
+fn build_flash_image(
+    firmware_bin: &Path,
+    output_path: Option<&Path>,
+    persistent: bool,
+) -> Result<PathBuf> {
     let build_dir = firmware_bin.parent().unwrap_or(Path::new("."));
     let bootloader =
         existing_sibling_or_nested(build_dir, "bootloader.bin", "bootloader/bootloader.bin");
@@ -1828,7 +1857,12 @@ fn build_flash_image(firmware_bin: &Path, output_path: Option<&Path>) -> Result<
         "firmware",
     )?;
 
-    std::fs::write(&flash_img, img)?;
+    if persistent {
+        persistent_flash::preserve_nvs(&mut img, &pt_data, &flash_img)?;
+        persistent_flash::write_image(&flash_img, &img)?;
+    } else {
+        std::fs::write(&flash_img, img)?;
+    }
 
     Ok(flash_img)
 }
@@ -1895,6 +1929,13 @@ fn add_qemu_heap_mode_env(qemu_cmd: &mut Command, heap_mode: Option<HeapMode>) {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = normalize_args_paths(&Args::parse())?;
+    if args.persistent_flash.is_some()
+        && args.firmware.extension().and_then(|s| s.to_str()) != Some("bin")
+    {
+        return Err(anyhow!(
+            "persistent flash requires a firmware BIN and its matching ELF"
+        ));
+    }
     let board = load_board_runtime(args.board.as_deref())?;
     eprintln!(
         "[headless] board: {} raw={}x{} output={}x{}",
@@ -1967,6 +2008,11 @@ async fn main() -> Result<()> {
     );
     let monitor_arg = format!("unix:{},server=on,wait=off", monitor_socket.display());
     let sd_root = simulator_sd_root(args.sd_root.clone())?;
+    let _flash_lease = args
+        .persistent_flash
+        .as_deref()
+        .map(|path| persistent_flash::Lease::acquire(path, &sd_root))
+        .transpose()?;
     eprintln!("[headless] simulator SD root: {}", sd_root.display());
     let simulator_location = write_simulator_location(&sd_root)?;
     sync_visible_system_dir(&sd_root)?;
@@ -1992,7 +2038,14 @@ async fn main() -> Result<()> {
     qemu_cmd.env("MOFEI_FIRMWARE_ELF", &symbol_elf_path);
 
     if firmware_path.extension().and_then(|s| s.to_str()) == Some("bin") {
-        let flash_img = build_flash_image(&firmware_path, None)?;
+        let flash_img = build_flash_image(
+            &firmware_path,
+            args.persistent_flash.as_deref(),
+            args.persistent_flash.is_some(),
+        )?;
+        if args.persistent_flash.is_some() {
+            qemu_cmd.env("MOFEI_SIM_NATIVE_NVS", "1");
+        }
         qemu_cmd
             .arg("-drive")
             .arg(format!("file={},if=mtd,format=raw", flash_img.display()));
@@ -2060,7 +2113,12 @@ async fn main() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("spawning {}", args.qemu.display()))?;
-    let mut qemu = QemuChildGuard::new(child, args.socket.clone(), monitor_socket.clone());
+    let mut qemu = QemuChildGuard::new(
+        child,
+        args.socket.clone(),
+        monitor_socket.clone(),
+        _flash_lease,
+    );
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<HeadlessEvent>();
     let stderr = qemu
@@ -6527,6 +6585,11 @@ async fn run_e2e_case(
     );
     let monitor_arg = format!("unix:{},server=on,wait=off", monitor_socket.display());
     let sd_root = e2e_case_sd_root(args, &artifacts_dir)?;
+    let _flash_lease = args
+        .persistent_flash
+        .as_deref()
+        .map(|path| persistent_flash::Lease::acquire(path, &sd_root))
+        .transpose()?;
     eprintln!("[e2e] simulator SD root: {}", sd_root.display());
     seed_boot_copy_files(&case, &sd_root)?;
     if !case.boot.runtime_apps.is_empty() {
@@ -6560,7 +6623,18 @@ async fn run_e2e_case(
     qemu_cmd.env("MOFEI_FIRMWARE_ELF", &symbol_elf_path);
 
     if firmware_path.extension().and_then(|s| s.to_str()) == Some("bin") {
-        let flash_img = build_flash_image(&firmware_path, Some(&artifacts_dir.join("flash.img")))?;
+        let flash_path = args
+            .persistent_flash
+            .clone()
+            .unwrap_or_else(|| artifacts_dir.join("flash.img"));
+        let flash_img = build_flash_image(
+            &firmware_path,
+            Some(&flash_path),
+            args.persistent_flash.is_some(),
+        )?;
+        if args.persistent_flash.is_some() {
+            qemu_cmd.env("MOFEI_SIM_NATIVE_NVS", "1");
+        }
         qemu_cmd
             .arg("-drive")
             .arg(format!("file={},if=mtd,format=raw", flash_img.display()));
@@ -6600,7 +6674,12 @@ async fn run_e2e_case(
         .stderr(Stdio::piped())
         .spawn()
         .with_context(|| format!("spawning {}", args.qemu.display()))?;
-    let mut qemu = QemuChildGuard::new(child, args.socket.clone(), monitor_socket.clone());
+    let mut qemu = QemuChildGuard::new(
+        child,
+        args.socket.clone(),
+        monitor_socket.clone(),
+        _flash_lease,
+    );
 
     let (event_tx, mut event_rx) = mpsc::unbounded_channel::<HeadlessEvent>();
     let stderr = qemu
@@ -7974,6 +8053,113 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp_dir);
         fs::create_dir_all(&tmp_dir).unwrap();
         tmp_dir
+    }
+
+    fn leased_child_fixture(
+        name: &str,
+        script: &str,
+    ) -> (PathBuf, PathBuf, PathBuf, QemuChildGuard) {
+        let directory = temp_test_dir(name);
+        let sd_root = directory.join("sd");
+        fs::create_dir(&sd_root).unwrap();
+        let image = directory.join("flash.img");
+        let lease = persistent_flash::Lease::acquire(&image, &sd_root).unwrap();
+        let child = Command::new("sh")
+            .args(["-c", script])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let guard = QemuChildGuard::new(
+            child,
+            directory.join("uart"),
+            directory.join("monitor"),
+            Some(lease),
+        );
+        (directory, sd_root, image, guard)
+    }
+
+    #[tokio::test]
+    async fn qemu_child_lease_early_drop_does_not_reopen_before_confirmed_reap() {
+        let (directory, sd_root, image, guard) =
+            leased_child_fixture("lease-early-drop", "read -r value");
+        let pid = guard.child.as_ref().unwrap().id().unwrap();
+        drop(guard);
+        let blocked = persistent_flash::Lease::acquire(&image, &sd_root).is_err();
+        time::timeout(Duration::from_secs(5), async {
+            loop {
+                let running = std::process::Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .unwrap()
+                    .success();
+                if !running {
+                    break;
+                }
+                time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        fs::remove_dir_all(directory).unwrap();
+        assert!(blocked);
+    }
+
+    #[tokio::test]
+    async fn qemu_child_lease_wait_and_cleanup_release_after_reap() {
+        for cleanup in [false, true] {
+            let (directory, sd_root, image, mut guard) = leased_child_fixture(
+                if cleanup {
+                    "lease-cleanup"
+                } else {
+                    "lease-wait"
+                },
+                if cleanup { "read -r value" } else { "exit 0" },
+            );
+            assert!(persistent_flash::Lease::acquire(&image, &sd_root).is_err());
+            if cleanup {
+                guard.cleanup().await;
+            } else {
+                assert!(guard.wait().await.unwrap().success());
+            }
+            assert!(guard.child.is_none());
+            assert!(persistent_flash::Lease::acquire(&image, &sd_root).is_ok());
+            drop(guard);
+            fs::remove_dir_all(directory).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn qemu_child_lease_prespawn_failure_releases_ownership() {
+        let directory = temp_test_dir("lease-prespawn");
+        let sd_root = directory.join("sd");
+        fs::create_dir(&sd_root).unwrap();
+        let image = directory.join("flash.img");
+        let lease = persistent_flash::Lease::acquire(&image, &sd_root).unwrap();
+        assert!(Command::new(directory.join("missing-qemu"))
+            .spawn()
+            .is_err());
+        drop(lease);
+        assert!(persistent_flash::Lease::acquire(&image, &sd_root).is_ok());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn qemu_child_lease_absent_preserves_ordinary_child_cleanup() {
+        let directory = temp_test_dir("lease-absent");
+        let child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+        let mut guard = QemuChildGuard::new(
+            child,
+            directory.join("uart"),
+            directory.join("monitor"),
+            None,
+        );
+        assert!(guard.wait().await.unwrap().success());
+        guard.cleanup().await;
+        fs::remove_dir_all(directory).unwrap();
     }
 
     fn minimal_case(id: &str) -> E2ECase {
@@ -11073,6 +11259,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: Some(PathBuf::from("/tmp/sd-root")),
+            persistent_flash: None,
             runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,
@@ -11171,6 +11358,7 @@ mod tests {
             duration: 10,
             out: None,
             sd_root: None,
+            persistent_flash: None,
             runtime_app_root_key: None,
             serial: false,
             inject_touch_tap: false,

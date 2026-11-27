@@ -865,6 +865,7 @@ overlay_mofei_peripherals() {
   copy_if_present "${src}/mofei-sim-addrs.h" "${QEMU_WASM_SRC_DIR}/hw/xtensa/mofei-sim-addrs.h"
   copy_if_present "${src}/mofei-sim-addrs.h" "${QEMU_WASM_SRC_DIR}/target/xtensa/mofei-sim-addrs.h"
   copy_if_present "${src}/esp32s3_gpspi2.c" "${QEMU_WASM_SRC_DIR}/hw/ssi/esp32s3_gpspi2.c"
+  copy_if_present "${src}/esp32s3_spi.c" "${QEMU_WASM_SRC_DIR}/hw/ssi/esp32s3_spi.c"
   copy_if_present "${src}/ssd1677_gdeq0426t82.c" "${QEMU_WASM_SRC_DIR}/hw/display/ssd1677_gdeq0426t82.c"
   copy_if_present "${src}/uc8253c.c" "${QEMU_WASM_SRC_DIR}/hw/display/uc8253c.c"
   mkdir -p "${QEMU_WASM_SRC_DIR}/hw/sensor"
