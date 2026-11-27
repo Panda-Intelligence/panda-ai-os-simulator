@@ -229,6 +229,7 @@ const PERIPHERAL_CONTROL_SET_STATE: u8 = 1;
 const PERIPHERAL_CONTROL_SET_FAULT: u8 = 2;
 const PERIPHERAL_CONTROL_RESET: u8 = 3;
 const PERIPHERAL_CONTROL_QUERY: u8 = 4;
+const PERIPHERAL_CONTROL_ERROR_UNKNOWN_DEVICE: u8 = 2;
 const SX1262_CONTROL_SET_ENDPOINT: u8 = 1;
 const SX1262_CONTROL_SCHEDULE_RECEIVE: u8 = 2;
 const SX1262_CONTROL_DELIVER_BROKER_PACKET: u8 = 3;
@@ -4746,6 +4747,14 @@ fn peripheral_control_ack_result(
     }
 }
 
+fn peripheral_control_ack_is_unknown_device(payload: &[u8]) -> bool {
+    // contract: boards without the storage control device still answer the fence query in order with an unknown-device ACK.
+    payload.len() == 12
+        && payload[1] == PERIPHERAL_CONTROL_ACK
+        && payload[3] == 0
+        && payload[8] == PERIPHERAL_CONTROL_ERROR_UNKNOWN_DEVICE
+}
+
 fn peripheral_control_trace_summary(payload: &[u8]) -> Option<Result<String>> {
     if payload.len() < 2
         || payload[0] != PERIPHERAL_CONTROL_VERSION
@@ -5382,7 +5391,9 @@ async fn wait_for_gray4_present(
                         request_id,
                     ) {
                         if let Err(error) = result {
-                            break format!("Gray4 IPC fence rejected: {error}");
+                            if !peripheral_control_ack_is_unknown_device(&payload) {
+                                break format!("Gray4 IPC fence rejected: {error}");
+                            }
                         }
                         let ctx = ctx.lock().await;
                         let matching_frame = last_fb.as_ref().is_some_and(|frame| {
@@ -10442,6 +10453,17 @@ mod tests {
                 draw_generation: 0,
             })
         );
+    }
+
+    #[test]
+    fn gray4_fence_accepts_only_the_unknown_device_rejection() {
+        let unknown = [1, 0x80, 3, 0, 4, 0, 0, 0, 2, 0, 0, 0];
+        let busy = [1, 0x80, 3, 0, 4, 0, 0, 0, 7, 0, 0, 0];
+        let accepted = [1, 0x80, 3, 1, 4, 0, 0, 0, 0, 0, 0, 0];
+        assert!(peripheral_control_ack_is_unknown_device(&unknown));
+        assert!(!peripheral_control_ack_is_unknown_device(&busy));
+        assert!(!peripheral_control_ack_is_unknown_device(&accepted));
+        assert!(!peripheral_control_ack_is_unknown_device(&unknown[..8]));
     }
 
     #[test]
