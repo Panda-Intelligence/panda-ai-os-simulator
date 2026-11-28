@@ -1,7 +1,7 @@
 // Compatibility entry for an explicitly supplied, source-labelled runtime set.
 // No downloads, guest execution, public deployment or account operations occur.
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,7 +80,7 @@ export function packageExistingRuntime(options) {
       const bytes = role === "script" ? Buffer.from(patchQemuScriptForBrowserWorker(original.toString("utf8"))) : original;
       qemu[role]=stageBytes(runtimeDir,name,bytes);
     }
-    const workerScript=stageBytes(runtimeDir,"browser-simulator-worker.js",readBounded(join(ROOT,"public/simulator-runtime/browser-simulator-worker.js")));
+    const workerScript=stageBytes(runtimeDir,"browser-simulator-worker.js",readBounded(join(ROOT,"src/browserSimulatorRuntimeWorker.js")));
     const sdStoreScript=stageBytes(runtimeDir,"sd-card-store.js",readBounded(join(ROOT,"public/simulator-runtime/sd-card-store.js")));
     if (options.sdImage) {
       const packed = readBounded(resolve(options.sdImage));
@@ -153,12 +153,6 @@ function cli(argv) {
     const key=keys[argv[i]],value=argv[i+1];
     if (!key || !value || value.startsWith("--") || key in opts) fail("cli_arguments");
     opts[key]=key==="sdRawBytes" ? Number(value) : value;
-  }
-  if (existsSync(resolve(ROOT, "src/browserSimulatorRuntimeWorker.js"))) {
-    copyFileSync(
-      resolve(ROOT, "src/browserSimulatorRuntimeWorker.js"),
-      resolve(ROOT, "public/simulator-runtime/browser-simulator-worker.js"),
-    );
   }
   const result=packageExistingRuntime(opts);
   console.log(JSON.stringify({status:"private-package-written",...result,guestBootQualified:false}));
