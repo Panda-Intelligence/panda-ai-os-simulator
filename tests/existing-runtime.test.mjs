@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import fs, { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { packageExistingRuntime } from "../scripts/pack-existing-runtime.mjs";
 const digest=data=>createHash("sha256").update(data).digest("hex");
@@ -86,4 +88,35 @@ test("required runtime revision refuses stale or unlabelled builds before replac
     f.manifest.runtimeBuildRevision="asyncify-stack-v4-papers3-sdspi";f.save();
     packageExistingRuntime({...f,requireRuntimeRevision:"asyncify-stack-v4-papers3-sdspi"});
   } finally {rmSync(f.root,{recursive:true,force:true});}
+});
+
+
+test("direct runtime packaging records canonical worker bytes despite a stale public copy", (context) => {
+  const f = fixture();
+  const canonical = readFileSync(new URL("../src/browserSimulatorRuntimeWorker.js", import.meta.url));
+  const generatedPath = fileURLToPath(new URL("../public/simulator-runtime/browser-simulator-worker.js", import.meta.url));
+  const stale = Buffer.alloc(readFileSync(generatedPath).length, 32);
+  stale.write("throw new Error('stale generated worker');");
+  const originalRead = fs.readFileSync;
+  let staleReads = 0;
+  const mock = context.mock.method(fs, "readFileSync", (path, ...options) => {
+    if (resolve(String(path)) === generatedPath) {
+      staleReads++;
+      return stale;
+    }
+    return originalRead(path, ...options);
+  });
+  syncBuiltinESMExports();
+  try {
+    packageExistingRuntime(f);
+    const actual = readFileSync(join(f.outputDir, "simulator-runtime/browser-simulator-worker.js"));
+    const manifest = JSON.parse(readFileSync(join(f.outputDir, "manifest.json")));
+    assert.deepEqual(actual, canonical);
+    assert.equal(manifest.runtime.digests.runtime_workerScript, digest(canonical));
+    assert.equal(staleReads, 0);
+  } finally {
+    mock.mock.restore();
+    syncBuiltinESMExports();
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });
