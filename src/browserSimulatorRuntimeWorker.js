@@ -39,6 +39,9 @@ let lastBoardId = "mofei";
 let activeSdCard = null;
 let editableSdCard = null;
 let sdCardPersistTimer = null;
+let sdCardPersistPromise = null;
+let sdCardPersistRequested = false;
+let sdCardPersistReason = "interval";
 
 postMessage({
   type: "ready",
@@ -227,8 +230,13 @@ async function startRuntime(command) {
 }
 
 async function stopRuntime(requestId, emitResult) {
-  await persistActiveSdCard("stop");
   stopSdCardPersistence();
+  try {
+    await persistActiveSdCard("stop");
+  } catch (error) {
+    if (running) startSdCardPersistence();
+    throw error;
+  }
   running = false;
   qemuIpcOwner.instance = null;
   qemuInstance = null;
@@ -720,7 +728,7 @@ function startSdCardPersistence() {
     return;
   }
   sdCardPersistTimer = setInterval(() => {
-    void persistActiveSdCard("interval");
+    void persistActiveSdCard("interval").catch(() => undefined);
   }, SD_CARD_PERSIST_INTERVAL_MS);
 }
 
@@ -731,7 +739,27 @@ function stopSdCardPersistence() {
   }
 }
 
-async function persistActiveSdCard(reason) {
+function persistActiveSdCard(reason) {
+  sdCardPersistRequested = true;
+  if (reason !== "interval" || sdCardPersistReason === "interval") sdCardPersistReason = reason;
+  if (!sdCardPersistPromise) {
+    sdCardPersistPromise = Promise.resolve().then(async () => {
+      try {
+        while (sdCardPersistRequested) {
+          sdCardPersistRequested = false;
+          const nextReason = sdCardPersistReason;
+          sdCardPersistReason = "interval";
+          await flushActiveSdCard(nextReason);
+        }
+      } finally {
+        sdCardPersistPromise = null;
+      }
+    });
+  }
+  return sdCardPersistPromise;
+}
+
+async function flushActiveSdCard(reason) {
   if (!activeSdCard || !qemuInstance || !qemuInstance.FS) {
     return;
   }
@@ -766,6 +794,7 @@ async function persistActiveSdCard(reason) {
     }
   } catch (error) {
     emitError(`[browser-qemu] failed to persist browser SD image: ${describeStorageError(error)}`);
+    throw error;
   }
 }
 
